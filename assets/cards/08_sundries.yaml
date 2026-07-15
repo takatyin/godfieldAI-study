@@ -1,0 +1,142 @@
+### HP回復 ###
+- name: スマイルのしずく
+  description: +HP5
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 1
+  drop_rate: 12
+- name: ハートのしずく
+  description: +HP10
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 3
+  drop_rate: 8
+- name: ロマンスウォーター
+  description: +HP15
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 5
+  drop_rate: 4
+- name: 天の川のおいしい水
+  description: +HP20
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 20
+  drop_rate: 1
+
+### MP回復 ###
+- name: スマイルの花
+  description: +MP5
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 1
+  drop_rate: 12
+- name: ハートの花
+  description: +MP10
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 3
+  drop_rate: 8
+- name: ロマンスの香木
+  description: +MP15
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 5
+  drop_rate: 4
+- name: 天国草
+  description: +MP20天国病になる
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 20
+  drop_rate: 1
+
+### 災い(病、状態異常)の回復 ###
+- name: スマイルの貝がら
+  description: 風邪、熱病、霧、閃光の災いを払う
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 5
+  drop_rate: 12
+- name: ハートの貝がら
+  description: 全ての災いを払う
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 15
+  drop_rate: 6
+
+### その他 ###
+- name: 守護封印のつぼ
+  description: 守護神が宿る
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 10
+  drop_rate: 3
+- name: ドキドキ涙
+  description: HP10回復 or 10ダメージ
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 1
+  drop_rate: 2
+- name: ちからの粉
+  description: +攻10
+  type: sundry
+  usage_timing:
+  - atk_plus_phase
+  price: 15
+  drop_rate: 2
+  attack_power: 10
+- name: 精霊のぬいぐるみ
+  description: MP消費なしで奇跡を使える
+  type: sundry
+  usage_timing:
+  - miracle_plus_phase
+  price: 5
+  drop_rate: 2
+- name: 夜空のホウキ
+  description: 対象の神器を無作為に3つ捨てる
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 10
+  drop_rate: 1
+- name: 女神の石けん
+  description: 習得済みの軌跡を無作為に2個捨てる
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 10
+  drop_rate: 1
+- name: 運命のひも
+  description: 超常現象が起こる
+  type: sundry
+  usage_timing:
+  - main_sundry_phase
+  price: 3
+  drop_rate: 1
+
+### 受動発動 ###
+- name: 太陽のお守り
+  id_str: "sun_amulet"
+  description: HPが0になると+HP10
+  type: sundry
+  usage_timing: []
+  price: 10
+  drop_rate: 1
+- name: あぶないウス
+  description: あぶないキネ使用時、99ダメージを受ける
+  type: sundry
+  usage_timing: []
+  price: 1
+  drop_rate: 1

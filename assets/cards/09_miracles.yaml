@@ -1,0 +1,252 @@
+### 単体対象の奇跡 ###
+- name: ＜火の玉＞
+  type: miracle
+  usage_timing:
+  - atk_plus_phase
+  - main_miracle_phase
+  element: 火
+  attack_power: 2
+  drop_rate: 1
+  mp_cost: 2
+- name: ＜氷＞
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 水
+  attack_power: 4
+  drop_rate: 1
+  mp_cost: 2
+- name: ＜闇＞
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 闇
+  attack_power: 5
+  drop_rate: 1
+  mp_cost: 5
+- name: ＜大木＞
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 木
+  attack_power: 6
+  drop_rate: 1
+  mp_cost: 3
+- name: ＜岩＞
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 土
+  attack_power: 8
+  drop_rate: 1
+  mp_cost: 4
+- name: ＜炎＞
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 火
+  attack_power: 10
+  drop_rate: 1
+  mp_cost: 5
+- name: ＜吸収＞
+  description: 与えたダメージ分HPを吸収する
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 光
+  attack_power: 10
+  drop_rate: 1
+  mp_cost: 10
+- name: ＜流星＞
+  type: miracle
+  usage_timing:
+  - atk_plus_phase
+  - main_miracle_phase
+  element: 光
+  attack_power: 10
+  drop_rate: 1
+  mp_cost: 7
+- name: ＜滝＞
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 水
+  attack_power: 25
+  drop_rate: 1
+  mp_cost: 12
+- name: ＜風＞
+  description: 対象を風邪状態にする
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  mp_cost: 6
+  drop_rate: 1
+- name: ＜天国風＞
+  description: 対象を天国病状態にする
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  mp_cost: 15
+  drop_rate: 1
+- name: ＜霧＞
+  description: 対象を霧状態にする
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 水
+  mp_cost: 3
+  drop_rate: 1
+- name: ＜夢＞
+  description: 対象を夢状態にする
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 木
+  mp_cost: 6
+  drop_rate: 1
+- name: ＜暗雲＞
+  description: 対象を暗雲状態にする
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 闇
+  mp_cost: 5
+  drop_rate: 1
+
+### 全体攻撃の奇跡 ###
+- name: ＜閃光＞
+  description: 25%全体攻撃ダメージを与えた対象を閃光状態にする
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 光
+  mp_cost: 3
+  drop_rate: 1
+  accuracy: 25
+- name: ＜煙＞
+  description: 75%全体攻撃
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 火
+  attack_power: 5
+  drop_rate: 1
+  mp_cost: 4
+  accuracy: 75
+- name: ＜雪崩＞
+  description: 75%全体攻撃
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 水
+  attack_power: 8
+  drop_rate: 1
+  mp_cost: 6
+  accuracy: 75
+- name: ＜雷＞
+  description: 25%全体攻撃
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 光
+  attack_power: 10
+  drop_rate: 1
+  mp_cost: 4
+  accuracy: 25
+- name: ＜土石流＞
+  description: 50%全体攻撃
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 土
+  attack_power: 12
+  drop_rate: 1
+  mp_cost: 6
+  accuracy: 50
+- name: ＜マグマ＞
+  description: 75%全体攻撃
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 火
+  attack_power: 15
+  drop_rate: 1
+  mp_cost: 10
+  accuracy: 75
+- name: ＜氷河期＞
+  description: 75%全体攻撃
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  element: 水
+  attack_power: 30
+  drop_rate: 1
+  mp_cost: 30
+  accuracy: 75
+
+### 特殊な奇跡 ###
+- name: ＜オーラ＞
+  description: 攻撃力を倍にする
+  type: miracle
+  usage_timing:
+  - atk_plus_phase
+  mp_cost: 6
+  drop_rate: 1
+- name: ＜蜃気楼＞
+  description: 攻撃が全体攻撃になる
+  type: miracle
+  usage_timing:
+  - atk_plus_phase
+  mp_cost: 5
+  drop_rate: 1
+- name: ＜壁＞
+  description: 無属性武器を止める
+  type: miracle
+  reaction_type: block
+  usage_timing:
+  - atk_defence_phase
+  mp_cost: 6
+  drop_rate: 1
+- name: ＜乱気流＞
+  description: 奇跡を弾く
+  type: miracle
+  reaction_type: bounce
+  usage_timing:
+  - miracle_defence_phase
+  mp_cost: 5
+  drop_rate: 1
+- name: ＜泉＞
+  description: +HP10
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  mp_cost: 7
+  drop_rate: 1
+- name: ＜財宝＞
+  description: +￥10
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  mp_cost: 5
+  drop_rate: 1
+- name: ＜音色＞
+  description: 風邪・熱病・霧・閃光を回復する
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  mp_cost: 2
+  drop_rate: 1
+- name: ＜歌声＞
+  description: 全ての災いを回復する
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  mp_cost: 5
+  drop_rate: 1
+- name: ＜解放＞
+  description: 守護神が宿る
+  type: miracle
+  usage_timing:
+  - main_miracle_phase
+  mp_cost: 15
+  drop_rate: 1

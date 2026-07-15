@@ -1,0 +1,185 @@
+### 全体攻撃武器 ###
+- name: 火の粉袋
+  description: 75%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 2
+  element: 火
+  attack_power: 1
+  drop_rate: 1
+  accuracy: 75
+- name: シャドウハンド
+  description: 50%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 8
+  element: 闇
+  attack_power: 2
+  drop_rate: 1
+  accuracy: 50
+- name: 霧の扇
+  description: ダメージを与えた対象を霧状態にする
+  hit_curse: "fog"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 8
+  element: 水
+  attack_power: 3
+  drop_rate: 1
+  accuracy: 50
+- name: つるシュート
+  description: 与えたダメージ分HPを吸収する
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 木
+  attack_power: 3
+  drop_rate: 1
+  accuracy: 75
+- name: イナヅマキッズ
+  description: 25%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 2
+  element: 光
+  attack_power: 3
+  drop_rate: 1
+  accuracy: 25
+- name: 火炎杯
+  description: 75%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 6
+  element: 火
+  attack_power: 4
+  drop_rate: 1
+  accuracy: 75
+- name: 冷気杯
+  description: 75%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 6
+  element: 水
+  attack_power: 4
+  drop_rate: 1
+  accuracy: 75
+- name: 植物杯
+  description: 75%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 6
+  element: 木
+  attack_power: 4
+  drop_rate: 1
+  accuracy: 75
+- name: 岩石杯
+  description: 75%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 6
+  element: 土
+  attack_power: 4
+  drop_rate: 1
+  accuracy: 75
+- name: 特大雪玉
+  description: 50%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 5
+  element: 水
+  attack_power: 5
+  drop_rate: 1
+  accuracy: 50
+- name: ガケッツチ
+  description: 25%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 土
+  attack_power: 6
+  drop_rate: 1
+  accuracy: 25
+- name: 光のオーブ
+  description: 75%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 光
+  attack_power: 6
+  drop_rate: 1
+  accuracy: 75
+- name: 烈火シャワー
+  description: 75%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 火
+  attack_power: 7
+  drop_rate: 1
+  accuracy: 75
+- name: 魔神の木馬
+  description: 守6
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 15
+  element: 木
+  attack_power: 8
+  defense_power: 6
+  drop_rate: 1
+  accuracy: 75
+- name: 雨神刀
+  description: 50%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 9
+  element: 水
+  attack_power: 9
+  drop_rate: 1
+  accuracy: 50
+- name: フレアアクス
+  description: 50%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 火
+  attack_power: 10
+  drop_rate: 1
+  accuracy: 50
+- name: プチサターン
+  description: 25%全体攻撃
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 15
+  element: 土
+  attack_power: 20
+  drop_rate: 1
+  accuracy: 25
+- name: 昇天弓
+  id_str: "ascension_bow"
+  description: 25%全体攻撃（死亡時発動は環境側で処理）
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 光
+  attack_power: 1
+  drop_rate: 1
+  accuracy: 25

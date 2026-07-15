@@ -1,0 +1,440 @@
+### 単体無属性攻撃 ###
+- name: 銅のこん棒
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 1
+  attack_power: 1
+  drop_rate: 3
+- name: 銀のこん棒
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  attack_power: 1
+  drop_rate: 1
+- name: 金のこん棒
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 25
+  attack_power: 1
+  drop_rate: 1
+- name: 吹き矢
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 1
+  attack_power: 1
+  drop_rate: 1
+- name: ムチ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 1
+  attack_power: 2
+  drop_rate: 4
+- name: セイバーロッド
+  description: 守6
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 10
+  attack_power: 2
+  defense_power: 6
+  drop_rate: 1
+- name: クロスボウ
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 2
+  attack_power: 2
+  drop_rate: 1
+- name: パンチ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 1
+  attack_power: 3
+  drop_rate: 5
+- name: のこぶんぶん
+  description: 二回攻撃する
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  attack_power: 3
+  drop_rate: 1
+- name: ブーメラン
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 3
+  attack_power: 3
+  drop_rate: 1
+- name: ハチェット
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 2
+  attack_power: 4
+  drop_rate: 6
+- name: とげベルト
+  description: 守2
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 3
+  attack_power: 4
+  defense_power: 2
+  drop_rate: 1
+- name: バトルボール
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 4
+  attack_power: 4
+  drop_rate: 1
+- name: 鎖ガマ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 2
+  attack_power: 5
+  drop_rate: 7
+- name: 打撃の鉄板
+  description: 守7
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 3
+  attack_power: 5
+  defense_power: 7
+  drop_rate: 1
+- name: 乱弾武剣
+  description: 無属性武器を弾く
+  type: weapon
+  reaction_type: bounce
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 10
+  attack_power: 5
+  drop_rate: 7
+- name: 戦士の弓
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 5
+  attack_power: 5
+  drop_rate: 1
+- name: 硬いつち
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 2
+  attack_power: 6
+  drop_rate: 8
+- name: エルボーサック
+  description: 守3
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 3
+  attack_power: 6
+  defense_power: 3
+  drop_rate: 1
+- name: ジェットヨーヨー
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 6
+  attack_power: 6
+  drop_rate: 1
+- name: なぎなたクラシック
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 3
+  attack_power: 7
+  drop_rate: 8
+- name: ゴーストソード
+  description: 与えたダメージ分HPを吸収する
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  attack_power: 7
+  drop_rate: 1
+- name: 未知の羽根
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 7
+  attack_power: 7
+  drop_rate: 1
+- name: ファイナル牙
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 3
+  attack_power: 8
+  drop_rate: 8
+- name: 地獄のハサミ
+  description: ダメージを与えた対象を地獄病状態にする
+  hit_curse: "hell"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 15
+  attack_power: 8
+  drop_rate: 1
+- name: サイキックカード
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 8
+  attack_power: 8
+  drop_rate: 1
+- name: パワーハルベルト
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 3
+  attack_power: 9
+  drop_rate: 7
+- name: 疾風剣
+  description: ダメージを与えた対象を風邪状態にする
+  hit_curse: "cold"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  attack_power: 9
+  drop_rate: 1
+- name: スカイハープーン
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 5
+  attack_power: 9
+  drop_rate: 1
+- name: ワンダーソード
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 4
+  attack_power: 10
+  drop_rate: 7
+- name: いんちきスピア
+  description: ダメージを与えた対象を夢状態にする
+  hit_curse: "dream"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  attack_power: 10
+  drop_rate: 1
+- name: ソードシールド
+  description: 守10
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 15
+  attack_power: 10
+  defense_power: 10
+  drop_rate: 1
+- name: 反射剣
+  description: 無属性武器をはね返す
+  type: weapon
+  reaction_type: reflect
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 5
+  attack_power: 10
+  drop_rate: 3
+- name: 月光のオノ
+  description: 奇跡をはね返す
+  type: weapon
+  reaction_type: reflect
+  usage_timing:
+  - main_atk_phase
+  - miracle_defence_phase
+  price: 10
+  attack_power: 10
+  drop_rate: 1
+- name: グラビティメイス
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 4
+  attack_power: 11
+  drop_rate: 4
+- name: 六角凶
+  description: ダメージを与えた対象を暗雲状態にする
+  hit_curse: "dark cloud"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 15
+  attack_power: 11
+  drop_rate: 1
+- name: エンゼルナイフ
+  description: 奇跡を止める
+  type: weapon
+  reaction_type: block
+  usage_timing:
+  - main_atk_phase
+  - miracle_defence_phase
+  price: 15
+  attack_power: 11
+  drop_rate: 1
+- name: 恐怖の車輪
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 10
+  attack_power: 11
+  drop_rate: 1
+- name: もろぶっこみアクス
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 4
+  attack_power: 12
+  drop_rate: 4
+- name: リアルゴーストソード
+  description: 与えたダメージ分HPを吸収する
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 15
+  attack_power: 12
+  drop_rate: 1
+- name: 精霊の杖
+  description: MP消費なしで奇跡を使える
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  - miracle_plus_phase
+  price: 20
+  attack_power: 12
+  drop_rate: 1
+- name: 絶景のヤリ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 5
+  attack_power: 13
+  drop_rate: 4
+- name: 激烈疾風剣
+  description: ダメージを与えた対象を風邪状態にする
+  hit_curse: "cold"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 15
+  attack_power: 13
+  drop_rate: 1
+- name: 伝説の剣のさや
+  description: 守1
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 3
+  attack_power: 13
+  defense_power: 1
+  drop_rate: 1
+- name: エンゼルソード
+  description: 奇跡を止める
+  type: weapon
+  reaction_type: block
+  usage_timing:
+  - main_atk_phase
+  - miracle_defence_phase
+  price: 15
+  attack_power: 13
+  drop_rate: 1
+- name: 独楽コンバット
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 10
+  attack_power: 13
+  drop_rate: 1
+- name: 暴れフレイル
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 5
+  attack_power: 14
+  drop_rate: 3
+- name: 邪神の大剣
+  description: 与えたダメージ分自分にダメージ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 1
+  attack_power: 14
+  drop_rate: 1
+- name: ドラゴンクロウ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 5
+  attack_power: 15
+  drop_rate: 3
+- name: エンゼルアクス
+  description: 奇跡を止める
+  type: weapon
+  reaction_type: block
+  usage_timing:
+  - main_atk_phase
+  - miracle_defence_phase
+  price: 15
+  attack_power: 15
+  drop_rate: 1
+- name: エンゼルの弓
+  description: 奇跡を止める
+  type: weapon
+  reaction_type: block
+  usage_timing:
+  - miracle_defence_phase
+  - atk_plus_phase
+  - main_atk_phase
+  price: 15
+  attack_power: 15
+  drop_rate: 1
+- name: 神の剣
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 30
+  attack_power: 30
+  drop_rate: 1
+- name: マジカルステッキ
+  description: MPを全て消費する攻MP*2
+  type: weapon
+  usage_timing:
+  - main_sundry_phase
+  price: 10
+  drop_rate: 1
+  attack_power: 0

@@ -1,0 +1,563 @@
+### 基本的な防具 ###
+- name: 革の帽子
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 1
+  defense_power: 1
+  drop_rate: 10
+- name: スカイブーツ
+  description: 奇跡を弾く
+  type: defense
+  reaction_type: bounce
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 5
+  defense_power: 1
+  drop_rate: 1
+- name: アクアシューズ
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 2
+  element: 水
+  defense_power: 1
+  drop_rate: 1
+- name: 草かんむり
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 2
+  element: 木
+  defense_power: 1
+  drop_rate: 1
+- name: 石版
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 2
+  element: 土
+  defense_power: 1
+  drop_rate: 1
+- name: 革の服
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 2
+  defense_power: 2
+  drop_rate: 10
+- name: 火花の手袋
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 4
+  element: 火
+  defense_power: 2
+  drop_rate: 1
+- name: アクアグローブ
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 4
+  element: 水
+  defense_power: 2
+  drop_rate: 1
+- name: 木の盾
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 4
+  element: 木
+  defense_power: 2
+  drop_rate: 1
+- name: 岩盤
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 4
+  element: 土
+  defense_power: 2
+  drop_rate: 1
+- name: アイアンガントレット
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 3
+  defense_power: 3
+  drop_rate: 8
+- name: 鬼のくつ
+  description: +攻5
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  - atk_plus_phase
+  price: 10
+  defense_power: 3
+  attack_power: 5
+  drop_rate: 1
+- name: スカイガントレット
+  description: 奇跡を弾く
+  type: defense
+  reaction_type: bounce
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 5
+  defense_power: 3
+  drop_rate: 1
+- name: フレイムブーツ
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 6
+  element: 火
+  defense_power: 3
+  drop_rate: 1
+- name: アイスブーツ
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 6
+  element: 水
+  defense_power: 3
+  drop_rate: 1
+- name: 御神木の小手
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 6
+  element: 木
+  defense_power: 3
+  drop_rate: 1
+- name: 結晶板
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 6
+  element: 土
+  defense_power: 3
+  drop_rate: 1
+- name: アイアンシールド
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 4
+  defense_power: 4
+  drop_rate: 8
+- name: フレイムヘルム
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 8
+  element: 火
+  defense_power: 4
+  drop_rate: 1
+- name: アイスヘルム
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 8
+  element: 水
+  defense_power: 4
+  drop_rate: 1
+- name: 林の盾
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 8
+  element: 木
+  defense_power: 4
+  drop_rate: 1
+- name: 大地のくつ
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 8
+  element: 土
+  defense_power: 4
+  drop_rate: 1
+- name: アイアンアーマー
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 5
+  defense_power: 5
+  drop_rate: 8
+- name: 鬼の小手
+  description: +攻10
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  - atk_plus_phase
+  price: 15
+  defense_power: 5
+  attack_power: 10
+  drop_rate: 1
+- name: スカイヘルム
+  description: 奇跡を弾く
+  type: defense
+  reaction_type: bounce
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 5
+  defense_power: 5
+  drop_rate: 1
+- name: フレイムシールド
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 火
+  defense_power: 5
+  drop_rate: 1
+- name: アイスシールド
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 水
+  defense_power: 5
+  drop_rate: 1
+- name: 樹脂で編んだ法衣
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 木
+  defense_power: 5
+  drop_rate: 1
+- name: 大地の小手
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 土
+  defense_power: 5
+  drop_rate: 1
+- name: はがねの小手
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 6
+  defense_power: 6
+  drop_rate: 6
+- name: 精霊の足袋
+  description: MP消費なしで奇跡を使える
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  - miracle_plus_phase
+  price: 20
+  defense_power: 6
+  drop_rate: 1
+- name: フレイムメイル
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 火
+  defense_power: 6
+  drop_rate: 1
+- name: アイスアーマー
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 水
+  defense_power: 6
+  drop_rate: 1
+- name: 森の盾
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 木
+  defense_power: 6
+  drop_rate: 1
+- name: 大地のかぶと
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 土
+  defense_power: 6
+  drop_rate: 1
+- name: ぴかぴかハイヒール
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 15
+  element: 光
+  defense_power: 6
+  drop_rate: 1
+- name: はがねのかぶと
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 7
+  defense_power: 7
+  drop_rate: 6
+- name: 鬼のかぶと
+  description: +攻10
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  - atk_plus_phase
+  price: 15
+  defense_power: 7
+  attack_power: 10
+  drop_rate: 1
+- name: スカイシールド
+  description: 奇跡を弾く
+  type: defense
+  reaction_type: bounce
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 5
+  defense_power: 7
+  drop_rate: 1
+- name: バーニングシールド
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 火
+  defense_power: 7
+  drop_rate: 1
+- name: スノーミトン
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 水
+  defense_power: 7
+  drop_rate: 1
+- name: はがねの盾
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 木
+  defense_power: 8
+  drop_rate: 6
+- name: 美しいガラス細工
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 土
+  defense_power: 8
+  drop_rate: 1
+- name: 月光のかぶと
+  description: 奇跡をはね返す
+  type: defense
+  reaction_type: reflect
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 10
+  defense_power: 8
+  drop_rate: 1
+- name: バーニングジャケット
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 火
+  defense_power: 8
+  drop_rate: 1
+- name: スノーマスク
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 水
+  defense_power: 8
+  drop_rate: 1
+- name: コハクの胸当て
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 木
+  defense_power: 8
+  drop_rate: 1
+- name: 大地のよろい
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 土
+  defense_power: 8
+  drop_rate: 1
+- name: はがねのよろい
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 9
+  defense_power: 9
+  drop_rate: 6
+- name: 鬼のよろい
+  description: +攻15
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  - atk_plus_phase
+  price: 20
+  defense_power: 9
+  attack_power: 15
+  drop_rate: 1
+- name: 精霊の頭巾
+  description: MP消費なしで奇跡を使える
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  - miracle_plus_phase
+  price: 20
+  defense_power: 9
+  drop_rate: 1
+- name: スカイアーマー
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 5
+  defense_power: 9
+  drop_rate: 1
+- name: エンゼルの小手
+  description: 奇跡を止める
+  type: defense
+  reaction_type: block
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 15
+  defense_power: 9
+  drop_rate: 1
+- name: エナジーヘルム
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  defense_power: 10
+  drop_rate: 4
+- name: 月光の盾
+  description: 奇跡をはね返す
+  type: defense
+  reaction_type: reflect
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 10
+  defense_power: 10
+  drop_rate: 1
+- name: 熱狂仮面
+  description: 使用者を熱病状態にする
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  element: 火
+  defense_power: 10
+  drop_rate: 1
+- name: きらきらドレス
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 15
+  element: 光
+  defense_power: 10
+  drop_rate: 1
+- name: エナジーアーマー
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  defense_power: 11
+  drop_rate: 4
+- name: エンゼルの帽子
+  description: 奇跡を止める
+  type: defense
+  reaction_type: block
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 15
+  defense_power: 11
+  drop_rate: 1
+- name: コアバリヤー
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  defense_power: 12
+  drop_rate: 2
+- name: 精霊の帯
+  description: MP消費なしで奇跡を使える
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  - miracle_plus_phase
+  price: 20
+  defense_power: 12
+  drop_rate: 1
+- name: 月光のよろい
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  defense_power: 12
+  drop_rate: 1
+- name: 陽炎のよろい
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 15
+  element: 火
+  defense_power: 12
+  drop_rate: 1
+- name: コアプロテクター
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 10
+  defense_power: 13
+  drop_rate: 2
+- name: エンゼルシールド
+  description: 奇跡を止める
+  type: defense
+  reaction_type: block
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 15
+  defense_power: 13
+  drop_rate: 1
+- name: 夢見る帽子
+  description: 使用者を夢状態にする使用者の神器を一新する
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 15
+  element: 木
+  defense_power: 14
+  drop_rate: 1
+- name: エンゼルアーマー
+  description: 奇跡を止める
+  type: defense
+  reaction_type: block
+  usage_timing:
+  - atk_defence_phase
+  - miracle_defence_phase
+  price: 15
+  defense_power: 15
+  drop_rate: 1
+- name: 神の盾
+  type: defense
+  usage_timing:
+  - atk_defence_phase
+  price: 30
+  defense_power: 30
+  drop_rate: 1

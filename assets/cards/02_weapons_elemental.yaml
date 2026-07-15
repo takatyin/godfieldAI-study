@@ -1,0 +1,312 @@
+### 単体属性攻撃 ###
+- name: たいまつ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 1
+  element: 火
+  attack_power: 1
+  drop_rate: 1
+- name: つらら
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 1
+  element: 水
+  attack_power: 1
+  drop_rate: 1
+- name: 木刀
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 1
+  element: 木
+  attack_power: 1
+  drop_rate: 1
+- name: 風のカギ爪
+  description: ダメージを与えた対象を風邪状態にする
+  hit_curse: "cold"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 土
+  attack_power: 1
+  drop_rate: 1
+- name: 輝きのカケラ
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 10
+  element: 光
+  attack_power: 1
+  drop_rate: 1
+- name: ちくりんちょ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 闇
+  attack_power: 1
+  drop_rate: 1
+- name: あちちナイフ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 2
+  element: 火
+  attack_power: 2
+  drop_rate: 1
+- name: 発火のワンド
+  description: 攻撃が火属性になる
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 15
+  element: 火
+  attack_power: 2
+  drop_rate: 1
+- name: いばらのムチ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 2
+  element: 木
+  attack_power: 2
+  drop_rate: 1
+- name: 葉っぱ手裏剣
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 4
+  element: 木
+  attack_power: 2
+  drop_rate: 1
+- name: つるぎ焼き
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 2
+  element: 土
+  attack_power: 2
+  drop_rate: 1
+- name: フラッシュダガー
+  description: ダメージを与えた対象を閃光状態にする
+  hit_curse: "flash"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 15
+  element: 光
+  attack_power: 2
+  drop_rate: 1
+- name: 燃えムチ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 3
+  element: 火
+  attack_power: 3
+  drop_rate: 1
+- name: 霧鉄砲
+  description: ダメージを与えた対象を霧状態にする
+  hit_curse: "fog"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 水
+  attack_power: 3
+  drop_rate: 1
+- name: いがナッツ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 3
+  element: 木
+  attack_power: 3
+  drop_rate: 1
+- name: 熟成ゴムの弓
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 3
+  element: 木
+  attack_power: 3
+  drop_rate: 1
+- name: スタースタッフ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 3
+  element: 光
+  attack_power: 3
+  drop_rate: 1
+- name: コブラ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 闇
+  attack_power: 3
+  drop_rate: 1
+- name: ほむら巻き
+  description: 守4
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  - atk_defence_phase
+  price: 8
+  element: 火
+  attack_power: 4
+  defense_power: 4
+  drop_rate: 1
+- name: ファイヤークロスボウ
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 8
+  element: 火
+  attack_power: 4
+  drop_rate: 1
+- name: 氷結ハンマー
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 4
+  element: 水
+  attack_power: 4
+  drop_rate: 1
+- name: 夢の木づち
+  description: ダメージを与えた対象を夢状態にする
+  hit_curse: "dream"
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 15
+  element: 木
+  attack_power: 4
+  drop_rate: 1
+- name: さよならの剣
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 闇
+  attack_power: 4
+  drop_rate: 1
+- name: ブレイズブレイド
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 5
+  element: 火
+  attack_power: 5
+  drop_rate: 1
+- name: 魔水のワンド
+  description: 攻撃が水属性になる
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 15
+  element: 水
+  attack_power: 5
+  drop_rate: 1
+- name: 旧石器ジャベリン
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 10
+  element: 土
+  attack_power: 5
+  drop_rate: 1
+- name: ジャスティスランス
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 5
+  element: 光
+  attack_power: 5
+  drop_rate: 1
+- name: キラーフォーク
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 闇
+  attack_power: 5
+  drop_rate: 1
+- name: 冥矢
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 15
+  element: 闇
+  attack_power: 5
+  drop_rate: 1
+- name: 新石器トマホーク
+  type: weapon
+  usage_timing:
+  - atk_plus_phase
+  - main_atk_phase
+  price: 10
+  element: 土
+  attack_power: 7
+  drop_rate: 1
+- name: 火竜一角
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 火
+  attack_power: 8
+  drop_rate: 1
+- name: 水竜一角
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 10
+  element: 水
+  attack_power: 8
+  drop_rate: 1
+- name: 聖剣
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 15
+  element: 光
+  attack_power: 9
+  drop_rate: 1
+- name: 死神のカマ
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 20
+  element: 闇
+  attack_power: 10
+  drop_rate: 1
+- name: ダイヤモンドソード
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 25
+  element: 土
+  attack_power: 13
+  drop_rate: 1
+- name: あぶないキネ
+  description: 攻撃対象をランダムに取る
+  type: weapon
+  usage_timing:
+  - main_atk_phase
+  price: 5
+  element: 光
+  attack_power: 30
+  drop_rate: 1
