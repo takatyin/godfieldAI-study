@@ -1,24 +1,26 @@
-from tests.core.test_utils import SimulationRunner
 import godfield_core
+from tests.core.test_utils import SimulationRunner
+
 
 def test_basic_attack_state_transition():
+    """
+    検証内容: 非合法手（違法なアクション）を選択した際に、ゲーム状態が遷移せずに無視されることをテストする。
+    具体的には、守護神フェーズ (PHASE_GUARDIAN) において、手札決定アクション (ACTION_TARGET_OPP) は非合法であるため、
+    ステップを実行してもフェーズやアクティブプレイヤーなどの状態が一切変化しないことを確認する。
+    """
     sim = SimulationRunner()
-    
-    # 状況セットアップ: P0は木の剣(id_str="wood_sword"が未定義なら適当なIDにするが、今回はダミーロジックテストなので手札は問わない)
-    # ダミーとして適当にセット
+
     sim.set_status(player=0, hp=40)
     sim.set_status(player=1, hp=40)
-    
-    # current_actor_id is 0 by default
+
+    # 初期状態のアクティブプレイヤーが 0 であることを確認
     assert sim.state.current_actor_id == 0
-    assert sim.state.current_phase == godfield_core.GamePhase.STATE_0_GUARDIAN
-    
-    # Action 18 is dummy for "attack execution" in our game_logic.cpp test
-    sim.step(action=18)
-    
-    # Assert state moved to defense phase and actor switched
-    assert sim.state.current_phase == godfield_core.GamePhase.STATE_4_ATK_DEF
-    assert sim.state.attacker_id == 0
-    assert sim.state.defender_id == 1
-    assert sim.state.current_actor_id == 1
-    assert sim.state.pending_attack_power == 1
+    sim.state.current_phase = godfield_core.GamePhase.PHASE_GUARDIAN
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_GUARDIAN
+
+    # 守護神フェーズにおいて無効なアクション 18 (ACTION_TARGET_OPP) を実行
+    sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+
+    # アクションは無視され、状態が変わっていないことをアサート
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_GUARDIAN
+    assert sim.state.current_actor_id == 0

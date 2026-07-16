@@ -1,5 +1,6 @@
 ### 特殊防具 ###
 - name: 虹のカーテン
+  id_str: "rainbow_curtain"
   description: 攻撃の属性を取り除く
   type: defense
   usage_timing:

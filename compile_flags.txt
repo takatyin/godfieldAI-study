@@ -1,0 +1,5 @@
+-xc++
+-std=c++17
+-Igodfield_core/src
+-IC:/Users/onaok/Desktop/git/GodFieldAI/.venv/Lib/site-packages/pybind11/include
+-IC:/Users/onaok/AppData/Roaming/uv/python/cpython-3.14.0-windows-x86_64-none/Include

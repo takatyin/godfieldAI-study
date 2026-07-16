@@ -1,17 +1,70 @@
 #pragma once
 
-constexpr int MAX_HAND_SIZE = 18;        // 最大手札枚数（使用済み奇跡含む）
-constexpr int ACTION_SPACE_SIZE = 21;    // 行動の次元数
-constexpr int HISTORY_LENGTH = 64;       // イベント履歴の長さ（リングバッファ、2のべき乗推奨）
-constexpr int NUM_ENVS = 10000;          // 並列実行するゲーム数（メモリ・コア数に応じて調整）
+constexpr int MAX_HAND_SIZE = 18;     // 最大手札枚数（使用済み奇跡含む）
+constexpr int CARD_EMPTY = -1;        // 手札スロットが空であることを示す仮想カードID
+constexpr int ACTION_SPACE_SIZE = 122; // 行動の次元数
+constexpr int HISTORY_LENGTH = 64;    // イベント履歴の長さ（リングバッファ、2のべき乗推奨）
+constexpr int NUM_ENVS = 10000;       // 並列実行するゲーム数（メモリ・コア数に応じて調整）
 
 // ゲームの進行と終末の時（Apocalypse）用パラメータ
-constexpr int APOCALYPSE_TURN = 150;     // 終末の時が発動するターン数
-constexpr int MAX_EPISODE_TURNS = 300;   // 無限ループ防止用の最大ターン数（到達で引き分け）
+constexpr int APOCALYPSE_TURN = 150;   // 終末の時が発動するターン数
+constexpr int MAX_EPISODE_TURNS = 300; // 無限ループ防止用の最大ターン数（到達で引き分け）
 
 // n-step学習用パラメータ
-constexpr int N_STEP = 3;                // または 5。報酬を伝播させるステップ数
-constexpr float GAMMA = 0.995f;          // 割引率 (ゲーム長 100〜500 stepを想定)
-constexpr float WIN_REWARD = 1.0f;       // 勝利時の報酬
-constexpr float LOSE_REWARD = -1.0f;     // 敗北時の報酬
-constexpr float DRAW_REWARD = 0.0f;      // 引き分け（昇天弓による相打ち、最大ターン超過等）の報酬
+constexpr int N_STEP = 3;            // または 5。報酬を伝播させるステップ数
+constexpr float GAMMA = 0.995f;      // 割引率 (ゲーム長 100〜500 stepを想定)
+constexpr float WIN_REWARD = 1.0f;   // 勝利時の報酬
+constexpr float LOSE_REWARD = -1.0f; // 敗北時の報酬
+constexpr float DRAW_REWARD = 0.0f;  // 引き分け（昇天弓による相打ち、最大ターン超過等）の報酬
+
+enum ActionType {
+    ACTION_SELECT_HAND_0 = 0,
+    ACTION_SELECT_HAND_1 = 1,
+    ACTION_SELECT_HAND_2 = 2,
+    ACTION_SELECT_HAND_3 = 3,
+    ACTION_SELECT_HAND_4 = 4,
+    ACTION_SELECT_HAND_5 = 5,
+    ACTION_SELECT_HAND_6 = 6,
+    ACTION_SELECT_HAND_7 = 7,
+    ACTION_SELECT_HAND_8 = 8,
+    ACTION_SELECT_HAND_9 = 9,
+    ACTION_SELECT_HAND_10 = 10,
+    ACTION_SELECT_HAND_11 = 11,
+    ACTION_SELECT_HAND_12 = 12,
+    ACTION_SELECT_HAND_13 = 13,
+    ACTION_SELECT_HAND_14 = 14,
+    ACTION_SELECT_HAND_15 = 15,
+    ACTION_SELECT_HAND_16 = 16,
+    ACTION_SELECT_HAND_17 = 17,
+
+    ACTION_TARGET_OPP = 18,
+    ACTION_DEAL_YES = 18,
+
+    ACTION_TARGET_SELF = 19,
+    ACTION_DEAL_NO = 19,
+    ACTION_CONFIRM = 19,
+
+    ACTION_PRAY = 20,
+    ACTION_DISCARD = 21,
+
+    ACTION_NUM_0 = 22, ACTION_NUM_1 = 23, ACTION_NUM_2 = 24, ACTION_NUM_3 = 25, ACTION_NUM_4 = 26,
+    ACTION_NUM_5 = 27, ACTION_NUM_6 = 28, ACTION_NUM_7 = 29, ACTION_NUM_8 = 30, ACTION_NUM_9 = 31,
+    ACTION_NUM_10 = 32, ACTION_NUM_11 = 33, ACTION_NUM_12 = 34, ACTION_NUM_13 = 35, ACTION_NUM_14 = 36,
+    ACTION_NUM_15 = 37, ACTION_NUM_16 = 38, ACTION_NUM_17 = 39, ACTION_NUM_18 = 40, ACTION_NUM_19 = 41,
+    ACTION_NUM_20 = 42, ACTION_NUM_21 = 43, ACTION_NUM_22 = 44, ACTION_NUM_23 = 45, ACTION_NUM_24 = 46,
+    ACTION_NUM_25 = 47, ACTION_NUM_26 = 48, ACTION_NUM_27 = 49, ACTION_NUM_28 = 50, ACTION_NUM_29 = 51,
+    ACTION_NUM_30 = 52, ACTION_NUM_31 = 53, ACTION_NUM_32 = 54, ACTION_NUM_33 = 55, ACTION_NUM_34 = 56,
+    ACTION_NUM_35 = 57, ACTION_NUM_36 = 58, ACTION_NUM_37 = 59, ACTION_NUM_38 = 60, ACTION_NUM_39 = 61,
+    ACTION_NUM_40 = 62, ACTION_NUM_41 = 63, ACTION_NUM_42 = 64, ACTION_NUM_43 = 65, ACTION_NUM_44 = 66,
+    ACTION_NUM_45 = 67, ACTION_NUM_46 = 68, ACTION_NUM_47 = 69, ACTION_NUM_48 = 70, ACTION_NUM_49 = 71,
+    ACTION_NUM_50 = 72, ACTION_NUM_51 = 73, ACTION_NUM_52 = 74, ACTION_NUM_53 = 75, ACTION_NUM_54 = 76,
+    ACTION_NUM_55 = 77, ACTION_NUM_56 = 78, ACTION_NUM_57 = 79, ACTION_NUM_58 = 80, ACTION_NUM_59 = 81,
+    ACTION_NUM_60 = 82, ACTION_NUM_61 = 83, ACTION_NUM_62 = 84, ACTION_NUM_63 = 85, ACTION_NUM_64 = 86,
+    ACTION_NUM_65 = 87, ACTION_NUM_66 = 88, ACTION_NUM_67 = 89, ACTION_NUM_68 = 90, ACTION_NUM_69 = 91,
+    ACTION_NUM_70 = 92, ACTION_NUM_71 = 93, ACTION_NUM_72 = 94, ACTION_NUM_73 = 95, ACTION_NUM_74 = 96,
+    ACTION_NUM_75 = 97, ACTION_NUM_76 = 98, ACTION_NUM_77 = 99, ACTION_NUM_78 = 100, ACTION_NUM_79 = 101,
+    ACTION_NUM_80 = 102, ACTION_NUM_81 = 103, ACTION_NUM_82 = 104, ACTION_NUM_83 = 105, ACTION_NUM_84 = 106,
+    ACTION_NUM_85 = 107, ACTION_NUM_86 = 108, ACTION_NUM_87 = 109, ACTION_NUM_88 = 110, ACTION_NUM_89 = 111,
+    ACTION_NUM_90 = 112, ACTION_NUM_91 = 113, ACTION_NUM_92 = 114, ACTION_NUM_93 = 115, ACTION_NUM_94 = 116,
+    ACTION_NUM_95 = 117, ACTION_NUM_96 = 118, ACTION_NUM_97 = 119, ACTION_NUM_98 = 120, ACTION_NUM_99 = 121
+};

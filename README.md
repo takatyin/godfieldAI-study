@@ -25,6 +25,27 @@ uv run ruff check .
 uv run ruff format .
 ```
 
+### C++バインディングの型定義ファイル (Type Stubs) の生成
+PythonのIDE（VS CodeのPylance等）で、C++で実装された `godfield_core` モジュールの強力な型補完・チェックを有効にするため、`pybind11-stubgen` を用いて型定義ファイル（`.pyi`）を自動生成しています。
+C++側のコード（クラスやメソッド、プロパティ）を変更した後は、以下のコマンドを実行して型定義ファイルを更新してください。
+
+```powershell
+# Generate the stubs directly into the godfield_core-stubs directory
+.\.venv\Scripts\pybind11-stubgen.exe -o . --root-suffix="-stubs" godfield_core
+```
+
+> **[解説] なぜ `-stubs` フォルダを使うのか？ (Pylance 名前空間の衝突問題)**
+> プロジェクトルートに C++ソースが入っている `godfield_core/` というフォルダがあるため、単純に `godfield_core.pyi` をルートに置いたり `stubs/` に配置すると、Pylance がソースフォルダの方を Python パッケージだと誤認し、型スタブが無視される問題（Namespace Shadowing）が発生します。
+> これを回避するため、Python の PEP 561 仕様に則り `godfield_core-stubs` という型情報専用のパッケージフォルダを作成し、その中に `__init__.pyi` として配置することで、C++のディレクトリを汚さずに Pylance にモジュールの型を100%正しく認識させることができます。
+
+### 【重要】Windows環境でのC++コンパイルと文字コード設定 (MSVC UTF-8 Pitfalls)
+WindowsのMSVC環境では、デフォルトでソースコードを `Shift-JIS (CP932)` として読み込もうとするため、C++コード内で `"火"` などの日本語文字列を使用するとコンパイル時に文字化けし、JSONからのUTF-8パース結果と一致しなくなる致命的なバグが発生します。
+これを防ぐため、`setup.py` にて `/utf-8` コンパイルオプションを渡しています。
+
+**⚠️ ハマりどころ (Caching Pitfall):**
+過去に `/utf-8` オプションなしでコンパイルに失敗した、または文字化けした状態でキャッシュされた場合、後から `setup.py` に `/utf-8` を追加して `uv pip install -e .` を実行しても、**C++ソースコード自体に変更がないと再コンパイルが走らず、古い文字化けしたキャッシュ（`.obj` ファイル）が使い回されてしまいます。**
+エンコーディング関連でおかしいと感じた場合は、該当する `.cpp` ファイルに適当な空白やコメントを追加して保存（Touch）してから再度 `uv pip install -e .` を実行し、確実に再コンパイルを発生させてください。
+
 ## カードデータの管理とビルド (Card Data Generation)
 
 カードデータは可読性の高いYAML形式で [`assets/cards/`](./assets/cards/) ディレクトリ配下に定義されています。

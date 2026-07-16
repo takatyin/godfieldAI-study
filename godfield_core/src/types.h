@@ -3,13 +3,28 @@
 #include <random>
 
 enum Element {
-    ELEM_NONE = 0, ELEM_FIRE, ELEM_WATER, ELEM_WOOD, ELEM_EARTH, ELEM_LIGHT, ELEM_DARK
+    ELEM_NONE = 0, ELEM_FIRE, ELEM_WATER, ELEM_WOOD, ELEM_STONE, ELEM_LIGHT, ELEM_DARKNESS
 };
 enum ReactionType {
     REACTION_NONE = 0, REACTION_BOUNCE, REACTION_REFLECT, REACTION_BLOCK
 };
 enum HitCurse {
     CURSE_NONE = 0, CURSE_FOG, CURSE_FLASH, CURSE_DARK_CLOUD, CURSE_DREAM, CURSE_COLD, CURSE_FEVER, CURSE_HELL, CURSE_HEAVEN
+};
+
+enum class SicknessType {
+    SICKNESS_NONE = 0,
+    SICKNESS_COLD = 1,
+    SICKNESS_FEVER = 2,
+    SICKNESS_HELL = 3,
+    SICKNESS_HEAVEN = 4
+};
+
+enum class CurseType {
+    CURSE_FOG = 0,
+    CURSE_FLASH = 1,
+    CURSE_DARK_CLOUD = 2,
+    CURSE_DREAM = 3
 };
 
 // usage_timing flags mask
@@ -35,20 +50,27 @@ struct alignas(64) CardFeatures {
     int defense_power;
     int accuracy;
     int mp_cost;
+    int hp_recovery;
+    int mp_recovery;
     Element element;
     ReactionType reaction_type;
     HitCurse hit_curse;
 };
 
 enum class GamePhase {
-    STATE_0_GUARDIAN,
-    STATE_1_MAIN,
-    STATE_2_ATK_PLUS,
-    STATE_3_MIRACLE_PLUS,
-    STATE_M_SUPER_MIRROR,
-    STATE_4_ATK_DEF,
-    STATE_5_MIRACLE_DEF,
-    STATE_6_END
+    PHASE_GUARDIAN,
+    PHASE_MAIN,
+    PHASE_ATTACK_PLUS,
+    PHASE_MIRACLE_PLUS,
+    PHASE_SUPER_MIRROR,
+    PHASE_DEFENSE,
+    PHASE_MIRACLE_DEFENSE,
+    PHASE_SELL,
+    PHASE_BUY,
+    PHASE_EXCHANGE_HP,
+    PHASE_EXCHANGE_MP,
+    PHASE_DISCARD,
+    PHASE_END
 };
 
 struct GameEvent {
@@ -68,8 +90,8 @@ struct alignas(64) Observation {
     // 状態異常・病・守護神 (排他要素は独立したOne-hot次元として表現)
     float sickness_me[5];         // 病 (なし, 風邪, 熱病, 地獄病, 天国病)
     float sickness_opp[5];
-    float status_ailments_me[4];  // 霧, 閃光, 暗雲, 夢 (Multi-hot)
-    float status_ailments_opp[4];
+    float curses_me[4];           // 霧, 閃光, 暗雲, 夢 (Multi-hot)
+    float curses_opp[4];
     float guardian_me[11];        // 守護神 (なし=0, 火星神=1, ..., 月神=10)
     float guardian_opp[11];
     
@@ -85,6 +107,7 @@ struct alignas(64) Observation {
     int hand_cards[MAX_HAND_SIZE];           // 自分の手札（夢状態ならC++で偽装済みIDを入れる）
     int staged_cards[MAX_HAND_SIZE];         // 現在の仮置き場
     int opponent_hand_cards[MAX_HAND_SIZE];  // 相手の手札（非公開=0, 既知のカード・使用済み奇跡=実ID）
+    int opponent_staged_cards[MAX_HAND_SIZE]; // 相手が場に出しているカードID（攻撃順など）
     int pending_card;                        // 注目カード（飛んできた攻撃や買う対象など。なし=0）
 
     // イベント履歴（リングバッファ）
@@ -117,34 +140,41 @@ struct alignas(64) InternalState {
     
     // 基本ステータス群 (C++内では正規化前の生の値で管理)
     int hp[2], mp[2], money[2];
-    int sickness[2];                      // 0:なし, 1:風邪, 2:熱病, 3:地獄病, 4:天国病
-    int status_ailments[2];               // 状態異常のビットフラグ
-    int guardian[2];                      // 守護神ID (0~10)
     
     // 手札情報と「既知のカード」の管理
     int true_hand[2][MAX_HAND_SIZE];      // 両プレイヤーの真の手札
-    bool is_known_to_opp[2][MAX_HAND_SIZE]; // 相手に中身がバレているか (買うで見られた、売るで渡された等)
+    bool is_known_to_opp[2][MAX_HAND_SIZE]; // 相手に中身がバレているか
+    bool is_used[2][MAX_HAND_SIZE];       // 今回のターン内で使用され、補充待ちのスロット
+    bool is_deployed[2][MAX_HAND_SIZE];   // 奇跡が展開されているか
+    bool miracle_used_this_turn[2][MAX_HAND_SIZE]; // 展開済みの奇跡がこのターン既に使用されたか
+    
+    // 病と災い (Sickness & Curses)
+    int sickness[2];                      // 0:なし, 1:風邪, 2:熱病, 3:地獄病, 4:天国病
+    bool curses[2][4];                    // 0:霧, 1:閃光, 2:暗雲, 3:夢
+    int guardian[2];                      // 守護神ID (0: なし, 1..10: 守護神)
     
     // 状態遷移用変数
     GamePhase current_phase;
-    int attacker_id;                      // 現在の攻撃（アクション）の主体
-    int defender_id;                      // 現在の攻撃（アクション）の対象
-    int staged_cards[2][MAX_HAND_SIZE];   // 現在のフェイズで場に出ている（仮置き中の）カードID配列
+    
+    // Phase 1で使う仮置きバッファ (自分用/相手用など、まずは単純なバッファ)
+    int staged_cards[2][MAX_HAND_SIZE];   // 現在のフェイズで場に出ている（仮置き中の）手札インデックス配列
     int num_staged_cards[2];              // 仮置き枚数
+    
+    // 戦闘処理状態管理 (Phase 2 以降用)
+    int attacker_id;               // 攻撃側のプレイヤーID
+    int defender_id;               // 防御側のプレイヤーID (自分自身を攻撃する場合もあるため必要)
+    int pending_attack_power;      // 現在保留中の攻撃力
+    Element pending_attack_element;// 現在保留中の攻撃の属性
+    bool pending_absorption;       // 現在保留中の攻撃がHP吸収を持つか
+    
+    // 取引 (Phase 6 両替用テンポラリ変数)
+    int exchange_sum;
+    int exchange_hp;
 
-    // 確定済み攻撃のパラメータ等（防衛側が参照する）
-    int pending_attack_power;
-    Element pending_element;
-    HitCurse pending_hit_curse;
-    int pending_accuracy;
-
-    // n-step学習用ローカルキュー
-    Transition n_step_queue_p0[N_STEP];
-    Transition n_step_queue_p1[N_STEP];
-    int queue_size_p0;
-    int queue_size_p1;
-
-    bool is_done;
-    float p0_reward;
-    float p1_reward;
+    // === 強化学習 (RL) 用の終了シグナルと報酬 ===
+    // OpenAI Gym などの標準的な強化学習インターフェースに合わせるために必要不可欠な変数群です。
+    // Python側で各環境が終了したかを判定し、方策(Policy)の更新に使う報酬を取得します。
+    bool is_done;            // ゲームが終了したかどうか（誰かのHPが0になった、最大ターン数を超過した等）
+    float p0_reward;         // Player 0 が受け取る報酬（勝利で 1.0, 敗北で -1.0, 引き分けで 0.0）
+    float p1_reward;         // Player 1 が受け取る報酬（勝利で 1.0, 敗北で -1.0, 引き分けで 0.0）
 };

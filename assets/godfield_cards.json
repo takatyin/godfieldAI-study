@@ -1094,6 +1094,7 @@
   },
   {
     "name": "あぶないキネ",
+    "id_str": "dangerous-pestle",
     "description": "攻撃対象をランダムに取る",
     "type": "weapon",
     "usage_timing": [
@@ -2292,6 +2293,7 @@
   },
   {
     "name": "虹のカーテン",
+    "id_str": "rainbow_curtain",
     "description": "攻撃の属性を取り除く",
     "type": "defense",
     "usage_timing": [
@@ -2351,6 +2353,7 @@
   },
   {
     "name": "スマイルのしずく",
+    "id_str": "smile-dew",
     "description": "+HP5",
     "type": "sundry",
     "usage_timing": [
@@ -2358,10 +2361,12 @@
     ],
     "price": 1,
     "drop_rate": 12,
+    "hp_recovery": 5,
     "id": 188
   },
   {
     "name": "ハートのしずく",
+    "id_str": "heart-dew",
     "description": "+HP10",
     "type": "sundry",
     "usage_timing": [
@@ -2369,10 +2374,12 @@
     ],
     "price": 3,
     "drop_rate": 8,
+    "hp_recovery": 10,
     "id": 189
   },
   {
     "name": "ロマンスウォーター",
+    "id_str": "romance-water",
     "description": "+HP15",
     "type": "sundry",
     "usage_timing": [
@@ -2380,10 +2387,12 @@
     ],
     "price": 5,
     "drop_rate": 4,
+    "hp_recovery": 15,
     "id": 190
   },
   {
     "name": "天の川のおいしい水",
+    "id_str": "galaxy-geyser",
     "description": "+HP20",
     "type": "sundry",
     "usage_timing": [
@@ -2391,10 +2400,12 @@
     ],
     "price": 20,
     "drop_rate": 1,
+    "hp_recovery": 20,
     "id": 191
   },
   {
     "name": "スマイルの花",
+    "id_str": "smile-flower",
     "description": "+MP5",
     "type": "sundry",
     "usage_timing": [
@@ -2402,10 +2413,12 @@
     ],
     "price": 1,
     "drop_rate": 12,
+    "mp_recovery": 5,
     "id": 192
   },
   {
     "name": "ハートの花",
+    "id_str": "heart-flower",
     "description": "+MP10",
     "type": "sundry",
     "usage_timing": [
@@ -2413,10 +2426,12 @@
     ],
     "price": 3,
     "drop_rate": 8,
+    "mp_recovery": 10,
     "id": 193
   },
   {
     "name": "ロマンスの香木",
+    "id_str": "romance-fragrance",
     "description": "+MP15",
     "type": "sundry",
     "usage_timing": [
@@ -2424,21 +2439,26 @@
     ],
     "price": 5,
     "drop_rate": 4,
+    "mp_recovery": 15,
     "id": 194
   },
   {
     "name": "天国草",
+    "id_str": "heaven-herb",
     "description": "+MP20天国病になる",
+    "hit_curse": "heaven",
     "type": "sundry",
     "usage_timing": [
       "main_sundry_phase"
     ],
     "price": 20,
     "drop_rate": 1,
+    "mp_recovery": 20,
     "id": 195
   },
   {
     "name": "スマイルの貝がら",
+    "id_str": "smile-shell",
     "description": "風邪、熱病、霧、閃光の災いを払う",
     "type": "sundry",
     "usage_timing": [
@@ -2450,6 +2470,7 @@
   },
   {
     "name": "ハートの貝がら",
+    "id_str": "heart-shell",
     "description": "全ての災いを払う",
     "type": "sundry",
     "usage_timing": [
@@ -2461,6 +2482,7 @@
   },
   {
     "name": "守護封印のつぼ",
+    "id_str": "guardian-pot",
     "description": "守護神が宿る",
     "type": "sundry",
     "usage_timing": [
@@ -2472,6 +2494,7 @@
   },
   {
     "name": "ドキドキ涙",
+    "id_str": "thump-thump-tear",
     "description": "HP10回復 or 10ダメージ",
     "type": "sundry",
     "usage_timing": [
@@ -2483,6 +2506,7 @@
   },
   {
     "name": "ちからの粉",
+    "id_str": "strength-powder",
     "description": "+攻10",
     "type": "sundry",
     "usage_timing": [
@@ -2495,6 +2519,7 @@
   },
   {
     "name": "精霊のぬいぐるみ",
+    "id_str": "spiritual-doll",
     "description": "MP消費なしで奇跡を使える",
     "type": "sundry",
     "usage_timing": [
@@ -2506,6 +2531,7 @@
   },
   {
     "name": "夜空のホウキ",
+    "id_str": "nocturnal-broom",
     "description": "対象の神器を無作為に3つ捨てる",
     "type": "sundry",
     "usage_timing": [
@@ -2517,6 +2543,7 @@
   },
   {
     "name": "女神の石けん",
+    "id_str": "goddess-s-soap",
     "description": "習得済みの軌跡を無作為に2個捨てる",
     "type": "sundry",
     "usage_timing": [
@@ -2528,6 +2555,7 @@
   },
   {
     "name": "運命のひも",
+    "id_str": "string-of-fate",
     "description": "超常現象が起こる",
     "type": "sundry",
     "usage_timing": [
@@ -2539,7 +2567,7 @@
   },
   {
     "name": "太陽のお守り",
-    "id_str": "sun_amulet",
+    "id_str": "sun-amulet",
     "description": "HPが0になると+HP10",
     "type": "sundry",
     "usage_timing": [],
@@ -2549,6 +2577,7 @@
   },
   {
     "name": "あぶないウス",
+    "id_str": "dangerous-mortar",
     "description": "あぶないキネ使用時、99ダメージを受ける",
     "type": "sundry",
     "usage_timing": [],
@@ -2558,6 +2587,7 @@
   },
   {
     "name": "＜火の玉＞",
+    "id_str": "fireball",
     "type": "miracle",
     "usage_timing": [
       "atk_plus_phase",
@@ -2571,6 +2601,7 @@
   },
   {
     "name": "＜氷＞",
+    "id_str": "ice",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2583,6 +2614,7 @@
   },
   {
     "name": "＜闇＞",
+    "id_str": "darkness",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2595,6 +2627,7 @@
   },
   {
     "name": "＜大木＞",
+    "id_str": "big-tree",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2607,6 +2640,7 @@
   },
   {
     "name": "＜岩＞",
+    "id_str": "rock",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2619,6 +2653,7 @@
   },
   {
     "name": "＜炎＞",
+    "id_str": "flame",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2631,6 +2666,7 @@
   },
   {
     "name": "＜吸収＞",
+    "id_str": "absorption",
     "description": "与えたダメージ分HPを吸収する",
     "type": "miracle",
     "usage_timing": [
@@ -2644,6 +2680,7 @@
   },
   {
     "name": "＜流星＞",
+    "id_str": "meteor",
     "type": "miracle",
     "usage_timing": [
       "atk_plus_phase",
@@ -2657,6 +2694,7 @@
   },
   {
     "name": "＜滝＞",
+    "id_str": "waterfall",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2669,7 +2707,9 @@
   },
   {
     "name": "＜風＞",
+    "id_str": "wind",
     "description": "対象を風邪状態にする",
+    "hit_curse": "cold",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2680,7 +2720,9 @@
   },
   {
     "name": "＜天国風＞",
+    "id_str": "heaven-wind",
     "description": "対象を天国病状態にする",
+    "hit_curse": "heaven",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2691,7 +2733,9 @@
   },
   {
     "name": "＜霧＞",
+    "id_str": "fog",
     "description": "対象を霧状態にする",
+    "hit_curse": "fog",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2703,7 +2747,9 @@
   },
   {
     "name": "＜夢＞",
+    "id_str": "dream",
     "description": "対象を夢状態にする",
+    "hit_curse": "dream",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2715,7 +2761,9 @@
   },
   {
     "name": "＜暗雲＞",
+    "id_str": "dark-cloud",
     "description": "対象を暗雲状態にする",
+    "hit_curse": "dark cloud",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2727,7 +2775,9 @@
   },
   {
     "name": "＜閃光＞",
+    "id_str": "flash",
     "description": "25%全体攻撃ダメージを与えた対象を閃光状態にする",
+    "hit_curse": "flash",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2740,6 +2790,7 @@
   },
   {
     "name": "＜煙＞",
+    "id_str": "smoke",
     "description": "75%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2754,6 +2805,7 @@
   },
   {
     "name": "＜雪崩＞",
+    "id_str": "avalanche",
     "description": "75%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2768,6 +2820,7 @@
   },
   {
     "name": "＜雷＞",
+    "id_str": "thunder",
     "description": "25%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2782,6 +2835,7 @@
   },
   {
     "name": "＜土石流＞",
+    "id_str": "mudflow",
     "description": "50%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2796,6 +2850,7 @@
   },
   {
     "name": "＜マグマ＞",
+    "id_str": "magma",
     "description": "75%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2810,6 +2865,7 @@
   },
   {
     "name": "＜氷河期＞",
+    "id_str": "ice-age",
     "description": "75%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2824,6 +2880,7 @@
   },
   {
     "name": "＜オーラ＞",
+    "id_str": "aura",
     "description": "攻撃力を倍にする",
     "type": "miracle",
     "usage_timing": [
@@ -2835,6 +2892,7 @@
   },
   {
     "name": "＜蜃気楼＞",
+    "id_str": "mirage",
     "description": "攻撃が全体攻撃になる",
     "type": "miracle",
     "usage_timing": [
@@ -2846,6 +2904,7 @@
   },
   {
     "name": "＜壁＞",
+    "id_str": "wall",
     "description": "無属性武器を止める",
     "type": "miracle",
     "reaction_type": "block",
@@ -2858,6 +2917,7 @@
   },
   {
     "name": "＜乱気流＞",
+    "id_str": "turbulence",
     "description": "奇跡を弾く",
     "type": "miracle",
     "reaction_type": "bounce",
@@ -2870,6 +2930,7 @@
   },
   {
     "name": "＜泉＞",
+    "id_str": "spring",
     "description": "+HP10",
     "type": "miracle",
     "usage_timing": [
@@ -2881,6 +2942,7 @@
   },
   {
     "name": "＜財宝＞",
+    "id_str": "treasure",
     "description": "+￥10",
     "type": "miracle",
     "usage_timing": [
@@ -2892,6 +2954,7 @@
   },
   {
     "name": "＜音色＞",
+    "id_str": "tone",
     "description": "風邪・熱病・霧・閃光を回復する",
     "type": "miracle",
     "usage_timing": [
@@ -2903,6 +2966,7 @@
   },
   {
     "name": "＜歌声＞",
+    "id_str": "song",
     "description": "全ての災いを回復する",
     "type": "miracle",
     "usage_timing": [
@@ -2914,6 +2978,7 @@
   },
   {
     "name": "＜解放＞",
+    "id_str": "release",
     "description": "守護神が宿る",
     "type": "miracle",
     "usage_timing": [

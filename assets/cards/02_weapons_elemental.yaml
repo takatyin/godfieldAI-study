@@ -302,6 +302,7 @@
   attack_power: 13
   drop_rate: 1
 - name: あぶないキネ
+  id_str: dangerous-pestle
   description: 攻撃対象をランダムに取る
   type: weapon
   usage_timing:
