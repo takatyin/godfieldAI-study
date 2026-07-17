@@ -1,4 +1,3 @@
-### 指輪系反撃防具 ###
 - name: 火星の指輪
   description: 反撃75%攻{被ダメージ}
   type: defense
@@ -8,6 +7,7 @@
   element: 火
   drop_rate: 1
   accuracy: 75
+  id_str: armor/mars-ring
 - name: 水星の指輪
   description: 反撃霧
   type: defense
@@ -16,6 +16,7 @@
   price: 10
   element: 水
   drop_rate: 1
+  id_str: armor/mercury-ring
 - name: 木星の指輪
   description: 反撃夢
   type: defense
@@ -24,6 +25,7 @@
   price: 10
   element: 木
   drop_rate: 1
+  id_str: armor/jupiter-ring
 - name: 土星の指輪
   description: 反撃攻{被ダメージ*2}
   type: defense
@@ -32,6 +34,7 @@
   price: 10
   element: 土
   drop_rate: 1
+  id_str: armor/saturn-ring
 - name: 天王の指輪
   description: 反撃閃光
   type: defense
@@ -62,3 +65,4 @@
   - atk_defence_phase
   price: 10
   drop_rate: 1
+  id_str: armor/venus-ring

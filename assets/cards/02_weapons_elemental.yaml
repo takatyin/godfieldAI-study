@@ -1,4 +1,3 @@
-### 単体属性攻撃 ###
 - name: たいまつ
   type: weapon
   usage_timing:
@@ -7,6 +6,7 @@
   element: 火
   attack_power: 1
   drop_rate: 1
+  id_str: weapons/torch
 - name: つらら
   type: weapon
   usage_timing:
@@ -15,6 +15,7 @@
   element: 水
   attack_power: 1
   drop_rate: 1
+  id_str: weapons/icicle
 - name: 木刀
   type: weapon
   usage_timing:
@@ -23,9 +24,10 @@
   element: 木
   attack_power: 1
   drop_rate: 1
+  id_str: weapons/wooden-sword
 - name: 風のカギ爪
   description: ダメージを与えた対象を風邪状態にする
-  hit_curse: "cold"
+  hit_curse: cold
   type: weapon
   usage_timing:
   - main_atk_phase
@@ -33,6 +35,7 @@
   element: 土
   attack_power: 1
   drop_rate: 1
+  id_str: weapons/wind-talons
 - name: 輝きのカケラ
   type: weapon
   usage_timing:
@@ -42,6 +45,7 @@
   element: 光
   attack_power: 1
   drop_rate: 1
+  id_str: weapons/piece-of-brightness
 - name: ちくりんちょ
   type: weapon
   usage_timing:
@@ -50,6 +54,7 @@
   element: 闇
   attack_power: 1
   drop_rate: 1
+  id_str: weapons/abyss-dart
 - name: あちちナイフ
   type: weapon
   usage_timing:
@@ -58,6 +63,7 @@
   element: 火
   attack_power: 2
   drop_rate: 1
+  id_str: weapons/ouch-knife
 - name: 発火のワンド
   description: 攻撃が火属性になる
   type: weapon
@@ -68,6 +74,7 @@
   element: 火
   attack_power: 2
   drop_rate: 1
+  id_str: weapons/wand-of-ignition
 - name: いばらのムチ
   type: weapon
   usage_timing:
@@ -76,6 +83,7 @@
   element: 木
   attack_power: 2
   drop_rate: 1
+  id_str: weapons/thorn-whip
 - name: 葉っぱ手裏剣
   type: weapon
   usage_timing:
@@ -85,6 +93,7 @@
   element: 木
   attack_power: 2
   drop_rate: 1
+  id_str: weapons/leaf-shuriken
 - name: つるぎ焼き
   type: weapon
   usage_timing:
@@ -93,9 +102,10 @@
   element: 土
   attack_power: 2
   drop_rate: 1
+  id_str: weapons/sword-ware
 - name: フラッシュダガー
   description: ダメージを与えた対象を閃光状態にする
-  hit_curse: "flash"
+  hit_curse: flash
   type: weapon
   usage_timing:
   - main_atk_phase
@@ -103,6 +113,7 @@
   element: 光
   attack_power: 2
   drop_rate: 1
+  id_str: weapons/flash-dagger
 - name: 燃えムチ
   type: weapon
   usage_timing:
@@ -113,7 +124,7 @@
   drop_rate: 1
 - name: 霧鉄砲
   description: ダメージを与えた対象を霧状態にする
-  hit_curse: "fog"
+  hit_curse: fog
   type: weapon
   usage_timing:
   - main_atk_phase
@@ -154,6 +165,7 @@
   element: 闇
   attack_power: 3
   drop_rate: 1
+  id_str: weapons/cobra
 - name: ほむら巻き
   description: 守4
   type: weapon
@@ -182,9 +194,10 @@
   element: 水
   attack_power: 4
   drop_rate: 1
+  id_str: weapons/frozen-hammer
 - name: 夢の木づち
   description: ダメージを与えた対象を夢状態にする
-  hit_curse: "dream"
+  hit_curse: dream
   type: weapon
   usage_timing:
   - main_atk_phase
@@ -200,6 +213,7 @@
   element: 闇
   attack_power: 4
   drop_rate: 1
+  id_str: weapons/goodbye-sword
 - name: ブレイズブレイド
   type: weapon
   usage_timing:
@@ -285,6 +299,7 @@
   element: 光
   attack_power: 9
   drop_rate: 1
+  id_str: weapons/holy-sword
 - name: 死神のカマ
   type: weapon
   usage_timing:
@@ -293,6 +308,7 @@
   element: 闇
   attack_power: 10
   drop_rate: 1
+  id_str: weapons/death-s-scythe
 - name: ダイヤモンドソード
   type: weapon
   usage_timing:
@@ -302,7 +318,7 @@
   attack_power: 13
   drop_rate: 1
 - name: あぶないキネ
-  id_str: dangerous-pestle
+  id_str: weapons/dangerous-pestle
   description: 攻撃対象をランダムに取る
   type: weapon
   usage_timing:

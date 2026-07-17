@@ -73,12 +73,15 @@ PYBIND11_MODULE(godfield_core, m) {
     py::enum_<GamePhase>(m, "GamePhase")
         .value("PHASE_GUARDIAN", GamePhase::PHASE_GUARDIAN)
         .value("PHASE_MAIN", GamePhase::PHASE_MAIN)
+        .value("PHASE_MAIN_TARGET_SELECT", GamePhase::PHASE_MAIN_TARGET_SELECT)
         .value("PHASE_ATTACK_PLUS", GamePhase::PHASE_ATTACK_PLUS)
         .value("PHASE_MIRACLE_PLUS", GamePhase::PHASE_MIRACLE_PLUS)
-        .value("PHASE_SUPER_MIRROR", GamePhase::PHASE_SUPER_MIRROR)
         .value("PHASE_DEFENSE", GamePhase::PHASE_DEFENSE)
         .value("PHASE_MIRACLE_DEFENSE", GamePhase::PHASE_MIRACLE_DEFENSE)
-        .value("PHASE_SELL", GamePhase::PHASE_SELL)
+        .value("PHASE_SELL_SELECT", GamePhase::PHASE_SELL_SELECT)
+        .value("PHASE_SELL_SELECT_MIRROR", GamePhase::PHASE_SELL_SELECT_MIRROR)
+        .value("PHASE_BUY_SELECT_MIRROR", GamePhase::PHASE_BUY_SELECT_MIRROR)
+        .value("PHASE_SUNDRY_SELECT_MIRROR", GamePhase::PHASE_SUNDRY_SELECT_MIRROR)
         .value("PHASE_BUY", GamePhase::PHASE_BUY)
         .value("PHASE_EXCHANGE_HP", GamePhase::PHASE_EXCHANGE_HP)
         .value("PHASE_EXCHANGE_MP", GamePhase::PHASE_EXCHANGE_MP)
@@ -135,6 +138,7 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("pending_attack_power", &InternalState::pending_attack_power)
         .def_readwrite("pending_attack_element", &InternalState::pending_attack_element)
         .def_readwrite("pending_absorption", &InternalState::pending_absorption)
+        .def_readwrite("pending_is_group_attack", &InternalState::pending_is_group_attack)
         // For array members, pybind11 requires special handling to access by index from python.
         // For now, we will add helper methods to InternalState bindings to get/set these arrays.
         .def(

@@ -21,6 +21,7 @@ def test_recovery_and_sickness_sundry():
 
     runner.step(action=ActionType.ACTION_SELECT_HAND_0)
     runner.step(action=ActionType.ACTION_TARGET_OPP)
+    runner.step(action=ActionType.ACTION_CONFIRM)
 
     # 相手(P1)のMPが30になり、天国病にかかっていること
     assert runner.state.get_mp(1) == 30
@@ -184,6 +185,7 @@ def test_goddess_soap_miracle_discard():
     # 石けんを使用して相手に撃つ
     runner.step(action=ActionType.ACTION_SELECT_HAND_0)
     runner.step(action=ActionType.ACTION_TARGET_OPP)
+    runner.step(action=ActionType.ACTION_CONFIRM)
 
     # 相手の展開中奇跡が破棄されていること
     assert runner.state.get_true_hand(1, 5) == godfield_core.CARD_EMPTY
@@ -193,9 +195,9 @@ def test_goddess_soap_miracle_discard():
 def test_spiritual_doll_mp_bypass():
     """
     検証内容: 精霊のぬいぐるみによる奇跡のMP消費踏み倒し。
-    - 自分のMPが0である。
-    - MP2必要な奇跡「火の玉」と「精霊のぬいぐるみ」を同時に奇跡プラスで出す。
-    - MP不足で非合法にならず、MP消費0で奇跡攻撃を発動できること。
+    - 自分のMPが2である（火の玉を出すのに最低限必要）。
+    - 奇跡「火の玉」を出した後に、追加で「精霊のぬいぐるみ」を重ねる。
+    - MP消費0で奇跡攻撃を発動でき、最終的なMPが2のまま保たれること。
     """
     runner = SimulationRunner()
     fireball_id = find_card_by_name("＜火の玉＞")
@@ -203,12 +205,12 @@ def test_spiritual_doll_mp_bypass():
 
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 0)  # MP 0
+    runner.state.set_mp(0, 2)  # MP 2 (火の玉を出すのに必要)
 
     runner.state.set_true_hand(0, 0, fireball_id)
     runner.state.set_true_hand(0, 1, doll_id)
 
-    # 1. まずPHASE_MAINで火の玉を選択可能であることを確認 (手札に人形があるのでMP 0でも選択可能)
+    # 1. まずPHASE_MAINで火の玉を選択可能であることを確認 (MP 2あるため)
     legal_main = godfield_core.get_legal_actions(runner.state)
     assert legal_main[ActionType.ACTION_SELECT_HAND_0.value] == True
 
@@ -221,6 +223,53 @@ def test_spiritual_doll_mp_bypass():
     runner.step(action=ActionType.ACTION_SELECT_HAND_1)  # 人形選択
     runner.step(action=ActionType.ACTION_TARGET_OPP)  # 確定
 
-    # 3. 消費MPが0なので、MPが0のままであり、PHASE_MIRACLE_DEFENSEへ進めていること
-    assert runner.state.get_mp(0) == 0
+    # 3. 消費MPが0なので、MPが2のままであり、PHASE_MIRACLE_DEFENSEへ進めていること
+    assert runner.state.get_mp(0) == 2
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
+
+
+def test_high_cost_miracle_spiritual_bypass():
+    """
+    検証内容: MPが不足している高コスト奇跡でも、手札に精霊系カードがあれば選択可能であること。
+    - 自分のMPが2である。
+    - 手札に奇跡「＜闇＞」（消費MP 5）と「精霊のぬいぐるみ」がある。
+    - 1. 自身のMP（2）より高コストな奇跡「＜闇＞」（5）が、手札に人形があるため PHASE_MAIN で選択可能であることを確認。
+    - 2. 「＜闇＞」を仮置きした時点（PHASE_MIRACLE_PLUS）では、消費MP（5）が手持ちMP（2）を超えているため、
+         ターゲット決定（攻撃開始）が不可（非合法）であることを確認。
+    - 3. 追加で「精霊のぬいぐるみ」を選択して仮置きに重ねた後、合計消費MPが0になるため、ターゲット決定が合法になることを確認。
+    - 4. 攻撃を発動し、消費MPが0であるため最終的なMPが2のまま保たれることを確認。
+    """
+    runner = SimulationRunner()
+    darkness_id = find_card_by_name("＜闇＞") # MP 5
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 2)  # MP 2 (＜闇＞のコスト5に不足)
+
+    runner.state.set_true_hand(0, 0, darkness_id)
+    runner.state.set_true_hand(0, 1, doll_id)
+
+    # 1. 相手手札に精霊があるので選択可能であることを確認
+    legal_main = godfield_core.get_legal_actions(runner.state)
+    assert legal_main[ActionType.ACTION_SELECT_HAND_0.value] == True
+
+    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # ＜闇＞を選択
+
+    # 2. この段階ではMP不足のためターゲット決定はできないはず
+    legal_plus = godfield_core.get_legal_actions(runner.state)
+    assert legal_plus[ActionType.ACTION_TARGET_OPP.value] == False
+    assert legal_plus[ActionType.ACTION_TARGET_SELF.value] == False
+    assert legal_plus[ActionType.ACTION_SELECT_HAND_1.value] == True  # 精霊は選択可能
+
+    runner.step(action=ActionType.ACTION_SELECT_HAND_1)  # 精霊を選択
+
+    # 3. 精霊によってコストが0になったため、ターゲット決定ができるようになる
+    legal_plus_2 = godfield_core.get_legal_actions(runner.state)
+    assert legal_plus_2[ActionType.ACTION_TARGET_OPP.value] == True
+
+    runner.step(action=ActionType.ACTION_TARGET_OPP)  # 確定
+
+    # 4. 消費MPが0なので、MPが2のままであり、PHASE_MIRACLE_DEFENSEへ進めていること
+    assert runner.state.get_mp(0) == 2
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE

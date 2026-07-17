@@ -20,10 +20,10 @@ void EnvPool::reset(int seed) {
         states_[i].rng.seed(seed + i);
         states_[i].current_actor_id = 0;
         states_[i].current_turn = 0;
-        states_[i].current_phase = GamePhase::PHASE_GUARDIAN;
+        states_[i].current_phase = GamePhase::PHASE_MAIN;
         states_[i].hp[0] = 40; states_[i].hp[1] = 40;
-        states_[i].mp[0] = 0; states_[i].mp[1] = 0;
-        states_[i].money[0] = 0; states_[i].money[1] = 0;
+        states_[i].mp[0] = 10; states_[i].mp[1] = 10;
+        states_[i].money[0] = 20; states_[i].money[1] = 20;
         states_[i].num_staged_cards[0] = 0; states_[i].num_staged_cards[1] = 0;
         
         states_[i].attacker_id = -1;
@@ -51,6 +51,12 @@ void EnvPool::reset(int seed) {
         states_[i].is_done = false;
         states_[i].p0_reward = 0.0f;
         states_[i].p1_reward = 0.0f;
+
+        // Auto-advance if the starting state has only 1 legal action
+        int auto_action;
+        while (!states_[i].is_done && (auto_action = get_single_legal_action(states_[i])) != -1) {
+            step_game(states_[i], static_cast<ActionType>(auto_action));
+        }
 
         generate_observation(i);
         ready_env_ids_[i] = i; // All ready
@@ -94,9 +100,14 @@ void EnvPool::step_env(int env_id, int action) {
     
     // Call the decoupled game logic
     step_game(state, static_cast<ActionType>(action));
+
+    // Auto-advance loop for phases with only 1 legal choice
+    int auto_action;
+    while (!state.is_done && (auto_action = get_single_legal_action(state)) != -1) {
+        step_game(state, static_cast<ActionType>(auto_action));
+    }
     
     // Environment specific artificial turn advance (for now)
-    state.current_turn++;
     if (state.current_turn > MAX_EPISODE_TURNS) {
         state.is_done = true;
     }
@@ -139,12 +150,12 @@ void EnvPool::generate_observation(int env_id) {
         obs.staged_cards[i] = state.true_hand[me][h_idx];
     }
 
-    // Opponent hand cards (only show known or deployed ones)
+    // Opponent hand cards (相手の公開手札のスロット位置リークを防ぐため、左詰めで格納する)
+    int known_count = 0;
+    std::fill(std::begin(obs.opponent_hand_cards), std::end(obs.opponent_hand_cards), 0);
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         if (state.is_known_to_opp[opp][i] || state.is_deployed[opp][i]) {
-            obs.opponent_hand_cards[i] = state.true_hand[opp][i];
-        } else {
-            obs.opponent_hand_cards[i] = 0;
+            obs.opponent_hand_cards[known_count++] = state.true_hand[opp][i];
         }
     }
 

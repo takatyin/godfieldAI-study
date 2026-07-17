@@ -1,4 +1,3 @@
-### 全体攻撃武器 ###
 - name: 火の粉袋
   description: 75%全体攻撃
   type: weapon
@@ -9,6 +8,7 @@
   attack_power: 1
   drop_rate: 1
   accuracy: 75
+  id_str: weapons/spark-bag
 - name: シャドウハンド
   description: 50%全体攻撃
   type: weapon
@@ -19,9 +19,10 @@
   attack_power: 2
   drop_rate: 1
   accuracy: 50
+  id_str: weapons/shadow-hand
 - name: 霧の扇
   description: ダメージを与えた対象を霧状態にする
-  hit_curse: "fog"
+  hit_curse: fog
   type: weapon
   usage_timing:
   - main_atk_phase
@@ -30,6 +31,7 @@
   attack_power: 3
   drop_rate: 1
   accuracy: 50
+  id_str: weapons/fog-fan
 - name: つるシュート
   description: 与えたダメージ分HPを吸収する
   type: weapon
@@ -40,6 +42,7 @@
   attack_power: 3
   drop_rate: 1
   accuracy: 75
+  id_str: weapons/vine-shoot
 - name: イナヅマキッズ
   description: 25%全体攻撃
   type: weapon
@@ -50,6 +53,7 @@
   attack_power: 3
   drop_rate: 1
   accuracy: 25
+  id_str: weapons/lightning-kids
 - name: 火炎杯
   description: 75%全体攻撃
   type: weapon
@@ -60,6 +64,7 @@
   attack_power: 4
   drop_rate: 1
   accuracy: 75
+  id_str: weapons/flame-cup
 - name: 冷気杯
   description: 75%全体攻撃
   type: weapon
@@ -70,6 +75,7 @@
   attack_power: 4
   drop_rate: 1
   accuracy: 75
+  id_str: weapons/chill-cup
 - name: 植物杯
   description: 75%全体攻撃
   type: weapon
@@ -80,6 +86,7 @@
   attack_power: 4
   drop_rate: 1
   accuracy: 75
+  id_str: weapons/plant-cup
 - name: 岩石杯
   description: 75%全体攻撃
   type: weapon
@@ -90,6 +97,7 @@
   attack_power: 4
   drop_rate: 1
   accuracy: 75
+  id_str: weapons/rock-cup
 - name: 特大雪玉
   description: 50%全体攻撃
   type: weapon
@@ -100,6 +108,7 @@
   attack_power: 5
   drop_rate: 1
   accuracy: 50
+  id_str: weapons/oversize-snowball
 - name: ガケッツチ
   description: 25%全体攻撃
   type: weapon
@@ -110,6 +119,7 @@
   attack_power: 6
   drop_rate: 1
   accuracy: 25
+  id_str: weapons/cliff-hammer
 - name: 光のオーブ
   description: 75%全体攻撃
   type: weapon
@@ -120,6 +130,7 @@
   attack_power: 6
   drop_rate: 1
   accuracy: 75
+  id_str: weapons/light-orb
 - name: 烈火シャワー
   description: 75%全体攻撃
   type: weapon
@@ -130,6 +141,7 @@
   attack_power: 7
   drop_rate: 1
   accuracy: 75
+  id_str: weapons/fire-shower
 - name: 魔神の木馬
   description: 守6
   type: weapon
@@ -142,6 +154,7 @@
   defense_power: 6
   drop_rate: 1
   accuracy: 75
+  id_str: weapons/jinn-s-rocking-horse
 - name: 雨神刀
   description: 50%全体攻撃
   type: weapon
@@ -152,6 +165,7 @@
   attack_power: 9
   drop_rate: 1
   accuracy: 50
+  id_str: weapons/rain-deity-s-saber
 - name: フレアアクス
   description: 50%全体攻撃
   type: weapon
@@ -162,6 +176,7 @@
   attack_power: 10
   drop_rate: 1
   accuracy: 50
+  id_str: weapons/flare-axe
 - name: プチサターン
   description: 25%全体攻撃
   type: weapon
@@ -172,8 +187,9 @@
   attack_power: 20
   drop_rate: 1
   accuracy: 25
+  id_str: weapons/petit-saturn
 - name: 昇天弓
-  id_str: "ascension_bow"
+  id_str: weapons/ascension-bow
   description: 25%全体攻撃（死亡時発動は環境側で処理）
   type: weapon
   usage_timing:

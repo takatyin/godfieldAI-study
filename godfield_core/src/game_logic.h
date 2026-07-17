@@ -46,5 +46,8 @@ void step_game(InternalState& state, ActionType action);
  */
 void get_legal_actions(const InternalState& state, bool legal_actions[ACTION_SPACE_SIZE]);
 
-// Helper function to resolve ongoing effects/events.
-void resolve_events(InternalState& state);
+/**
+ * @brief 現在のゲーム状態において、合法手が1つしかない場合はそのアクションIDを返す
+ *        それ以外（0個、または2個以上）の場合は -1 を返す
+ */
+int get_single_legal_action(const InternalState& state);

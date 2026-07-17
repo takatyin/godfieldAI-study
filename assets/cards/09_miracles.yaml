@@ -1,6 +1,5 @@
-### 単体対象の奇跡 ###
 - name: ＜火の玉＞
-  id_str: fireball
+  id_str: miracles/fireball
   type: miracle
   usage_timing:
   - atk_plus_phase
@@ -10,7 +9,7 @@
   drop_rate: 1
   mp_cost: 2
 - name: ＜氷＞
-  id_str: ice
+  id_str: miracles/ice
   type: miracle
   usage_timing:
   - main_miracle_phase
@@ -19,7 +18,7 @@
   drop_rate: 1
   mp_cost: 2
 - name: ＜闇＞
-  id_str: darkness
+  id_str: miracles/darkness
   type: miracle
   usage_timing:
   - main_miracle_phase
@@ -28,7 +27,7 @@
   drop_rate: 1
   mp_cost: 5
 - name: ＜大木＞
-  id_str: big-tree
+  id_str: miracles/big-tree
   type: miracle
   usage_timing:
   - main_miracle_phase
@@ -37,7 +36,7 @@
   drop_rate: 1
   mp_cost: 3
 - name: ＜岩＞
-  id_str: rock
+  id_str: miracles/rock
   type: miracle
   usage_timing:
   - main_miracle_phase
@@ -46,7 +45,7 @@
   drop_rate: 1
   mp_cost: 4
 - name: ＜炎＞
-  id_str: flame
+  id_str: miracles/flame
   type: miracle
   usage_timing:
   - main_miracle_phase
@@ -55,7 +54,7 @@
   drop_rate: 1
   mp_cost: 5
 - name: ＜吸収＞
-  id_str: absorption
+  id_str: miracles/absorption
   description: 与えたダメージ分HPを吸収する
   type: miracle
   usage_timing:
@@ -65,7 +64,7 @@
   drop_rate: 1
   mp_cost: 10
 - name: ＜流星＞
-  id_str: meteor
+  id_str: miracles/meteor
   type: miracle
   usage_timing:
   - atk_plus_phase
@@ -75,7 +74,7 @@
   drop_rate: 1
   mp_cost: 7
 - name: ＜滝＞
-  id_str: waterfall
+  id_str: miracles/waterfall
   type: miracle
   usage_timing:
   - main_miracle_phase
@@ -84,27 +83,27 @@
   drop_rate: 1
   mp_cost: 12
 - name: ＜風＞
-  id_str: wind
+  id_str: miracles/wind
   description: 対象を風邪状態にする
-  hit_curse: "cold"
+  hit_curse: cold
   type: miracle
   usage_timing:
   - main_miracle_phase
   mp_cost: 6
   drop_rate: 1
 - name: ＜天国風＞
-  id_str: heaven-wind
+  id_str: miracles/heaven-wind
   description: 対象を天国病状態にする
-  hit_curse: "heaven"
+  hit_curse: heaven
   type: miracle
   usage_timing:
   - main_miracle_phase
   mp_cost: 15
   drop_rate: 1
 - name: ＜霧＞
-  id_str: fog
+  id_str: miracles/fog
   description: 対象を霧状態にする
-  hit_curse: "fog"
+  hit_curse: fog
   type: miracle
   usage_timing:
   - main_miracle_phase
@@ -112,9 +111,9 @@
   mp_cost: 3
   drop_rate: 1
 - name: ＜夢＞
-  id_str: dream
+  id_str: miracles/dream
   description: 対象を夢状態にする
-  hit_curse: "dream"
+  hit_curse: dream
   type: miracle
   usage_timing:
   - main_miracle_phase
@@ -122,21 +121,19 @@
   mp_cost: 6
   drop_rate: 1
 - name: ＜暗雲＞
-  id_str: dark-cloud
+  id_str: miracles/dark-cloud
   description: 対象を暗雲状態にする
-  hit_curse: "dark cloud"
+  hit_curse: dark cloud
   type: miracle
   usage_timing:
   - main_miracle_phase
   element: 闇
   mp_cost: 5
   drop_rate: 1
-
-### 全体攻撃の奇跡 ###
 - name: ＜閃光＞
-  id_str: flash
+  id_str: miracles/flash
   description: 25%全体攻撃ダメージを与えた対象を閃光状態にする
-  hit_curse: "flash"
+  hit_curse: flash
   type: miracle
   usage_timing:
   - main_miracle_phase
@@ -145,7 +142,7 @@
   drop_rate: 1
   accuracy: 25
 - name: ＜煙＞
-  id_str: smoke
+  id_str: miracles/smoke
   description: 75%全体攻撃
   type: miracle
   usage_timing:
@@ -156,7 +153,7 @@
   mp_cost: 4
   accuracy: 75
 - name: ＜雪崩＞
-  id_str: avalanche
+  id_str: miracles/avalanche
   description: 75%全体攻撃
   type: miracle
   usage_timing:
@@ -167,7 +164,7 @@
   mp_cost: 6
   accuracy: 75
 - name: ＜雷＞
-  id_str: thunder
+  id_str: miracles/thunder
   description: 25%全体攻撃
   type: miracle
   usage_timing:
@@ -178,7 +175,7 @@
   mp_cost: 4
   accuracy: 25
 - name: ＜土石流＞
-  id_str: mudflow
+  id_str: miracles/mudflow
   description: 50%全体攻撃
   type: miracle
   usage_timing:
@@ -189,7 +186,7 @@
   mp_cost: 6
   accuracy: 50
 - name: ＜マグマ＞
-  id_str: magma
+  id_str: miracles/magma
   description: 75%全体攻撃
   type: miracle
   usage_timing:
@@ -200,7 +197,7 @@
   mp_cost: 10
   accuracy: 75
 - name: ＜氷河期＞
-  id_str: ice-age
+  id_str: miracles/ice-age
   description: 75%全体攻撃
   type: miracle
   usage_timing:
@@ -210,10 +207,8 @@
   drop_rate: 1
   mp_cost: 30
   accuracy: 75
-
-### 特殊な奇跡 ###
 - name: ＜オーラ＞
-  id_str: aura
+  id_str: miracles/aura
   description: 攻撃力を倍にする
   type: miracle
   usage_timing:
@@ -221,7 +216,7 @@
   mp_cost: 6
   drop_rate: 1
 - name: ＜蜃気楼＞
-  id_str: mirage
+  id_str: miracles/mirage
   description: 攻撃が全体攻撃になる
   type: miracle
   usage_timing:
@@ -229,7 +224,7 @@
   mp_cost: 5
   drop_rate: 1
 - name: ＜壁＞
-  id_str: wall
+  id_str: miracles/wall
   description: 無属性武器を止める
   type: miracle
   reaction_type: block
@@ -238,7 +233,7 @@
   mp_cost: 6
   drop_rate: 1
 - name: ＜乱気流＞
-  id_str: turbulence
+  id_str: miracles/turbulence
   description: 奇跡を弾く
   type: miracle
   reaction_type: bounce
@@ -247,7 +242,7 @@
   mp_cost: 5
   drop_rate: 1
 - name: ＜泉＞
-  id_str: spring
+  id_str: miracles/spring
   description: +HP10
   type: miracle
   usage_timing:
@@ -255,7 +250,7 @@
   mp_cost: 7
   drop_rate: 1
 - name: ＜財宝＞
-  id_str: treasure
+  id_str: miracles/treasure
   description: +￥10
   type: miracle
   usage_timing:
@@ -263,7 +258,7 @@
   mp_cost: 5
   drop_rate: 1
 - name: ＜音色＞
-  id_str: tone
+  id_str: miracles/tone
   description: 風邪・熱病・霧・閃光を回復する
   type: miracle
   usage_timing:
@@ -271,7 +266,7 @@
   mp_cost: 2
   drop_rate: 1
 - name: ＜歌声＞
-  id_str: song
+  id_str: miracles/song
   description: 全ての災いを回復する
   type: miracle
   usage_timing:
@@ -279,7 +274,7 @@
   mp_cost: 5
   drop_rate: 1
 - name: ＜解放＞
-  id_str: release
+  id_str: miracles/release
   description: 守護神が宿る
   type: miracle
   usage_timing:

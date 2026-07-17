@@ -75,7 +75,44 @@ constexpr int ID_SUN_AMULET = 205;
 コアロジックは単発のインライン関数 `step_game(InternalState&, int)` として切り出されており、テスト環境からはこの関数を直接叩きます。
 Python側には `InternalState` 構造体がそのまま公開されているため、`SimulationRunner` (`tests/core/test_utils.py`) を使って任意のHPや手札の盤面状況を直接注入し、マイクロステップ単位で詳細なアサーションが可能です。
 
-## プロジェクト構造とドキュメント (Project Structure)
+## 現在のプロジェクト進捗状況 (Current Project Progress)
+
+本プロジェクトは現在、**「フェーズ1：ゲームルールシミュレータの作成・完成度向上」**の段階にあります。
+強化学習 (RL) やAIのモデル学習などの実装は**未着手**（スタブコードや枠組みのみの状態）であり、まずはC++側でゴッドフィールドの複雑なルール、例外、フェイズ遷移をバグなく正確にシミュレーションし、100%正しく進行できるゲームエンジンを完成させることに注力しています。
+
+シミュレーション動作の正当性は、`tests/core/` 配下の単体テスト（`pytest`）を通じて厳密に検証されています。
+
+---
+
+## プロジェクト構造とコード分割 (Project Structure & Code Split)
+
+当初 `godfield_core/src/game_logic.cpp` という1つの巨大なモノリスファイル（約2200行/80KB）で実装されていたゲームルールエンジンは、可読性と保守性の観点から、機能ごとに細かく分割・再設計されました。
+
+各関数には、その役割がひと目でわかるよう日本語と英語の丁寧なコメントが記述されています。
+
+### コアモジュールの構成 (`godfield_core/src/`)
+
+* **[game_logic.cpp](./godfield_core/src/game_logic.cpp) (メインエントリー・管制塔)**
+  * ルールエンジンの入り口である `step_game()`, `get_legal_actions()`, `get_single_legal_action()` のみを定義しています。
+  * 各フェイズの処理や合法手チェックは、対応するモジュールへ委譲し、全体の流れのみをコントロールします。
+* **[game_logic_internal.h](./godfield_core/src/game_logic_internal.h) (内部共有ヘッダー)**
+  * 分割されたソースファイル間で共有するヘルパー関数、フェイズ固有のアクションステップ、および合法手チェック関数のプロトタイプ宣言をまとめています。
+* **[card_registry.cpp](./godfield_core/src/card_registry.cpp) (カードマスター・ドロー管理)**
+  * Python側から渡されたリストに基づくカードデータベースの初期化（`init_game_logic`）、カードドローの確率分布構築（山札からの抽選）、カード名の引き当てなどを担当します。
+* **[combat_resolution.cpp](./godfield_core/src/combat_resolution.cpp) (戦闘・取引・効果適用解決)**
+  * 雑貨カードなどの効果解決（回復、病気・状態異常付与）、売買取引の解決（`execute_sell_resolution`）、スーパーミラーによる反射処理など、直接ステータスや手札を操作する解決ロジックを管理します。
+* **[phase_handlers.cpp](./godfield_core/src/phase_handlers.cpp) (フェイズ別ステップハンドラ)**
+  * メイン、攻撃、防御、奇跡、両替、破棄など、ゲームフェイズごとのアクションに応じた状態遷移（`step_phase_X`）を実装しています。
+* **[legal_actions.cpp](./godfield_core/src/legal_actions.cpp) (フェイズ別合法アクションチェック)**
+  * 各種フェイズにおいて、プレイヤーが現在どの手札や行動を選択できるかのマスクを計算する関数群（`legal_phase_X`）を実装しています。
+* **[env_pool.cpp](./godfield_core/src/env_pool.cpp) / [env_pool.h](./godfield_core/src/env_pool.h) (並列環境プール)**
+  * 強化学習時にマルチスレッドで数万の環境をバッチ処理するためのプール機構です。
+* **[bindings.cpp](./godfield_core/src/bindings.cpp) (pybind11 バインディング)**
+  * C++で実装されたシミュレータを Python から高速に呼び出すためのバインディング定義。
+
+---
+
+## ドキュメントとアセット (Docs & Assets)
 
 ### ドキュメント (`docs/`)
 - [`docs/rules.md`](./docs/rules.md): ゴッドフィールドの詳細なゲームルール。

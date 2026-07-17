@@ -1,5 +1,5 @@
 - name: 両替
-  id_str: "exchange"
+  id_str: deals/exchange
   description: 自分のHP,MP,¥を自由に振り分ける
   type: deal
   usage_timing:
@@ -7,7 +7,7 @@
   price: 5
   drop_rate: 20
 - name: 売る
-  id_str: "sell"
+  id_str: deals/sell
   description: 神器を一個売る
   type: deal
   usage_timing:
@@ -15,7 +15,7 @@
   price: 5
   drop_rate: 20
 - name: 買う
-  id_str: "buy"
+  id_str: deals/buy
   description: 神器を一個買う
   type: deal
   usage_timing:

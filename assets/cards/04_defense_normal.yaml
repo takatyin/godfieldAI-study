@@ -1,4 +1,3 @@
-### 基本的な防具 ###
 - name: 革の帽子
   type: defense
   usage_timing:
@@ -16,6 +15,7 @@
   price: 5
   defense_power: 1
   drop_rate: 1
+  id_str: armor/sky-boots
 - name: アクアシューズ
   type: defense
   usage_timing:
@@ -47,6 +47,7 @@
   price: 2
   defense_power: 2
   drop_rate: 10
+  id_str: armor/leather-clothes
 - name: 火花の手袋
   type: defense
   usage_timing:
@@ -55,6 +56,7 @@
   element: 火
   defense_power: 2
   drop_rate: 1
+  id_str: armor/sparkle-glove
 - name: アクアグローブ
   type: defense
   usage_timing:
@@ -71,6 +73,7 @@
   element: 木
   defense_power: 2
   drop_rate: 1
+  id_str: armor/wood-shield
 - name: 岩盤
   type: defense
   usage_timing:
@@ -79,6 +82,7 @@
   element: 土
   defense_power: 2
   drop_rate: 1
+  id_str: armor/bedrock
 - name: アイアンガントレット
   type: defense
   usage_timing:
@@ -177,6 +181,7 @@
   element: 土
   defense_power: 4
   drop_rate: 1
+  id_str: armor/terra-shoes
 - name: アイアンアーマー
   type: defense
   usage_timing:
@@ -236,6 +241,7 @@
   element: 土
   defense_power: 5
   drop_rate: 1
+  id_str: armor/terra-gauntlet
 - name: はがねの小手
   type: defense
   usage_timing:
@@ -252,6 +258,7 @@
   price: 20
   defense_power: 6
   drop_rate: 1
+  id_str: armor/spiritual-socks
 - name: フレイムメイル
   type: defense
   usage_timing:
@@ -260,6 +267,7 @@
   element: 火
   defense_power: 6
   drop_rate: 1
+  id_str: armor/flame-mail
 - name: アイスアーマー
   type: defense
   usage_timing:
@@ -319,6 +327,7 @@
   price: 5
   defense_power: 7
   drop_rate: 1
+  id_str: armor/sky-shield
 - name: バーニングシールド
   type: defense
   usage_timing:
@@ -393,6 +402,7 @@
   element: 土
   defense_power: 8
   drop_rate: 1
+  id_str: armor/terra-armor
 - name: はがねのよろい
   type: defense
   usage_timing:
@@ -419,6 +429,7 @@
   price: 20
   defense_power: 9
   drop_rate: 1
+  id_str: armor/spiritual-hood
 - name: スカイアーマー
   type: defense
   usage_timing:
@@ -426,6 +437,7 @@
   price: 5
   defense_power: 9
   drop_rate: 1
+  id_str: armor/sky-armor
 - name: エンゼルの小手
   description: 奇跡を止める
   type: defense
@@ -453,6 +465,7 @@
   price: 10
   defense_power: 10
   drop_rate: 1
+  id_str: armor/moonlight-shield
 - name: 熱狂仮面
   description: 使用者を熱病状態にする
   type: defense
@@ -503,6 +516,7 @@
   price: 20
   defense_power: 12
   drop_rate: 1
+  id_str: armor/spiritual-sash
 - name: 月光のよろい
   type: defense
   usage_timing:
@@ -510,6 +524,7 @@
   price: 10
   defense_power: 12
   drop_rate: 1
+  id_str: armor/moonlight-armor
 - name: 陽炎のよろい
   type: defense
   usage_timing:
@@ -518,6 +533,7 @@
   element: 火
   defense_power: 12
   drop_rate: 1
+  id_str: armor/heat-haze-armor
 - name: コアプロテクター
   type: defense
   usage_timing:
@@ -544,6 +560,7 @@
   element: 木
   defense_power: 14
   drop_rate: 1
+  id_str: armor/dreaming-hat
 - name: エンゼルアーマー
   description: 奇跡を止める
   type: defense
@@ -561,3 +578,4 @@
   price: 30
   defense_power: 30
   drop_rate: 1
+  id_str: armor/god-shield

@@ -8,6 +8,7 @@
     "price": 1,
     "attack_power": 1,
     "drop_rate": 3,
+    "id_str": "weapons/bronze-club",
     "id": 0
   },
   {
@@ -19,6 +20,7 @@
     "price": 10,
     "attack_power": 1,
     "drop_rate": 1,
+    "id_str": "weapons/silver-club",
     "id": 1
   },
   {
@@ -30,6 +32,7 @@
     "price": 25,
     "attack_power": 1,
     "drop_rate": 1,
+    "id_str": "weapons/gold-club",
     "id": 2
   },
   {
@@ -42,6 +45,7 @@
     "price": 1,
     "attack_power": 1,
     "drop_rate": 1,
+    "id_str": "weapons/blowgun",
     "id": 3
   },
   {
@@ -53,6 +57,7 @@
     "price": 1,
     "attack_power": 2,
     "drop_rate": 4,
+    "id_str": "weapons/whip",
     "id": 4
   },
   {
@@ -67,6 +72,7 @@
     "attack_power": 2,
     "defense_power": 6,
     "drop_rate": 1,
+    "id_str": "weapons/saver-rod",
     "id": 5
   },
   {
@@ -79,6 +85,7 @@
     "price": 2,
     "attack_power": 2,
     "drop_rate": 1,
+    "id_str": "weapons/crossbow",
     "id": 6
   },
   {
@@ -90,6 +97,7 @@
     "price": 1,
     "attack_power": 3,
     "drop_rate": 5,
+    "id_str": "weapons/punch",
     "id": 7
   },
   {
@@ -114,6 +122,7 @@
     "price": 3,
     "attack_power": 3,
     "drop_rate": 1,
+    "id_str": "weapons/boomerang",
     "id": 9
   },
   {
@@ -151,6 +160,7 @@
     "price": 4,
     "attack_power": 4,
     "drop_rate": 1,
+    "id_str": "weapons/battle-ball",
     "id": 12
   },
   {
@@ -202,6 +212,7 @@
     "price": 5,
     "attack_power": 5,
     "drop_rate": 1,
+    "id_str": "weapons/warrior-s-bow",
     "id": 16
   },
   {
@@ -239,6 +250,7 @@
     "price": 6,
     "attack_power": 6,
     "drop_rate": 1,
+    "id_str": "weapons/jet-yo-yo",
     "id": 19
   },
   {
@@ -298,6 +310,7 @@
     "price": 15,
     "attack_power": 8,
     "drop_rate": 1,
+    "id_str": "weapons/hell-scissors",
     "id": 24
   },
   {
@@ -384,6 +397,7 @@
     "attack_power": 10,
     "defense_power": 10,
     "drop_rate": 1,
+    "id_str": "weapons/sword-shield",
     "id": 31
   },
   {
@@ -498,6 +512,7 @@
     "price": 20,
     "attack_power": 12,
     "drop_rate": 1,
+    "id_str": "weapons/spiritual-staff",
     "id": 40
   },
   {
@@ -636,6 +651,7 @@
     "price": 30,
     "attack_power": 30,
     "drop_rate": 1,
+    "id_str": "weapons/god-sword",
     "id": 51
   },
   {
@@ -660,6 +676,7 @@
     "element": "火",
     "attack_power": 1,
     "drop_rate": 1,
+    "id_str": "weapons/torch",
     "id": 53
   },
   {
@@ -672,6 +689,7 @@
     "element": "水",
     "attack_power": 1,
     "drop_rate": 1,
+    "id_str": "weapons/icicle",
     "id": 54
   },
   {
@@ -684,6 +702,7 @@
     "element": "木",
     "attack_power": 1,
     "drop_rate": 1,
+    "id_str": "weapons/wooden-sword",
     "id": 55
   },
   {
@@ -698,6 +717,7 @@
     "element": "土",
     "attack_power": 1,
     "drop_rate": 1,
+    "id_str": "weapons/wind-talons",
     "id": 56
   },
   {
@@ -711,6 +731,7 @@
     "element": "光",
     "attack_power": 1,
     "drop_rate": 1,
+    "id_str": "weapons/piece-of-brightness",
     "id": 57
   },
   {
@@ -723,6 +744,7 @@
     "element": "闇",
     "attack_power": 1,
     "drop_rate": 1,
+    "id_str": "weapons/abyss-dart",
     "id": 58
   },
   {
@@ -735,6 +757,7 @@
     "element": "火",
     "attack_power": 2,
     "drop_rate": 1,
+    "id_str": "weapons/ouch-knife",
     "id": 59
   },
   {
@@ -749,6 +772,7 @@
     "element": "火",
     "attack_power": 2,
     "drop_rate": 1,
+    "id_str": "weapons/wand-of-ignition",
     "id": 60
   },
   {
@@ -761,6 +785,7 @@
     "element": "木",
     "attack_power": 2,
     "drop_rate": 1,
+    "id_str": "weapons/thorn-whip",
     "id": 61
   },
   {
@@ -774,6 +799,7 @@
     "element": "木",
     "attack_power": 2,
     "drop_rate": 1,
+    "id_str": "weapons/leaf-shuriken",
     "id": 62
   },
   {
@@ -786,6 +812,7 @@
     "element": "土",
     "attack_power": 2,
     "drop_rate": 1,
+    "id_str": "weapons/sword-ware",
     "id": 63
   },
   {
@@ -800,6 +827,7 @@
     "element": "光",
     "attack_power": 2,
     "drop_rate": 1,
+    "id_str": "weapons/flash-dagger",
     "id": 64
   },
   {
@@ -875,6 +903,7 @@
     "element": "闇",
     "attack_power": 3,
     "drop_rate": 1,
+    "id_str": "weapons/cobra",
     "id": 70
   },
   {
@@ -915,6 +944,7 @@
     "element": "水",
     "attack_power": 4,
     "drop_rate": 1,
+    "id_str": "weapons/frozen-hammer",
     "id": 73
   },
   {
@@ -941,6 +971,7 @@
     "element": "闇",
     "attack_power": 4,
     "drop_rate": 1,
+    "id_str": "weapons/goodbye-sword",
     "id": 75
   },
   {
@@ -1066,6 +1097,7 @@
     "element": "光",
     "attack_power": 9,
     "drop_rate": 1,
+    "id_str": "weapons/holy-sword",
     "id": 85
   },
   {
@@ -1078,6 +1110,7 @@
     "element": "闇",
     "attack_power": 10,
     "drop_rate": 1,
+    "id_str": "weapons/death-s-scythe",
     "id": 86
   },
   {
@@ -1094,7 +1127,7 @@
   },
   {
     "name": "あぶないキネ",
-    "id_str": "dangerous-pestle",
+    "id_str": "weapons/dangerous-pestle",
     "description": "攻撃対象をランダムに取る",
     "type": "weapon",
     "usage_timing": [
@@ -1118,6 +1151,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "weapons/spark-bag",
     "id": 89
   },
   {
@@ -1132,6 +1166,7 @@
     "attack_power": 2,
     "drop_rate": 1,
     "accuracy": 50,
+    "id_str": "weapons/shadow-hand",
     "id": 90
   },
   {
@@ -1147,6 +1182,7 @@
     "attack_power": 3,
     "drop_rate": 1,
     "accuracy": 50,
+    "id_str": "weapons/fog-fan",
     "id": 91
   },
   {
@@ -1161,6 +1197,7 @@
     "attack_power": 3,
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "weapons/vine-shoot",
     "id": 92
   },
   {
@@ -1175,6 +1212,7 @@
     "attack_power": 3,
     "drop_rate": 1,
     "accuracy": 25,
+    "id_str": "weapons/lightning-kids",
     "id": 93
   },
   {
@@ -1189,6 +1227,7 @@
     "attack_power": 4,
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "weapons/flame-cup",
     "id": 94
   },
   {
@@ -1203,6 +1242,7 @@
     "attack_power": 4,
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "weapons/chill-cup",
     "id": 95
   },
   {
@@ -1217,6 +1257,7 @@
     "attack_power": 4,
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "weapons/plant-cup",
     "id": 96
   },
   {
@@ -1231,6 +1272,7 @@
     "attack_power": 4,
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "weapons/rock-cup",
     "id": 97
   },
   {
@@ -1245,6 +1287,7 @@
     "attack_power": 5,
     "drop_rate": 1,
     "accuracy": 50,
+    "id_str": "weapons/oversize-snowball",
     "id": 98
   },
   {
@@ -1259,6 +1302,7 @@
     "attack_power": 6,
     "drop_rate": 1,
     "accuracy": 25,
+    "id_str": "weapons/cliff-hammer",
     "id": 99
   },
   {
@@ -1273,6 +1317,7 @@
     "attack_power": 6,
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "weapons/light-orb",
     "id": 100
   },
   {
@@ -1287,6 +1332,7 @@
     "attack_power": 7,
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "weapons/fire-shower",
     "id": 101
   },
   {
@@ -1303,6 +1349,7 @@
     "defense_power": 6,
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "weapons/jinn-s-rocking-horse",
     "id": 102
   },
   {
@@ -1317,6 +1364,7 @@
     "attack_power": 9,
     "drop_rate": 1,
     "accuracy": 50,
+    "id_str": "weapons/rain-deity-s-saber",
     "id": 103
   },
   {
@@ -1331,6 +1379,7 @@
     "attack_power": 10,
     "drop_rate": 1,
     "accuracy": 50,
+    "id_str": "weapons/flare-axe",
     "id": 104
   },
   {
@@ -1345,11 +1394,12 @@
     "attack_power": 20,
     "drop_rate": 1,
     "accuracy": 25,
+    "id_str": "weapons/petit-saturn",
     "id": 105
   },
   {
     "name": "昇天弓",
-    "id_str": "ascension_bow",
+    "id_str": "weapons/ascension-bow",
     "description": "25%全体攻撃（死亡時発動は環境側で処理）",
     "type": "weapon",
     "usage_timing": [
@@ -1385,6 +1435,7 @@
     "price": 5,
     "defense_power": 1,
     "drop_rate": 1,
+    "id_str": "armor/sky-boots",
     "id": 108
   },
   {
@@ -1432,6 +1483,7 @@
     "price": 2,
     "defense_power": 2,
     "drop_rate": 10,
+    "id_str": "armor/leather-clothes",
     "id": 112
   },
   {
@@ -1444,6 +1496,7 @@
     "element": "火",
     "defense_power": 2,
     "drop_rate": 1,
+    "id_str": "armor/sparkle-glove",
     "id": 113
   },
   {
@@ -1468,6 +1521,7 @@
     "element": "木",
     "defense_power": 2,
     "drop_rate": 1,
+    "id_str": "armor/wood-shield",
     "id": 115
   },
   {
@@ -1480,6 +1534,7 @@
     "element": "土",
     "defense_power": 2,
     "drop_rate": 1,
+    "id_str": "armor/bedrock",
     "id": 116
   },
   {
@@ -1626,6 +1681,7 @@
     "element": "土",
     "defense_power": 4,
     "drop_rate": 1,
+    "id_str": "armor/terra-shoes",
     "id": 128
   },
   {
@@ -1713,6 +1769,7 @@
     "element": "土",
     "defense_power": 5,
     "drop_rate": 1,
+    "id_str": "armor/terra-gauntlet",
     "id": 135
   },
   {
@@ -1737,6 +1794,7 @@
     "price": 20,
     "defense_power": 6,
     "drop_rate": 1,
+    "id_str": "armor/spiritual-socks",
     "id": 137
   },
   {
@@ -1749,6 +1807,7 @@
     "element": "火",
     "defense_power": 6,
     "drop_rate": 1,
+    "id_str": "armor/flame-mail",
     "id": 138
   },
   {
@@ -1836,6 +1895,7 @@
     "price": 5,
     "defense_power": 7,
     "drop_rate": 1,
+    "id_str": "armor/sky-shield",
     "id": 145
   },
   {
@@ -1946,6 +2006,7 @@
     "element": "土",
     "defense_power": 8,
     "drop_rate": 1,
+    "id_str": "armor/terra-armor",
     "id": 154
   },
   {
@@ -1984,6 +2045,7 @@
     "price": 20,
     "defense_power": 9,
     "drop_rate": 1,
+    "id_str": "armor/spiritual-hood",
     "id": 157
   },
   {
@@ -1995,6 +2057,7 @@
     "price": 5,
     "defense_power": 9,
     "drop_rate": 1,
+    "id_str": "armor/sky-armor",
     "id": 158
   },
   {
@@ -2034,6 +2097,7 @@
     "price": 10,
     "defense_power": 10,
     "drop_rate": 1,
+    "id_str": "armor/moonlight-shield",
     "id": 161
   },
   {
@@ -2108,6 +2172,7 @@
     "price": 20,
     "defense_power": 12,
     "drop_rate": 1,
+    "id_str": "armor/spiritual-sash",
     "id": 167
   },
   {
@@ -2119,6 +2184,7 @@
     "price": 10,
     "defense_power": 12,
     "drop_rate": 1,
+    "id_str": "armor/moonlight-armor",
     "id": 168
   },
   {
@@ -2131,6 +2197,7 @@
     "element": "火",
     "defense_power": 12,
     "drop_rate": 1,
+    "id_str": "armor/heat-haze-armor",
     "id": 169
   },
   {
@@ -2169,6 +2236,7 @@
     "element": "木",
     "defense_power": 14,
     "drop_rate": 1,
+    "id_str": "armor/dreaming-hat",
     "id": 172
   },
   {
@@ -2194,6 +2262,7 @@
     "price": 30,
     "defense_power": 30,
     "drop_rate": 1,
+    "id_str": "armor/god-shield",
     "id": 174
   },
   {
@@ -2207,6 +2276,7 @@
     "element": "火",
     "drop_rate": 1,
     "accuracy": 75,
+    "id_str": "armor/mars-ring",
     "id": 175
   },
   {
@@ -2219,6 +2289,7 @@
     "price": 10,
     "element": "水",
     "drop_rate": 1,
+    "id_str": "armor/mercury-ring",
     "id": 176
   },
   {
@@ -2231,6 +2302,7 @@
     "price": 10,
     "element": "木",
     "drop_rate": 1,
+    "id_str": "armor/jupiter-ring",
     "id": 177
   },
   {
@@ -2243,6 +2315,7 @@
     "price": 10,
     "element": "土",
     "drop_rate": 1,
+    "id_str": "armor/saturn-ring",
     "id": 178
   },
   {
@@ -2289,11 +2362,12 @@
     ],
     "price": 10,
     "drop_rate": 1,
+    "id_str": "armor/venus-ring",
     "id": 182
   },
   {
     "name": "虹のカーテン",
-    "id_str": "rainbow_curtain",
+    "id_str": "armor/rainbow-curtain",
     "description": "攻撃の属性を取り除く",
     "type": "defense",
     "usage_timing": [
@@ -2306,7 +2380,7 @@
   },
   {
     "name": "スーパーミラー",
-    "id_str": "super_mirror",
+    "id_str": "armor/super-mirror",
     "description": "色んな攻撃を跳ね返す",
     "type": "defense",
     "reaction_type": "reflect",
@@ -2317,7 +2391,7 @@
   },
   {
     "name": "両替",
-    "id_str": "exchange",
+    "id_str": "deals/exchange",
     "description": "自分のHP,MP,¥を自由に振り分ける",
     "type": "deal",
     "usage_timing": [
@@ -2329,7 +2403,7 @@
   },
   {
     "name": "売る",
-    "id_str": "sell",
+    "id_str": "deals/sell",
     "description": "神器を一個売る",
     "type": "deal",
     "usage_timing": [
@@ -2341,7 +2415,7 @@
   },
   {
     "name": "買う",
-    "id_str": "buy",
+    "id_str": "deals/buy",
     "description": "神器を一個買う",
     "type": "deal",
     "usage_timing": [
@@ -2353,7 +2427,7 @@
   },
   {
     "name": "スマイルのしずく",
-    "id_str": "smile-dew",
+    "id_str": "sundries/smile-dew",
     "description": "+HP5",
     "type": "sundry",
     "usage_timing": [
@@ -2366,7 +2440,7 @@
   },
   {
     "name": "ハートのしずく",
-    "id_str": "heart-dew",
+    "id_str": "sundries/heart-dew",
     "description": "+HP10",
     "type": "sundry",
     "usage_timing": [
@@ -2379,7 +2453,7 @@
   },
   {
     "name": "ロマンスウォーター",
-    "id_str": "romance-water",
+    "id_str": "sundries/romance-water",
     "description": "+HP15",
     "type": "sundry",
     "usage_timing": [
@@ -2392,7 +2466,7 @@
   },
   {
     "name": "天の川のおいしい水",
-    "id_str": "galaxy-geyser",
+    "id_str": "sundries/galaxy-geyser",
     "description": "+HP20",
     "type": "sundry",
     "usage_timing": [
@@ -2405,7 +2479,7 @@
   },
   {
     "name": "スマイルの花",
-    "id_str": "smile-flower",
+    "id_str": "sundries/smile-flower",
     "description": "+MP5",
     "type": "sundry",
     "usage_timing": [
@@ -2418,7 +2492,7 @@
   },
   {
     "name": "ハートの花",
-    "id_str": "heart-flower",
+    "id_str": "sundries/heart-flower",
     "description": "+MP10",
     "type": "sundry",
     "usage_timing": [
@@ -2431,7 +2505,7 @@
   },
   {
     "name": "ロマンスの香木",
-    "id_str": "romance-fragrance",
+    "id_str": "sundries/romance-fragrance",
     "description": "+MP15",
     "type": "sundry",
     "usage_timing": [
@@ -2444,7 +2518,7 @@
   },
   {
     "name": "天国草",
-    "id_str": "heaven-herb",
+    "id_str": "sundries/heaven-herb",
     "description": "+MP20天国病になる",
     "hit_curse": "heaven",
     "type": "sundry",
@@ -2458,7 +2532,7 @@
   },
   {
     "name": "スマイルの貝がら",
-    "id_str": "smile-shell",
+    "id_str": "sundries/smile-shell",
     "description": "風邪、熱病、霧、閃光の災いを払う",
     "type": "sundry",
     "usage_timing": [
@@ -2470,7 +2544,7 @@
   },
   {
     "name": "ハートの貝がら",
-    "id_str": "heart-shell",
+    "id_str": "sundries/heart-shell",
     "description": "全ての災いを払う",
     "type": "sundry",
     "usage_timing": [
@@ -2482,7 +2556,7 @@
   },
   {
     "name": "守護封印のつぼ",
-    "id_str": "guardian-pot",
+    "id_str": "sundries/guardian-pot",
     "description": "守護神が宿る",
     "type": "sundry",
     "usage_timing": [
@@ -2494,7 +2568,7 @@
   },
   {
     "name": "ドキドキ涙",
-    "id_str": "thump-thump-tear",
+    "id_str": "sundries/thump-thump-tear",
     "description": "HP10回復 or 10ダメージ",
     "type": "sundry",
     "usage_timing": [
@@ -2506,7 +2580,7 @@
   },
   {
     "name": "ちからの粉",
-    "id_str": "strength-powder",
+    "id_str": "sundries/strength-powder",
     "description": "+攻10",
     "type": "sundry",
     "usage_timing": [
@@ -2519,7 +2593,7 @@
   },
   {
     "name": "精霊のぬいぐるみ",
-    "id_str": "spiritual-doll",
+    "id_str": "sundries/spiritual-doll",
     "description": "MP消費なしで奇跡を使える",
     "type": "sundry",
     "usage_timing": [
@@ -2531,7 +2605,7 @@
   },
   {
     "name": "夜空のホウキ",
-    "id_str": "nocturnal-broom",
+    "id_str": "sundries/nocturnal-broom",
     "description": "対象の神器を無作為に3つ捨てる",
     "type": "sundry",
     "usage_timing": [
@@ -2543,7 +2617,7 @@
   },
   {
     "name": "女神の石けん",
-    "id_str": "goddess-s-soap",
+    "id_str": "sundries/goddess-s-soap",
     "description": "習得済みの軌跡を無作為に2個捨てる",
     "type": "sundry",
     "usage_timing": [
@@ -2555,7 +2629,7 @@
   },
   {
     "name": "運命のひも",
-    "id_str": "string-of-fate",
+    "id_str": "sundries/string-of-fate",
     "description": "超常現象が起こる",
     "type": "sundry",
     "usage_timing": [
@@ -2567,7 +2641,7 @@
   },
   {
     "name": "太陽のお守り",
-    "id_str": "sun-amulet",
+    "id_str": "sundries/sun-amulet",
     "description": "HPが0になると+HP10",
     "type": "sundry",
     "usage_timing": [],
@@ -2577,7 +2651,7 @@
   },
   {
     "name": "あぶないウス",
-    "id_str": "dangerous-mortar",
+    "id_str": "sundries/dangerous-mortar",
     "description": "あぶないキネ使用時、99ダメージを受ける",
     "type": "sundry",
     "usage_timing": [],
@@ -2587,7 +2661,7 @@
   },
   {
     "name": "＜火の玉＞",
-    "id_str": "fireball",
+    "id_str": "miracles/fireball",
     "type": "miracle",
     "usage_timing": [
       "atk_plus_phase",
@@ -2601,7 +2675,7 @@
   },
   {
     "name": "＜氷＞",
-    "id_str": "ice",
+    "id_str": "miracles/ice",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2614,7 +2688,7 @@
   },
   {
     "name": "＜闇＞",
-    "id_str": "darkness",
+    "id_str": "miracles/darkness",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2627,7 +2701,7 @@
   },
   {
     "name": "＜大木＞",
-    "id_str": "big-tree",
+    "id_str": "miracles/big-tree",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2640,7 +2714,7 @@
   },
   {
     "name": "＜岩＞",
-    "id_str": "rock",
+    "id_str": "miracles/rock",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2653,7 +2727,7 @@
   },
   {
     "name": "＜炎＞",
-    "id_str": "flame",
+    "id_str": "miracles/flame",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2666,7 +2740,7 @@
   },
   {
     "name": "＜吸収＞",
-    "id_str": "absorption",
+    "id_str": "miracles/absorption",
     "description": "与えたダメージ分HPを吸収する",
     "type": "miracle",
     "usage_timing": [
@@ -2680,7 +2754,7 @@
   },
   {
     "name": "＜流星＞",
-    "id_str": "meteor",
+    "id_str": "miracles/meteor",
     "type": "miracle",
     "usage_timing": [
       "atk_plus_phase",
@@ -2694,7 +2768,7 @@
   },
   {
     "name": "＜滝＞",
-    "id_str": "waterfall",
+    "id_str": "miracles/waterfall",
     "type": "miracle",
     "usage_timing": [
       "main_miracle_phase"
@@ -2707,7 +2781,7 @@
   },
   {
     "name": "＜風＞",
-    "id_str": "wind",
+    "id_str": "miracles/wind",
     "description": "対象を風邪状態にする",
     "hit_curse": "cold",
     "type": "miracle",
@@ -2720,7 +2794,7 @@
   },
   {
     "name": "＜天国風＞",
-    "id_str": "heaven-wind",
+    "id_str": "miracles/heaven-wind",
     "description": "対象を天国病状態にする",
     "hit_curse": "heaven",
     "type": "miracle",
@@ -2733,7 +2807,7 @@
   },
   {
     "name": "＜霧＞",
-    "id_str": "fog",
+    "id_str": "miracles/fog",
     "description": "対象を霧状態にする",
     "hit_curse": "fog",
     "type": "miracle",
@@ -2747,7 +2821,7 @@
   },
   {
     "name": "＜夢＞",
-    "id_str": "dream",
+    "id_str": "miracles/dream",
     "description": "対象を夢状態にする",
     "hit_curse": "dream",
     "type": "miracle",
@@ -2761,7 +2835,7 @@
   },
   {
     "name": "＜暗雲＞",
-    "id_str": "dark-cloud",
+    "id_str": "miracles/dark-cloud",
     "description": "対象を暗雲状態にする",
     "hit_curse": "dark cloud",
     "type": "miracle",
@@ -2775,7 +2849,7 @@
   },
   {
     "name": "＜閃光＞",
-    "id_str": "flash",
+    "id_str": "miracles/flash",
     "description": "25%全体攻撃ダメージを与えた対象を閃光状態にする",
     "hit_curse": "flash",
     "type": "miracle",
@@ -2790,7 +2864,7 @@
   },
   {
     "name": "＜煙＞",
-    "id_str": "smoke",
+    "id_str": "miracles/smoke",
     "description": "75%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2805,7 +2879,7 @@
   },
   {
     "name": "＜雪崩＞",
-    "id_str": "avalanche",
+    "id_str": "miracles/avalanche",
     "description": "75%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2820,7 +2894,7 @@
   },
   {
     "name": "＜雷＞",
-    "id_str": "thunder",
+    "id_str": "miracles/thunder",
     "description": "25%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2835,7 +2909,7 @@
   },
   {
     "name": "＜土石流＞",
-    "id_str": "mudflow",
+    "id_str": "miracles/mudflow",
     "description": "50%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2850,7 +2924,7 @@
   },
   {
     "name": "＜マグマ＞",
-    "id_str": "magma",
+    "id_str": "miracles/magma",
     "description": "75%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2865,7 +2939,7 @@
   },
   {
     "name": "＜氷河期＞",
-    "id_str": "ice-age",
+    "id_str": "miracles/ice-age",
     "description": "75%全体攻撃",
     "type": "miracle",
     "usage_timing": [
@@ -2880,7 +2954,7 @@
   },
   {
     "name": "＜オーラ＞",
-    "id_str": "aura",
+    "id_str": "miracles/aura",
     "description": "攻撃力を倍にする",
     "type": "miracle",
     "usage_timing": [
@@ -2892,7 +2966,7 @@
   },
   {
     "name": "＜蜃気楼＞",
-    "id_str": "mirage",
+    "id_str": "miracles/mirage",
     "description": "攻撃が全体攻撃になる",
     "type": "miracle",
     "usage_timing": [
@@ -2904,7 +2978,7 @@
   },
   {
     "name": "＜壁＞",
-    "id_str": "wall",
+    "id_str": "miracles/wall",
     "description": "無属性武器を止める",
     "type": "miracle",
     "reaction_type": "block",
@@ -2917,7 +2991,7 @@
   },
   {
     "name": "＜乱気流＞",
-    "id_str": "turbulence",
+    "id_str": "miracles/turbulence",
     "description": "奇跡を弾く",
     "type": "miracle",
     "reaction_type": "bounce",
@@ -2930,7 +3004,7 @@
   },
   {
     "name": "＜泉＞",
-    "id_str": "spring",
+    "id_str": "miracles/spring",
     "description": "+HP10",
     "type": "miracle",
     "usage_timing": [
@@ -2942,7 +3016,7 @@
   },
   {
     "name": "＜財宝＞",
-    "id_str": "treasure",
+    "id_str": "miracles/treasure",
     "description": "+￥10",
     "type": "miracle",
     "usage_timing": [
@@ -2954,7 +3028,7 @@
   },
   {
     "name": "＜音色＞",
-    "id_str": "tone",
+    "id_str": "miracles/tone",
     "description": "風邪・熱病・霧・閃光を回復する",
     "type": "miracle",
     "usage_timing": [
@@ -2966,7 +3040,7 @@
   },
   {
     "name": "＜歌声＞",
-    "id_str": "song",
+    "id_str": "miracles/song",
     "description": "全ての災いを回復する",
     "type": "miracle",
     "usage_timing": [
@@ -2978,7 +3052,7 @@
   },
   {
     "name": "＜解放＞",
-    "id_str": "release",
+    "id_str": "miracles/release",
     "description": "守護神が宿る",
     "type": "miracle",
     "usage_timing": [

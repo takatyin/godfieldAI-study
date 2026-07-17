@@ -1,6 +1,5 @@
-### HP回復 ###
 - name: スマイルのしずく
-  id_str: smile-dew
+  id_str: sundries/smile-dew
   description: +HP5
   type: sundry
   usage_timing:
@@ -9,7 +8,7 @@
   drop_rate: 12
   hp_recovery: 5
 - name: ハートのしずく
-  id_str: heart-dew
+  id_str: sundries/heart-dew
   description: +HP10
   type: sundry
   usage_timing:
@@ -18,7 +17,7 @@
   drop_rate: 8
   hp_recovery: 10
 - name: ロマンスウォーター
-  id_str: romance-water
+  id_str: sundries/romance-water
   description: +HP15
   type: sundry
   usage_timing:
@@ -27,7 +26,7 @@
   drop_rate: 4
   hp_recovery: 15
 - name: 天の川のおいしい水
-  id_str: galaxy-geyser
+  id_str: sundries/galaxy-geyser
   description: +HP20
   type: sundry
   usage_timing:
@@ -35,10 +34,8 @@
   price: 20
   drop_rate: 1
   hp_recovery: 20
-
-### MP回復 ###
 - name: スマイルの花
-  id_str: smile-flower
+  id_str: sundries/smile-flower
   description: +MP5
   type: sundry
   usage_timing:
@@ -47,7 +44,7 @@
   drop_rate: 12
   mp_recovery: 5
 - name: ハートの花
-  id_str: heart-flower
+  id_str: sundries/heart-flower
   description: +MP10
   type: sundry
   usage_timing:
@@ -56,7 +53,7 @@
   drop_rate: 8
   mp_recovery: 10
 - name: ロマンスの香木
-  id_str: romance-fragrance
+  id_str: sundries/romance-fragrance
   description: +MP15
   type: sundry
   usage_timing:
@@ -65,7 +62,7 @@
   drop_rate: 4
   mp_recovery: 15
 - name: 天国草
-  id_str: heaven-herb
+  id_str: sundries/heaven-herb
   description: +MP20天国病になる
   hit_curse: heaven
   type: sundry
@@ -74,10 +71,8 @@
   price: 20
   drop_rate: 1
   mp_recovery: 20
-
-### 災い(病、状態異常)の回復 ###
 - name: スマイルの貝がら
-  id_str: smile-shell
+  id_str: sundries/smile-shell
   description: 風邪、熱病、霧、閃光の災いを払う
   type: sundry
   usage_timing:
@@ -85,17 +80,15 @@
   price: 5
   drop_rate: 12
 - name: ハートの貝がら
-  id_str: heart-shell
+  id_str: sundries/heart-shell
   description: 全ての災いを払う
   type: sundry
   usage_timing:
   - main_sundry_phase
   price: 15
   drop_rate: 6
-
-### その他 ###
 - name: 守護封印のつぼ
-  id_str: guardian-pot
+  id_str: sundries/guardian-pot
   description: 守護神が宿る
   type: sundry
   usage_timing:
@@ -103,7 +96,7 @@
   price: 10
   drop_rate: 3
 - name: ドキドキ涙
-  id_str: thump-thump-tear
+  id_str: sundries/thump-thump-tear
   description: HP10回復 or 10ダメージ
   type: sundry
   usage_timing:
@@ -111,7 +104,7 @@
   price: 1
   drop_rate: 2
 - name: ちからの粉
-  id_str: strength-powder
+  id_str: sundries/strength-powder
   description: +攻10
   type: sundry
   usage_timing:
@@ -120,7 +113,7 @@
   drop_rate: 2
   attack_power: 10
 - name: 精霊のぬいぐるみ
-  id_str: spiritual-doll
+  id_str: sundries/spiritual-doll
   description: MP消費なしで奇跡を使える
   type: sundry
   usage_timing:
@@ -128,7 +121,7 @@
   price: 5
   drop_rate: 2
 - name: 夜空のホウキ
-  id_str: nocturnal-broom
+  id_str: sundries/nocturnal-broom
   description: 対象の神器を無作為に3つ捨てる
   type: sundry
   usage_timing:
@@ -136,7 +129,7 @@
   price: 10
   drop_rate: 1
 - name: 女神の石けん
-  id_str: goddess-s-soap
+  id_str: sundries/goddess-s-soap
   description: 習得済みの軌跡を無作為に2個捨てる
   type: sundry
   usage_timing:
@@ -144,24 +137,22 @@
   price: 10
   drop_rate: 1
 - name: 運命のひも
-  id_str: string-of-fate
+  id_str: sundries/string-of-fate
   description: 超常現象が起こる
   type: sundry
   usage_timing:
   - main_sundry_phase
   price: 3
   drop_rate: 1
-
-### 受動発動 ###
 - name: 太陽のお守り
-  id_str: sun-amulet
+  id_str: sundries/sun-amulet
   description: HPが0になると+HP10
   type: sundry
   usage_timing: []
   price: 10
   drop_rate: 1
 - name: あぶないウス
-  id_str: dangerous-mortar
+  id_str: sundries/dangerous-mortar
   description: あぶないキネ使用時、99ダメージを受ける
   type: sundry
   usage_timing: []

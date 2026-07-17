@@ -1,6 +1,5 @@
-### 特殊防具 ###
 - name: 虹のカーテン
-  id_str: "rainbow_curtain"
+  id_str: armor/rainbow-curtain
   description: 攻撃の属性を取り除く
   type: defense
   usage_timing:
@@ -9,7 +8,7 @@
   drop_rate: 3
   defense_power: 0
 - name: スーパーミラー
-  id_str: "super_mirror"
+  id_str: armor/super-mirror
   description: 色んな攻撃を跳ね返す
   type: defense
   reaction_type: reflect

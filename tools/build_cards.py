@@ -33,7 +33,9 @@ def build_cards():
         f.write("#pragma once\n\n")
         for card in all_cards:
             if 'id_str' in card and card['id_str']:
-                macro_name = f"ID_{card['id_str'].upper().replace('-', '_')}"
+                base_name = os.path.basename(card['id_str'])
+                base_id = os.path.splitext(base_name)[0]
+                macro_name = f"ID_{base_id.upper().replace('-', '_')}"
                 f.write(f"constexpr int {macro_name} = {card['id']};\n")
                 
     print(f"Successfully built {len(all_cards)} cards into {output_json} and {header_path}")
