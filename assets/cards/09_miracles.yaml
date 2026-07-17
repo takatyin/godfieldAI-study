@@ -141,6 +141,7 @@
   mp_cost: 3
   drop_rate: 1
   accuracy: 25
+  is_group_attack: true
 - name: ＜煙＞
   id_str: miracles/smoke
   description: 75%全体攻撃
@@ -152,6 +153,7 @@
   drop_rate: 1
   mp_cost: 4
   accuracy: 75
+  is_group_attack: true
 - name: ＜雪崩＞
   id_str: miracles/avalanche
   description: 75%全体攻撃
@@ -163,6 +165,7 @@
   drop_rate: 1
   mp_cost: 6
   accuracy: 75
+  is_group_attack: true
 - name: ＜雷＞
   id_str: miracles/thunder
   description: 25%全体攻撃
@@ -174,6 +177,7 @@
   drop_rate: 1
   mp_cost: 4
   accuracy: 25
+  is_group_attack: true
 - name: ＜土石流＞
   id_str: miracles/mudflow
   description: 50%全体攻撃
@@ -185,6 +189,7 @@
   drop_rate: 1
   mp_cost: 6
   accuracy: 50
+  is_group_attack: true
 - name: ＜マグマ＞
   id_str: miracles/magma
   description: 75%全体攻撃
@@ -196,6 +201,7 @@
   drop_rate: 1
   mp_cost: 10
   accuracy: 75
+  is_group_attack: true
 - name: ＜氷河期＞
   id_str: miracles/ice-age
   description: 75%全体攻撃
@@ -207,6 +213,7 @@
   drop_rate: 1
   mp_cost: 30
   accuracy: 75
+  is_group_attack: true
 - name: ＜オーラ＞
   id_str: miracles/aura
   description: 攻撃力を倍にする

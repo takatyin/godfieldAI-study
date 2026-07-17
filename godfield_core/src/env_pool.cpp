@@ -36,6 +36,7 @@ void EnvPool::reset(int seed) {
 
         // Draw initial hands
         for (int p=0; p<2; ++p) {
+            states_[i].num_deployed_miracles[p] = 0;
             for (int h=0; h<MAX_HAND_SIZE; ++h) {
                 if (h < 9) {
                     states_[i].true_hand[p][h] = draw_card(states_[i].rng);

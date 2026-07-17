@@ -294,3 +294,38 @@ def test_unstable_accuracy_cannot_target_self():
     # TODO: C++側で命中率<100の場合にターゲット自分を禁止するロジックが実装されているかを期待するアサーション
     assert legal_actions[ActionType.ACTION_TARGET_SELF.value] == False
     assert legal_actions[ActionType.ACTION_TARGET_OPP.value] == True
+
+
+def test_miracle_deployment_limit_fifo():
+    """
+    検証内容: 奇跡の展開数は最大6つであり、それ以上展開しようとすると最も古いものから上書き（FIFO）で消滅する仕様のテスト。
+    """
+    runner = SimulationRunner()
+    
+    # 奇跡のIDを取得
+    fireball_id = find_card_by_name("＜火の玉＞")
+    
+    # 6つのスロットに奇跡を展開する（0から5）
+    for i in range(6):
+        runner.state.set_true_hand(0, i, fireball_id)
+        runner.state.set_is_deployed(0, i, True)
+        
+    # 現在展開されている奇跡が6つあることを確認
+    deployed_count = sum(1 for i in range(18) if runner.state.get_is_deployed(0, i))
+    assert deployed_count == 6
+    
+    # 7つ目の奇跡を展開する（スロット6）
+    runner.state.set_true_hand(0, 6, fireball_id)
+    runner.state.set_is_deployed(0, 6, True)
+    
+    # 結果確認:
+    # 1. 総展開数は6個のまま維持されていること
+    deployed_count_after = sum(1 for i in range(18) if runner.state.get_is_deployed(0, i))
+    assert deployed_count_after == 6
+    
+    # 2. 最も古かったスロット0の奇跡の展開状態が解除され、さらに手札からも消滅（CARD_EMPTY）していること
+    assert runner.state.get_is_deployed(0, 0) == False
+    assert runner.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY
+    
+    # 3. 新しく展開したスロット6の奇跡は展開されていること
+    assert runner.state.get_is_deployed(0, 6) == True

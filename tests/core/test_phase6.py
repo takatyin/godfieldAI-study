@@ -54,9 +54,9 @@ def test_discard_logic():
 
     runner.step(action=ActionType.ACTION_CONFIRM)
 
-    # 結果確認: 手札スロット0が空になり、かつ is_used が true
+    # 結果確認: 手札スロット0が空になり、かつ is_used が false（ドローによる補填を行わないため）
     assert runner.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY
-    assert runner.state.get_is_used(0, 0) is True
+    assert runner.state.get_is_used(0, 0) is False
 
 
 def test_exchange_logic():

@@ -54,6 +54,7 @@ struct alignas(64) CardFeatures {
     Element element;
     ReactionType reaction_type;
     HitCurse hit_curse;
+    bool is_group_attack;
 };
 
 enum class GamePhase {
@@ -61,7 +62,9 @@ enum class GamePhase {
     PHASE_MAIN,
     PHASE_MAIN_TARGET_SELECT,
     PHASE_ATTACK_PLUS,
+    PHASE_GROUP_WEAPON,
     PHASE_MIRACLE_PLUS,
+    PHASE_GROUP_MIRACLE,
     PHASE_DEFENSE,
     PHASE_MIRACLE_DEFENSE,
     PHASE_SELL_SELECT,
@@ -149,6 +152,8 @@ struct alignas(64) InternalState {
     bool is_used[2][MAX_HAND_SIZE];                // 今回のターン内で使用され、補充待ちのスロット
     bool is_deployed[2][MAX_HAND_SIZE];            // 奇跡が展開されているか
     bool miracle_used_this_turn[2][MAX_HAND_SIZE]; // 展開済みの奇跡がこのターン既に使用されたか
+    int deployed_miracles_order[2][MAX_HAND_SIZE]; // 奇跡の展開順序 (FIFO制御用)
+    int num_deployed_miracles[2];                  // 展開されている奇跡の個数
 
     // 病と災い (Sickness & Curses)
     int sickness[2];   // 0:なし, 1:風邪, 2:熱病, 3:地獄病, 4:天国病

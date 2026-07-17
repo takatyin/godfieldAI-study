@@ -13,9 +13,11 @@ C++エンジンは、以下のフェイズ（GamePhase型）を用いてプレ�
 | `PHASE_GUARDIAN` | 守護神の効果・行動を解決するフェイズ。 | 自動処理 (Auto-advanced) | `PHASE_MAIN` |
 | `PHASE_MAIN` | ターン開始時のメインフェイズ。「祈る」「捨てる」「両替」および「攻撃/奇跡/売る/買う/雑貨」カードの使用が可能。 | 手番プレイヤー (Active) | カードの使用に応じて変化 |
 | `PHASE_MAIN_TARGET_SELECT` | 使用した「売る」「買う」「雑貨」カードの対象（自分 / 相手）を選択するフェイズ。 | 手番プレイヤー (Active) | 選択した対象により変化（ミラー確認、または即時解決） |
-| `PHASE_ATTACK_PLUS` | 攻撃カード発動時、追加で「攻撃のプラス」カードを選択するフェイズ。 | 手番プレイヤー (Active) | 相手対象なら `PHASE_DEFENSE`、自分対象なら `PHASE_END` |
+| `PHASE_ATTACK_PLUS` | 単体攻撃カード発動時、追加で「攻撃のプラス」カードや「＜蜃気楼＞」を選択するフェイズ。 | 手番プレイヤー (Active) | 相手対象なら `PHASE_DEFENSE`、自分対象なら `PHASE_END`、＜蜃気楼＞使用時は `PHASE_GROUP_WEAPON` |
+| `PHASE_GROUP_WEAPON` | 全体攻撃武器の発動時、または単体武器に＜蜃気楼＞をプラスした際、追加で「精霊系」カード等を選択する全体武器攻撃フェイズ。 | 手番プレイヤー (Active) | 相手対象（ターゲットは相手全体 `OPP` のみ）決定で `PHASE_DEFENSE` |
 | `PHASE_DEFENSE` | 相手から受けた物理/属性攻撃に対して防御や反射アクションを選択するフェイズ。 | 防御プレイヤー (Defender) | `PHASE_END` |
-| `PHASE_MIRACLE_PLUS` | 奇跡カード発動時、追加で「消費MPを0にする」カードなどを選択するフェイズ. | 手番プレイヤー (Active) | 相手対象なら `PHASE_MIRACLE_DEFENSE`、自分対象なら `PHASE_END` |
+| `PHASE_MIRACLE_PLUS` | 単体奇跡カード発動時、追加で「消費MPを0にする」カード（精霊系）などを選択するフェイズ。2枚以上の攻撃奇跡が重なった場合は `PHASE_ATTACK_PLUS` に遷移。 | 手番プレイヤー (Active) | 相手対象なら `PHASE_MIRACLE_DEFENSE`、自分対象なら `PHASE_END` |
+| `PHASE_GROUP_MIRACLE` | 全体奇跡の発動時、追加で「精霊系」カード等を選択する全体奇跡攻撃フェイズ。 | 手番プレイヤー (Active) | 相手対象（ターゲットは相手全体 `OPP` のみ）決定で `PHASE_MIRACLE_DEFENSE` |
 | `PHASE_MIRACLE_DEFENSE` | 相手から受けた奇跡に対して、反射や阻止アクションを選択するフェイズ（物理/属性防御と異なり、奇跡防具の防御力数値による減算計算は行われません）。 | 防御プレイヤー (Defender) | `PHASE_END` |
 | `PHASE_SELL_SELECT` | 「売る」カード使用後、自分の手札から売り出したいアイテムカードを選択するフェイズ。 | 手番プレイヤー (Active) | `PHASE_MAIN_TARGET_SELECT` |
 | `PHASE_SELL_SELECT_MIRROR` | 相手にアイテムを売りつける際、買い手側が「スーパーミラー」で反射するか「受諾(CONFIRM)」するかを選択するフェイズ。 | 買い手プレイヤー (Defender) | `PHASE_END` (受諾時) または 反射され入れ替わった `PHASE_SELL_SELECT_MIRROR` (反射時) |

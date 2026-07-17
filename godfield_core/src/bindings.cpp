@@ -3,6 +3,7 @@
 #include <pybind11/numpy.h>
 #include "env_pool.h"
 #include "game_logic.h"
+#include "game_logic_internal.h"
 #include "types.h"
 
 namespace py = pybind11;
@@ -75,7 +76,9 @@ PYBIND11_MODULE(godfield_core, m) {
         .value("PHASE_MAIN", GamePhase::PHASE_MAIN)
         .value("PHASE_MAIN_TARGET_SELECT", GamePhase::PHASE_MAIN_TARGET_SELECT)
         .value("PHASE_ATTACK_PLUS", GamePhase::PHASE_ATTACK_PLUS)
+        .value("PHASE_GROUP_WEAPON", GamePhase::PHASE_GROUP_WEAPON)
         .value("PHASE_MIRACLE_PLUS", GamePhase::PHASE_MIRACLE_PLUS)
+        .value("PHASE_GROUP_MIRACLE", GamePhase::PHASE_GROUP_MIRACLE)
         .value("PHASE_DEFENSE", GamePhase::PHASE_DEFENSE)
         .value("PHASE_MIRACLE_DEFENSE", GamePhase::PHASE_MIRACLE_DEFENSE)
         .value("PHASE_SELL_SELECT", GamePhase::PHASE_SELL_SELECT)
@@ -127,6 +130,7 @@ PYBIND11_MODULE(godfield_core, m) {
     // Bind InternalState
     py::class_<InternalState>(m, "InternalState")
         .def(py::init<>())
+        .def("seed_rng", [](InternalState &s, unsigned int seed) { s.rng.seed(seed); }, py::arg("seed"))
         .def_readwrite("current_actor_id", &InternalState::current_actor_id)
         .def_readwrite("current_turn", &InternalState::current_turn)
         .def_readwrite("current_phase", &InternalState::current_phase)
@@ -183,7 +187,10 @@ PYBIND11_MODULE(godfield_core, m) {
             "get_is_deployed", [](InternalState &s, int p, int idx) { return s.is_deployed[p][idx]; },
             py::arg("player_id"), py::arg("hand_idx"))
         .def(
-            "set_is_deployed", [](InternalState &s, int p, int idx, bool v) { s.is_deployed[p][idx] = v; },
+            "set_is_deployed", [](InternalState &s, int p, int idx, bool v) { 
+                if (v) deploy_miracle(s, p, idx);
+                else undeploy_miracle(s, p, idx);
+            },
             py::arg("player_id"), py::arg("hand_idx"), py::arg("val"))
         .def(
             "get_miracle_used_this_turn", [](InternalState &s, int p, int idx) { return s.miracle_used_this_turn[p][idx]; },

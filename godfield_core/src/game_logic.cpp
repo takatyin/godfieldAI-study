@@ -33,11 +33,17 @@ void step_game(InternalState& state, ActionType action) {
         case GamePhase::PHASE_ATTACK_PLUS:
             step_phase_attack_plus(state, action, me, opp);
             break;
+        case GamePhase::PHASE_GROUP_WEAPON:
+            step_phase_group_weapon(state, action, me, opp);
+            break;
         case GamePhase::PHASE_DEFENSE:
             step_phase_defense(state, action, me, opp);
             break;
         case GamePhase::PHASE_MIRACLE_PLUS:
             step_phase_miracle_plus(state, action, me, opp);
+            break;
+        case GamePhase::PHASE_GROUP_MIRACLE:
+            step_phase_group_miracle(state, action, me, opp);
             break;
         case GamePhase::PHASE_MIRACLE_DEFENSE:
             step_phase_miracle_defense(state, action, me, opp);
@@ -105,11 +111,17 @@ void get_legal_actions(const InternalState &state, bool legal_actions[ACTION_SPA
         case GamePhase::PHASE_ATTACK_PLUS:
             legal_phase_attack_plus(state, legal_actions, me, opp);
             break;
+        case GamePhase::PHASE_GROUP_WEAPON:
+            legal_phase_group_weapon(state, legal_actions, me, opp);
+            break;
         case GamePhase::PHASE_DEFENSE:
             legal_phase_defense(state, legal_actions, me, opp);
             break;
         case GamePhase::PHASE_MIRACLE_PLUS:
             legal_phase_miracle_plus(state, legal_actions, me, opp);
+            break;
+        case GamePhase::PHASE_GROUP_MIRACLE:
+            legal_phase_group_miracle(state, legal_actions, me, opp);
             break;
         case GamePhase::PHASE_MIRACLE_DEFENSE:
             legal_phase_miracle_defense(state, legal_actions, me, opp);

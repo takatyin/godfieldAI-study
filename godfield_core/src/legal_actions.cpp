@@ -81,6 +81,57 @@ void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTI
     }
 }
 
+void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
+    bool has_mirage = false;
+    for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+        if (state.true_hand[me][state.staged_cards[me][i]] == ID_MIRAGE) {
+            has_mirage = true;
+            break;
+        }
+    }
+
+    if (has_mirage) {
+        for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+            if (!state.is_used[me][i] && state.true_hand[me][i] != CARD_EMPTY) {
+                if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
+                
+                int card_id = state.true_hand[me][i];
+                if (card_id == ID_MIRAGE || is_spiritual_zero_mp_card(card_id)) {
+                    if (can_afford_staged_plus_card(state, me, i)) {
+                        legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
+        legal_actions[ACTION_TARGET_OPP] = true;
+    }
+}
+
+void legal_phase_group_miracle(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
+    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+        if (!state.is_used[me][i] && state.true_hand[me][i] != CARD_EMPTY) {
+            if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
+            
+            int card_id = state.true_hand[me][i];
+            if (is_spiritual_zero_mp_card(card_id)) {
+                if (is_last_staged_card_miracle(state, me)) {
+                    if (can_afford_staged_plus_card(state, me, i)) {
+                        legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
+        legal_actions[ACTION_TARGET_OPP] = true;
+    }
+}
+
+
 /**
  * @brief 物理・属性防御フェイズ（PHASE_DEFENSE）における合法アクション（防御属性の整合性、およびCONFIRMの可否）を判定します。
  */
@@ -187,7 +238,7 @@ void legal_phase_miracle_plus(const InternalState &state, bool legal_actions[ACT
             if (!can_afford_staged_plus_card(state, me, i)) continue;
 
             bool is_legal_timing = false;
-            if (f.usage_timing & TIMING_ATK_PLUS) {
+            if ((f.usage_timing & TIMING_ATK_PLUS) && f.is_miracle && f.attack_power > 0) {
                 is_legal_timing = true;
             } else if ((f.usage_timing & TIMING_MIRACLE_PLUS) && is_spiritual_zero_mp_card(card_id)) {
                 if (is_last_staged_card_miracle(state, me)) {

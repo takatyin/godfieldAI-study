@@ -25,6 +25,55 @@ bool is_spiritual_zero_mp_card(int card_id) {
             card_id == ID_SPIRITUAL_DOLL);
 }
 
+void deploy_miracle(InternalState &state, int player_id, int slot_idx) {
+    if (state.is_deployed[player_id][slot_idx]) {
+        return;
+    }
+    state.is_deployed[player_id][slot_idx] = true;
+    state.is_known_to_opp[player_id][slot_idx] = true;
+
+    // 展開キューに積む
+    state.deployed_miracles_order[player_id][state.num_deployed_miracles[player_id]] = slot_idx;
+    state.num_deployed_miracles[player_id]++;
+
+    // FIFO制限：展開数が6を超えたら、最も古い展開カードを未展開にし、手札から破棄する
+    if (state.num_deployed_miracles[player_id] > 6) {
+        int oldest_idx = state.deployed_miracles_order[player_id][0];
+        
+        clear_hand_slot(state, player_id, oldest_idx);
+
+        // キューを左シフト
+        for (int k = 1; k < state.num_deployed_miracles[player_id]; ++k) {
+            state.deployed_miracles_order[player_id][k - 1] = state.deployed_miracles_order[player_id][k];
+        }
+        state.num_deployed_miracles[player_id]--;
+    }
+}
+
+void undeploy_miracle(InternalState &state, int player_id, int slot_idx) {
+    if (!state.is_deployed[player_id][slot_idx]) {
+        return;
+    }
+    state.is_deployed[player_id][slot_idx] = false;
+
+    // 展開キューから該当スロットを削除してシフト
+    int found_idx = -1;
+    for (int k = 0; k < state.num_deployed_miracles[player_id]; ++k) {
+        if (state.deployed_miracles_order[player_id][k] == slot_idx) {
+            found_idx = k;
+            break;
+        }
+    }
+}
+
+void clear_hand_slot(InternalState &state, int player_id, int slot_idx) {
+    state.true_hand[player_id][slot_idx] = CARD_EMPTY;
+    state.is_known_to_opp[player_id][slot_idx] = false;
+    state.is_used[player_id][slot_idx] = false;
+    state.miracle_used_this_turn[player_id][slot_idx] = false;
+    undeploy_miracle(state, player_id, slot_idx);
+}
+
 /**
  * @brief 対象プレイヤーの仮置き場の最後に置かれたカードが「奇跡」であるかを判定します。
  */
@@ -214,11 +263,7 @@ void discard_one_card_randomly(InternalState &state, int player_id) {
         }
     }
 
-    state.true_hand[player_id][best_idx] = CARD_EMPTY;
-    state.is_known_to_opp[player_id][best_idx] = false;
-    state.is_used[player_id][best_idx] = false;
-    state.is_deployed[player_id][best_idx] = false;
-    state.miracle_used_this_turn[player_id][best_idx] = false;
+    clear_hand_slot(state, player_id, best_idx);
 }
 
 /**
@@ -233,11 +278,9 @@ void draw_card_to_hand(InternalState &state, int player_id) {
         }
     }
     if (empty_slot_idx != -1) {
-        state.true_hand[player_id][empty_slot_idx] = draw_card(state.rng);
-        state.is_known_to_opp[player_id][empty_slot_idx] = false;
-        state.is_used[player_id][empty_slot_idx] = false;
-        state.is_deployed[player_id][empty_slot_idx] = false;
-        state.miracle_used_this_turn[player_id][empty_slot_idx] = false;
+        int card_id = draw_card(state.rng);
+        clear_hand_slot(state, player_id, empty_slot_idx);
+        state.true_hand[player_id][empty_slot_idx] = card_id;
     }
 }
 
@@ -254,16 +297,13 @@ void cleanup_phase_end(InternalState &state) {
                 CardFeatures &f = g_card_registry[card_id];
                 
                 if (f.is_miracle) {
-                    state.is_deployed[p][i] = true;
-                    state.is_known_to_opp[p][i] = true;
+                    deploy_miracle(state, p, i);
                     state.is_used[p][i] = false;
                     draw_count++;
                 } else {
-                    state.true_hand[p][i] = draw_card(state.rng);
-                    state.is_known_to_opp[p][i] = false;
-                    state.is_used[p][i] = false;
-                    state.is_deployed[p][i] = false;
-                    state.miracle_used_this_turn[p][i] = false;
+                    int new_card = draw_card(state.rng);
+                    clear_hand_slot(state, p, i);
+                    state.true_hand[p][i] = new_card;
                 }
             }
         }
@@ -341,9 +381,7 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
                 int num_to_discard = std::min(3, (int)target_candidates.size());
                 for (int k = 0; k < num_to_discard; ++k) {
                     int discard_idx = target_candidates[k];
-                    state.true_hand[target_id][discard_idx] = CARD_EMPTY;
-                    state.is_known_to_opp[target_id][discard_idx] = false;
-                    state.is_used[target_id][discard_idx] = false;
+                    clear_hand_slot(state, target_id, discard_idx);
                 }
             }
         }
@@ -359,11 +397,7 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
                 int num_to_discard = std::min(2, (int)target_candidates.size());
                 for (int k = 0; k < num_to_discard; ++k) {
                     int discard_idx = target_candidates[k];
-                    state.true_hand[target_id][discard_idx] = CARD_EMPTY;
-                    state.is_known_to_opp[target_id][discard_idx] = false;
-                    state.is_deployed[target_id][discard_idx] = false;
-                    state.miracle_used_this_turn[target_id][discard_idx] = false;
-                    state.is_used[target_id][discard_idx] = false;
+                    clear_hand_slot(state, target_id, discard_idx);
                 }
             }
         }
@@ -431,9 +465,7 @@ void execute_sell_resolution(InternalState &state, int seller, int buyer) {
     state.money[seller] = std::clamp(state.money[seller] + price, 0, 99);
     
     // 5. 売り手の手札から売却したカードを削除し、関連フラグを初期化する
-    state.true_hand[original_seller][idx] = CARD_EMPTY;
-    state.is_known_to_opp[original_seller][idx] = false;
-    state.is_used[original_seller][idx] = false; 
+    clear_hand_slot(state, original_seller, idx); 
 
     // 6. 買い手へ商品を引き渡す
     // 買い手の手札に空きスロットがあるか確認する
@@ -461,11 +493,9 @@ void execute_sell_resolution(InternalState &state, int seller, int buyer) {
         if (!candidates.empty()) {
             std::shuffle(candidates.begin(), candidates.end(), state.rng);
             int replace_idx = candidates[0];
+            clear_hand_slot(state, buyer, replace_idx);
             state.true_hand[buyer][replace_idx] = card_id;
             state.is_known_to_opp[buyer][replace_idx] = true;
-            state.is_deployed[buyer][replace_idx] = false;
-            state.miracle_used_this_turn[buyer][replace_idx] = false;
-            state.is_used[buyer][replace_idx] = false;
         }
     }
 

@@ -59,6 +59,18 @@ bool is_last_staged_card_miracle(const InternalState &state, int player_id);
 bool is_weapon_attack(const InternalState &state, int player_id);
 
 /**
+ * @brief 奇跡を展開し、6つの上限制限（FIFO）を処理します。
+ */
+void deploy_miracle(InternalState &state, int player_id, int slot_idx);
+
+/**
+ * @brief 奇跡の展開を解除し、展開順序バッファから削除します。
+ */
+void undeploy_miracle(InternalState &state, int player_id, int slot_idx);
+
+void clear_hand_slot(InternalState &state, int player_id, int slot_idx);
+
+/**
  * @brief 仮置き場（staged_cards）に積まれているカードの合計消費MPを計算します（精霊補正あり）。
  * @param state ゲーム状態。
  * @param player_id 対象プレイヤーID。
@@ -188,6 +200,8 @@ void step_phase_defense(InternalState &state, ActionType action, int me, int opp
  * @brief 奇跡攻撃の追加・決定フェイズ（PHASE_MIRACLE_PLUS）での処理を行います。
  */
 void step_phase_miracle_plus(InternalState &state, ActionType action, int me, int opp);
+void step_phase_group_weapon(InternalState &state, ActionType action, int me, int opp);
+void step_phase_group_miracle(InternalState &state, ActionType action, int me, int opp);
 
 /**
  * @brief 奇跡防御フェイズ（PHASE_MIRACLE_DEFENSE）での処理を行います。
@@ -253,6 +267,8 @@ void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTI
  * @brief 物理防御フェイズ（PHASE_DEFENSE）における合法アクションを判定します。
  */
 void legal_phase_defense(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp);
+void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp);
+void legal_phase_group_miracle(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp);
 
 /**
  * @brief 奇跡攻撃追加フェイズ（PHASE_MIRACLE_PLUS）における合法アクションを判定します。

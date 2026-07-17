@@ -1152,6 +1152,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "weapons/spark-bag",
+    "is_group_attack": true,
     "id": 89
   },
   {
@@ -1167,6 +1168,7 @@
     "drop_rate": 1,
     "accuracy": 50,
     "id_str": "weapons/shadow-hand",
+    "is_group_attack": true,
     "id": 90
   },
   {
@@ -1183,6 +1185,7 @@
     "drop_rate": 1,
     "accuracy": 50,
     "id_str": "weapons/fog-fan",
+    "is_group_attack": true,
     "id": 91
   },
   {
@@ -1198,6 +1201,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "weapons/vine-shoot",
+    "is_group_attack": true,
     "id": 92
   },
   {
@@ -1213,6 +1217,7 @@
     "drop_rate": 1,
     "accuracy": 25,
     "id_str": "weapons/lightning-kids",
+    "is_group_attack": true,
     "id": 93
   },
   {
@@ -1228,6 +1233,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "weapons/flame-cup",
+    "is_group_attack": true,
     "id": 94
   },
   {
@@ -1243,6 +1249,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "weapons/chill-cup",
+    "is_group_attack": true,
     "id": 95
   },
   {
@@ -1258,6 +1265,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "weapons/plant-cup",
+    "is_group_attack": true,
     "id": 96
   },
   {
@@ -1273,6 +1281,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "weapons/rock-cup",
+    "is_group_attack": true,
     "id": 97
   },
   {
@@ -1288,6 +1297,7 @@
     "drop_rate": 1,
     "accuracy": 50,
     "id_str": "weapons/oversize-snowball",
+    "is_group_attack": true,
     "id": 98
   },
   {
@@ -1303,6 +1313,7 @@
     "drop_rate": 1,
     "accuracy": 25,
     "id_str": "weapons/cliff-hammer",
+    "is_group_attack": true,
     "id": 99
   },
   {
@@ -1318,6 +1329,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "weapons/light-orb",
+    "is_group_attack": true,
     "id": 100
   },
   {
@@ -1333,6 +1345,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "weapons/fire-shower",
+    "is_group_attack": true,
     "id": 101
   },
   {
@@ -1350,6 +1363,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "weapons/jinn-s-rocking-horse",
+    "is_group_attack": true,
     "id": 102
   },
   {
@@ -1365,6 +1379,7 @@
     "drop_rate": 1,
     "accuracy": 50,
     "id_str": "weapons/rain-deity-s-saber",
+    "is_group_attack": true,
     "id": 103
   },
   {
@@ -1380,6 +1395,7 @@
     "drop_rate": 1,
     "accuracy": 50,
     "id_str": "weapons/flare-axe",
+    "is_group_attack": true,
     "id": 104
   },
   {
@@ -1395,6 +1411,7 @@
     "drop_rate": 1,
     "accuracy": 25,
     "id_str": "weapons/petit-saturn",
+    "is_group_attack": true,
     "id": 105
   },
   {
@@ -1410,6 +1427,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "accuracy": 25,
+    "is_group_attack": true,
     "id": 106
   },
   {
@@ -2860,6 +2878,7 @@
     "mp_cost": 3,
     "drop_rate": 1,
     "accuracy": 25,
+    "is_group_attack": true,
     "id": 221
   },
   {
@@ -2875,6 +2894,7 @@
     "drop_rate": 1,
     "mp_cost": 4,
     "accuracy": 75,
+    "is_group_attack": true,
     "id": 222
   },
   {
@@ -2890,6 +2910,7 @@
     "drop_rate": 1,
     "mp_cost": 6,
     "accuracy": 75,
+    "is_group_attack": true,
     "id": 223
   },
   {
@@ -2905,6 +2926,7 @@
     "drop_rate": 1,
     "mp_cost": 4,
     "accuracy": 25,
+    "is_group_attack": true,
     "id": 224
   },
   {
@@ -2920,6 +2942,7 @@
     "drop_rate": 1,
     "mp_cost": 6,
     "accuracy": 50,
+    "is_group_attack": true,
     "id": 225
   },
   {
@@ -2935,6 +2958,7 @@
     "drop_rate": 1,
     "mp_cost": 10,
     "accuracy": 75,
+    "is_group_attack": true,
     "id": 226
   },
   {
@@ -2950,6 +2974,7 @@
     "drop_rate": 1,
     "mp_cost": 30,
     "accuracy": 75,
+    "is_group_attack": true,
     "id": 227
   },
   {

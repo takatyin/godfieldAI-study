@@ -87,6 +87,8 @@ void init_game_logic(pybind11::list cards) {
             else if (hc == "heaven") f.hit_curse = CURSE_HEAVEN;
         }
 
+        f.is_group_attack = card.contains("is_group_attack") ? card["is_group_attack"].cast<bool>() : false;
+
         g_card_registry.push_back(f);
         g_card_names.push_back(card["name"].cast<std::string>());
         weights.push_back(f.drop_rate);

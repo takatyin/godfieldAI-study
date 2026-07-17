@@ -9,6 +9,7 @@
   drop_rate: 1
   accuracy: 75
   id_str: weapons/spark-bag
+  is_group_attack: true
 - name: シャドウハンド
   description: 50%全体攻撃
   type: weapon
@@ -20,6 +21,7 @@
   drop_rate: 1
   accuracy: 50
   id_str: weapons/shadow-hand
+  is_group_attack: true
 - name: 霧の扇
   description: ダメージを与えた対象を霧状態にする
   hit_curse: fog
@@ -32,6 +34,7 @@
   drop_rate: 1
   accuracy: 50
   id_str: weapons/fog-fan
+  is_group_attack: true
 - name: つるシュート
   description: 与えたダメージ分HPを吸収する
   type: weapon
@@ -43,6 +46,7 @@
   drop_rate: 1
   accuracy: 75
   id_str: weapons/vine-shoot
+  is_group_attack: true
 - name: イナヅマキッズ
   description: 25%全体攻撃
   type: weapon
@@ -54,6 +58,7 @@
   drop_rate: 1
   accuracy: 25
   id_str: weapons/lightning-kids
+  is_group_attack: true
 - name: 火炎杯
   description: 75%全体攻撃
   type: weapon
@@ -65,6 +70,7 @@
   drop_rate: 1
   accuracy: 75
   id_str: weapons/flame-cup
+  is_group_attack: true
 - name: 冷気杯
   description: 75%全体攻撃
   type: weapon
@@ -76,6 +82,7 @@
   drop_rate: 1
   accuracy: 75
   id_str: weapons/chill-cup
+  is_group_attack: true
 - name: 植物杯
   description: 75%全体攻撃
   type: weapon
@@ -87,6 +94,7 @@
   drop_rate: 1
   accuracy: 75
   id_str: weapons/plant-cup
+  is_group_attack: true
 - name: 岩石杯
   description: 75%全体攻撃
   type: weapon
@@ -98,6 +106,7 @@
   drop_rate: 1
   accuracy: 75
   id_str: weapons/rock-cup
+  is_group_attack: true
 - name: 特大雪玉
   description: 50%全体攻撃
   type: weapon
@@ -109,6 +118,7 @@
   drop_rate: 1
   accuracy: 50
   id_str: weapons/oversize-snowball
+  is_group_attack: true
 - name: ガケッツチ
   description: 25%全体攻撃
   type: weapon
@@ -120,6 +130,7 @@
   drop_rate: 1
   accuracy: 25
   id_str: weapons/cliff-hammer
+  is_group_attack: true
 - name: 光のオーブ
   description: 75%全体攻撃
   type: weapon
@@ -131,6 +142,7 @@
   drop_rate: 1
   accuracy: 75
   id_str: weapons/light-orb
+  is_group_attack: true
 - name: 烈火シャワー
   description: 75%全体攻撃
   type: weapon
@@ -142,6 +154,7 @@
   drop_rate: 1
   accuracy: 75
   id_str: weapons/fire-shower
+  is_group_attack: true
 - name: 魔神の木馬
   description: 守6
   type: weapon
@@ -155,6 +168,7 @@
   drop_rate: 1
   accuracy: 75
   id_str: weapons/jinn-s-rocking-horse
+  is_group_attack: true
 - name: 雨神刀
   description: 50%全体攻撃
   type: weapon
@@ -166,6 +180,7 @@
   drop_rate: 1
   accuracy: 50
   id_str: weapons/rain-deity-s-saber
+  is_group_attack: true
 - name: フレアアクス
   description: 50%全体攻撃
   type: weapon
@@ -177,6 +192,7 @@
   drop_rate: 1
   accuracy: 50
   id_str: weapons/flare-axe
+  is_group_attack: true
 - name: プチサターン
   description: 25%全体攻撃
   type: weapon
@@ -188,6 +204,7 @@
   drop_rate: 1
   accuracy: 25
   id_str: weapons/petit-saturn
+  is_group_attack: true
 - name: 昇天弓
   id_str: weapons/ascension-bow
   description: 25%全体攻撃（死亡時発動は環境側で処理）
@@ -199,3 +216,4 @@
   attack_power: 1
   drop_rate: 1
   accuracy: 25
+  is_group_attack: true

@@ -6,6 +6,85 @@
 #include <vector>
 #include <random>
 
+struct StagedAttackInfo {
+    int mp_cost;
+    int attack_power;
+    Element element;
+    bool absorption;
+    bool hit;
+};
+
+/**
+ * @brief 仮置きされているカード群を評価し、消費MP、攻撃力、属性、吸収フラグ、および命中結果を判定します。
+ */
+static StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
+    StagedAttackInfo info = {};
+    info.mp_cost = calculate_staged_mp_cost(state, player_id);
+
+    int total_atk = 0;
+    bool has_non_element = false;
+    bool has_multiple_different_elements = false;
+    Element base_element = ELEM_NONE;
+    bool has_light = false;
+
+    for (int i = 0; i < state.num_staged_cards[player_id]; ++i) {
+        int h_idx = state.staged_cards[player_id][i];
+        state.is_known_to_opp[player_id][h_idx] = true;
+        int card_id = state.true_hand[player_id][h_idx];
+        const CardFeatures &f = g_card_registry[card_id];
+
+        if (card_id == ID_AURA) {
+            total_atk *= 2;
+        } else {
+            total_atk += f.attack_power;
+        }
+
+        Element e = f.element;
+        if (e == ELEM_NONE) {
+            has_non_element = true;
+        } else if (e == ELEM_LIGHT) {
+            has_light = true;
+        } else {
+            if (base_element == ELEM_NONE) {
+                base_element = e;
+            } else if (base_element != e) {
+                has_multiple_different_elements = true;
+            }
+        }
+
+        if (card_id == ID_ABSORPTION || card_id == ID_VINE_SHOOT) {
+            info.absorption = true;
+        }
+    }
+
+    info.attack_power = total_atk;
+
+    if (has_non_element || has_multiple_different_elements) {
+        info.element = ELEM_NONE;
+    } else if (base_element != ELEM_NONE) {
+        info.element = base_element;
+    } else if (has_light) {
+        info.element = ELEM_LIGHT;
+    } else {
+        info.element = ELEM_NONE;
+    }
+
+    info.hit = true;
+    for (int i = 0; i < state.num_staged_cards[player_id]; ++i) {
+        int card_id = state.true_hand[player_id][state.staged_cards[player_id][i]];
+        const CardFeatures &f = g_card_registry[card_id];
+        if (f.accuracy < 100) {
+            std::uniform_int_distribution<int> dist(0, 99);
+            if (dist(state.rng) >= f.accuracy) {
+                info.hit = false;
+                break;
+            }
+        }
+    }
+
+    return info;
+}
+
 /**
  * @brief メインフェイズ（PHASE_MAIN）でのプレイヤー行動を処理します。
  *        祈る、捨てる、または使用タイミングがメインフェイズの各種カードの仮置きを行います。
@@ -41,14 +120,22 @@ void step_phase_main(InternalState &state, ActionType action, int me, int opp) {
                 state.current_phase = GamePhase::PHASE_EXCHANGE_HP;
                 return;
             } else if (f.usage_timing & TIMING_MAIN_ATK) {
-                state.current_phase = GamePhase::PHASE_ATTACK_PLUS;
                 state.attacker_id = me;
-                state.pending_is_group_attack = (f.is_weapon || f.is_miracle) && (f.accuracy < 100);
+                state.pending_is_group_attack = f.is_group_attack;
+                if (f.is_group_attack) {
+                    state.current_phase = GamePhase::PHASE_GROUP_WEAPON;
+                } else {
+                    state.current_phase = GamePhase::PHASE_ATTACK_PLUS;
+                }
                 return;
             } else if (f.usage_timing & TIMING_MAIN_MIRACLE) {
-                state.current_phase = GamePhase::PHASE_MIRACLE_PLUS;
                 state.attacker_id = me;
-                state.pending_is_group_attack = (f.is_weapon || f.is_miracle) && (f.accuracy < 100);
+                state.pending_is_group_attack = f.is_group_attack;
+                if (f.is_group_attack) {
+                    state.current_phase = GamePhase::PHASE_GROUP_MIRACLE;
+                } else {
+                    state.current_phase = GamePhase::PHASE_MIRACLE_PLUS;
+                }
                 return;
             } else if (card_id == ID_SELL) {
                 state.current_phase = GamePhase::PHASE_SELL_SELECT;
@@ -134,71 +221,27 @@ void step_phase_attack_plus(InternalState &state, ActionType action, int me, int
             
             if (card_id == ID_MIRAGE) {
                 state.pending_is_group_attack = true;
+                state.current_phase = GamePhase::PHASE_GROUP_WEAPON;
             }
         }
     } else if (action == ACTION_TARGET_OPP || action == ACTION_TARGET_SELF) {
         int target = (action == ACTION_TARGET_SELF) ? me : opp;
 
-        int total_mp_cost = calculate_staged_mp_cost(state, me);
-        state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
+        StagedAttackInfo info = evaluate_staged_attack(state, me);
+        state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
 
-        int total_atk = 0;
-        bool has_non_element = false;
-        bool has_multiple_different_elements = false;
-        Element base_element = ELEM_NONE;
-        bool has_light = false;
-
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            int h_idx = state.staged_cards[me][i];
-            state.is_known_to_opp[me][h_idx] = true;
-            int card_id = state.true_hand[me][h_idx];
-            CardFeatures &f = g_card_registry[card_id];
-            
-            if (card_id == ID_AURA) total_atk *= 2;
-            else total_atk += f.attack_power;
-            
-            Element e = f.element;
-            if (e == ELEM_NONE) has_non_element = true;
-            else if (e == ELEM_LIGHT) has_light = true;
-            else {
-                if (base_element == ELEM_NONE) base_element = e;
-                else if (base_element != e) has_multiple_different_elements = true;
-            }
-
-            if (card_id == ID_ABSORPTION || card_id == ID_VINE_SHOOT) {
-                state.pending_absorption = true;
-            }
-        }
-
-        Element atk_element = ELEM_NONE;
-        if (has_non_element || has_multiple_different_elements) atk_element = ELEM_NONE;
-        else if (base_element != ELEM_NONE) atk_element = base_element;
-        else if (has_light) atk_element = ELEM_LIGHT;
-
-        bool hit = true;
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            int card_id = state.true_hand[me][state.staged_cards[me][i]];
-            CardFeatures &f = g_card_registry[card_id];
-            if (f.accuracy < 100) {
-                std::uniform_int_distribution<int> dist(0, 99);
-                if (dist(state.rng) >= f.accuracy) {
-                    hit = false;
-                    break;
-                }
-            }
-        }
-
-        if (!hit) {
+        if (!info.hit) {
             state.current_phase = GamePhase::PHASE_END;
         } else {
-            state.pending_attack_power = total_atk;
-            state.pending_attack_element = atk_element;
+            state.pending_attack_power = info.attack_power;
+            state.pending_attack_element = info.element;
+            state.pending_absorption = info.absorption;
             state.defender_id = target;
 
             if (target == me) {
-                if (total_atk > 0) {
-                    int intended_damage = total_atk;
-                    state.hp[me] = std::clamp(state.hp[me] - total_atk, 0, 99);
+                if (info.attack_power > 0) {
+                    int intended_damage = info.attack_power;
+                    state.hp[me] = std::clamp(state.hp[me] - info.attack_power, 0, 99);
                     if (state.pending_absorption) {
                         state.hp[me] = std::clamp(state.hp[me] + intended_damage, 0, 99);
                     }
@@ -208,12 +251,60 @@ void step_phase_attack_plus(InternalState &state, ActionType action, int me, int
                 state.current_phase = GamePhase::PHASE_END;
             } else {
                 state.current_actor_id = target;
-                if (is_weapon_attack(state, me)) {
-                    state.current_phase = GamePhase::PHASE_DEFENSE;
-                } else {
-                    state.current_phase = GamePhase::PHASE_MIRACLE_DEFENSE;
-                }
+                state.current_phase = GamePhase::PHASE_DEFENSE;
             }
+        }
+    }
+}
+
+void step_phase_group_weapon(InternalState &state, ActionType action, int me, int opp) {
+    if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
+        if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
+            int idx = action - ACTION_SELECT_HAND_0;
+            state.staged_cards[me][state.num_staged_cards[me]++] = idx;
+            state.is_used[me][idx] = true;
+        }
+    } else if (action == ACTION_TARGET_OPP) {
+        int target = opp;
+
+        StagedAttackInfo info = evaluate_staged_attack(state, me);
+        state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
+
+        if (!info.hit) {
+            state.current_phase = GamePhase::PHASE_END;
+        } else {
+            state.pending_attack_power = info.attack_power;
+            state.pending_attack_element = info.element;
+            state.pending_absorption = info.absorption;
+            state.defender_id = target;
+            state.current_actor_id = target;
+            state.current_phase = GamePhase::PHASE_DEFENSE;
+        }
+    }
+}
+
+void step_phase_group_miracle(InternalState &state, ActionType action, int me, int opp) {
+    if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
+        if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
+            int idx = action - ACTION_SELECT_HAND_0;
+            state.staged_cards[me][state.num_staged_cards[me]++] = idx;
+            state.is_used[me][idx] = true;
+        }
+    } else if (action == ACTION_TARGET_OPP) {
+        int target = opp;
+
+        StagedAttackInfo info = evaluate_staged_attack(state, me);
+        state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
+
+        if (!info.hit) {
+            state.current_phase = GamePhase::PHASE_END;
+        } else {
+            state.pending_attack_power = info.attack_power;
+            state.pending_attack_element = info.element;
+            state.pending_absorption = info.absorption;
+            state.defender_id = target;
+            state.current_actor_id = target;
+            state.current_phase = GamePhase::PHASE_MIRACLE_DEFENSE;
         }
     }
 }
@@ -279,73 +370,28 @@ void step_phase_miracle_plus(InternalState &state, ActionType action, int me, in
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
             
-            if (card_id == ID_MIRAGE) {
-                state.pending_is_group_attack = true;
+            if (is_weapon_attack(state, me)) {
+                state.current_phase = GamePhase::PHASE_ATTACK_PLUS;
             }
         }
     } else if (action == ACTION_TARGET_OPP || action == ACTION_TARGET_SELF) {
         int target = (action == ACTION_TARGET_SELF) ? me : opp;
 
-        int total_mp_cost = calculate_staged_mp_cost(state, me);
-        state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
+        StagedAttackInfo info = evaluate_staged_attack(state, me);
+        state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
 
-        int total_atk = 0;
-        bool has_non_element = false;
-        bool has_multiple_different_elements = false;
-        Element base_element = ELEM_NONE;
-        bool has_light = false;
-
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            int h_idx = state.staged_cards[me][i];
-            state.is_known_to_opp[me][h_idx] = true;
-            int card_id = state.true_hand[me][h_idx];
-            CardFeatures &f = g_card_registry[card_id];
-            
-            if (card_id == ID_AURA) total_atk *= 2;
-            else total_atk += f.attack_power;
-            
-            Element e = f.element;
-            if (e == ELEM_NONE) has_non_element = true;
-            else if (e == ELEM_LIGHT) has_light = true;
-            else {
-                if (base_element == ELEM_NONE) base_element = e;
-                else if (base_element != e) has_multiple_different_elements = true;
-            }
-
-            if (card_id == ID_ABSORPTION || card_id == ID_VINE_SHOOT) {
-                state.pending_absorption = true;
-            }
-        }
-
-        Element atk_element = ELEM_NONE;
-        if (has_non_element || has_multiple_different_elements) atk_element = ELEM_NONE;
-        else if (base_element != ELEM_NONE) atk_element = base_element;
-        else if (has_light) atk_element = ELEM_LIGHT;
-
-        bool hit = true;
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            int card_id = state.true_hand[me][state.staged_cards[me][i]];
-            CardFeatures &f = g_card_registry[card_id];
-            if (f.accuracy < 100) {
-                std::uniform_int_distribution<int> dist(0, 99);
-                if (dist(state.rng) >= f.accuracy) {
-                    hit = false;
-                    break;
-                }
-            }
-        }
-
-        if (!hit) {
+        if (!info.hit) {
             state.current_phase = GamePhase::PHASE_END;
         } else {
-            state.pending_attack_power = total_atk;
-            state.pending_attack_element = atk_element;
+            state.pending_attack_power = info.attack_power;
+            state.pending_attack_element = info.element;
+            state.pending_absorption = info.absorption;
             state.defender_id = target;
 
             if (target == me) {
-                if (total_atk > 0) {
-                    int intended_damage = total_atk;
-                    state.hp[me] = std::clamp(state.hp[me] - total_atk, 0, 99);
+                if (info.attack_power > 0) {
+                    int intended_damage = info.attack_power;
+                    state.hp[me] = std::clamp(state.hp[me] - info.attack_power, 0, 99);
                     if (state.pending_absorption) {
                         state.hp[me] = std::clamp(state.hp[me] + intended_damage, 0, 99);
                     }
@@ -355,11 +401,7 @@ void step_phase_miracle_plus(InternalState &state, ActionType action, int me, in
                 state.current_phase = GamePhase::PHASE_END;
             } else {
                 state.current_actor_id = target;
-                if (is_weapon_attack(state, me)) {
-                    state.current_phase = GamePhase::PHASE_DEFENSE;
-                } else {
-                    state.current_phase = GamePhase::PHASE_MIRACLE_DEFENSE;
-                }
+                state.current_phase = GamePhase::PHASE_MIRACLE_DEFENSE;
             }
         }
     }
@@ -529,9 +571,7 @@ void step_phase_buy(InternalState &state, ActionType action, int me, int opp) {
             state.money[buyer] -= price;
             state.money[seller] = std::clamp(state.money[seller] + price, 0, 99);
 
-            state.true_hand[seller][revealed_idx] = CARD_EMPTY;
-            state.is_known_to_opp[seller][revealed_idx] = false;
-            state.is_used[seller][revealed_idx] = false;
+            clear_hand_slot(state, seller, revealed_idx);
 
             int empty_slot = -1;
             for (int j = 0; j < MAX_HAND_SIZE; ++j) {
@@ -556,11 +596,9 @@ void step_phase_buy(InternalState &state, ActionType action, int me, int opp) {
                 if (!candidates.empty()) {
                     std::shuffle(candidates.begin(), candidates.end(), state.rng);
                     int replace_idx = candidates[0];
+                    clear_hand_slot(state, buyer, replace_idx);
                     state.true_hand[buyer][replace_idx] = card_id;
                     state.is_known_to_opp[buyer][replace_idx] = true;
-                    state.is_deployed[buyer][replace_idx] = false;
-                    state.miracle_used_this_turn[buyer][replace_idx] = false;
-                    state.is_used[buyer][replace_idx] = false;
                 }
             }
         } else {
@@ -641,10 +679,7 @@ void step_phase_discard(InternalState &state, ActionType action, int me, int opp
         if (state.num_staged_cards[me] > 0) {
             for (int i = 0; i < state.num_staged_cards[me]; ++i) {
                 int hand_idx = state.staged_cards[me][i];
-                state.true_hand[me][hand_idx] = CARD_EMPTY;
-                state.is_known_to_opp[me][hand_idx] = false;
-                state.is_deployed[me][hand_idx] = false;
-                state.miracle_used_this_turn[me][hand_idx] = false;
+                clear_hand_slot(state, me, hand_idx);
             }
             state.num_staged_cards[me] = 0;
             state.current_phase = GamePhase::PHASE_END;

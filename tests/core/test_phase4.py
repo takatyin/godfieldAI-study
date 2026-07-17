@@ -273,3 +273,140 @@ def test_high_cost_miracle_spiritual_bypass():
     # 4. 消費MPが0なので、MPが2のままであり、PHASE_MIRACLE_DEFENSEへ進めていること
     assert runner.state.get_mp(0) == 2
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
+
+
+def test_group_attack_phases():
+    """
+    検証内容: 4パターンの攻撃フェイズ移行・ターゲット制限・防御フェイズ分岐のテスト。
+    1. 単体武器 ➡ PHASE_ATTACK_PLUS
+       - 蜃気楼を追加 ➡ PHASE_GROUP_WEAPON に遷移
+       - 追加の武器（吹き矢等）が非合法になること
+       - 自傷（TARGET_SELF）が非合法になること
+       - 精霊をプラスして 0 MP で OPP を狙い、PHASE_DEFENSE に遷移すること
+    2. 全体武器 ➡ PHASE_GROUP_WEAPON
+       - 移行直後から他カードをプラスできず、TARGET_OPP のみが合法であること
+       - OPP 選択により PHASE_DEFENSE に遷移すること
+    3. 全体奇跡 ➡ PHASE_GROUP_MIRACLE
+       - 移行直後は精霊によるMP軽減のみ可能、TARGET_OPP のみが合法であること
+       - OPP 選択により PHASE_MIRACLE_DEFENSE に遷移すること
+    4. 単体奇跡 ➡ PHASE_MIRACLE_PLUS
+       - 2枚目の奇跡（火の玉＋火の玉など）を置いた場合、PHASE_ATTACK_PLUS に遷移すること
+    """
+    runner = SimulationRunner()
+    runner.state.seed_rng(0)
+    sword_id = find_card_by_name("銅のこん棒")
+    mirage_id = find_card_by_name("＜蜃気楼＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+    blowpipe_id = find_card_by_name("吹き矢")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 10)
+
+    runner.state.set_true_hand(0, 0, sword_id)
+    runner.state.set_true_hand(0, 1, mirage_id)
+    runner.state.set_true_hand(0, 2, doll_id)
+    runner.state.set_true_hand(0, 3, blowpipe_id)
+
+    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # 銅のこん棒を選択
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
+
+    # 蜃気楼をプラス
+    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
+    # 全体武器フェイズに移行するはず
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_GROUP_WEAPON
+
+    # 1. 通常武器（吹き矢）が非合法、かつ自傷（TARGET_SELF）が非合法であることをアサート
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_3.value] == False  # 吹き矢は置けない
+    assert legal_actions[ActionType.ACTION_TARGET_SELF.value] == False   # 自傷不可
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_2.value] == True   # 精霊は置ける
+
+    # 精霊でコストを0にする
+    runner.step(action=ActionType.ACTION_SELECT_HAND_2)
+    # OPPを攻撃
+    runner.step(action=ActionType.ACTION_TARGET_OPP)
+
+    # 2. 物理防御フェイズ（PHASE_DEFENSE）に遷移していること、消費MPは0であること
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    assert runner.state.get_mp(0) == 10
+
+    # 2. 全体武器（火の粉袋）
+    runner2 = SimulationRunner()
+    runner2.state.seed_rng(0)
+    saw_id = find_card_by_name("火の粉袋")
+    runner2.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner2.state.current_actor_id = 0
+    runner2.state.set_true_hand(0, 0, saw_id)
+
+    runner2.step(action=ActionType.ACTION_SELECT_HAND_0)  # 火の粉袋を選択
+    assert runner2.state.current_phase == godfield_core.GamePhase.PHASE_GROUP_WEAPON
+
+    # のこぎりは最初から重ねられないため、ターゲットしかできないはず
+    legal_actions2 = godfield_core.get_legal_actions(runner2.state)
+    assert sum(1 for i in range(18) if legal_actions2[ActionType.ACTION_SELECT_HAND_0.value + i]) == 0
+    assert legal_actions2[ActionType.ACTION_TARGET_OPP.value] == True
+    assert legal_actions2[ActionType.ACTION_TARGET_SELF.value] == False
+
+    runner2.step(action=ActionType.ACTION_TARGET_OPP)
+    assert runner2.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+
+    # 3. 全体奇跡（煙）
+    runner3 = SimulationRunner()
+    runner3.state.seed_rng(0)
+    storm_id = find_card_by_name("＜煙＞")
+    runner3.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner3.state.current_actor_id = 0
+    runner3.state.set_mp(0, 20)
+    runner3.state.set_true_hand(0, 0, storm_id)
+
+    runner3.step(action=ActionType.ACTION_SELECT_HAND_0)  # 煙を選択
+    assert runner3.state.current_phase == godfield_core.GamePhase.PHASE_GROUP_MIRACLE
+
+    legal_actions3 = godfield_core.get_legal_actions(runner3.state)
+    assert legal_actions3[ActionType.ACTION_TARGET_OPP.value] == True
+    assert legal_actions3[ActionType.ACTION_TARGET_SELF.value] == False
+
+    runner3.step(action=ActionType.ACTION_TARGET_OPP)
+    assert runner3.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
+
+    # 4. 単体奇跡（火の玉）の連撃による武器攻撃変化 + 蜃気楼 + 精霊のぬいぐるみ ➡ 全体武器攻撃 ➡ 物理防御
+    runner4 = SimulationRunner()
+    runner4.state.seed_rng(0)
+    fireball_id = find_card_by_name("＜火の玉＞")
+    mirage_id = find_card_by_name("＜蜃気楼＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner4.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner4.state.current_actor_id = 0
+    runner4.state.set_mp(0, 20)
+    runner4.state.set_true_hand(0, 0, fireball_id)
+    runner4.state.set_true_hand(0, 1, fireball_id)
+    runner4.state.set_true_hand(0, 2, mirage_id)
+    runner4.state.set_true_hand(0, 3, doll_id)
+
+    runner4.step(action=ActionType.ACTION_SELECT_HAND_0)  # 1枚目の火の玉を選択
+    assert runner4.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_PLUS
+
+    # 2枚目の火の玉を選択
+    runner4.step(action=ActionType.ACTION_SELECT_HAND_1)
+    # 2枚重ねたので PHASE_ATTACK_PLUS（単体武器攻撃扱い）に遷移するはず
+    assert runner4.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
+
+    # 蜃気楼をプラス
+    runner4.step(action=ActionType.ACTION_SELECT_HAND_2)
+    # 蜃気楼を置いたので全体化し、PHASE_GROUP_WEAPON に遷移するはず
+    assert runner4.state.current_phase == godfield_core.GamePhase.PHASE_GROUP_WEAPON
+
+    # 精霊のぬいぐるみを選択してMP消費を無効化する
+    legal_actions4 = godfield_core.get_legal_actions(runner4.state)
+    assert legal_actions4[ActionType.ACTION_SELECT_HAND_3.value] == True  # ぬいぐるみが置けるはず
+    runner4.step(action=ActionType.ACTION_SELECT_HAND_3)
+
+    # ターゲット OPP を指定
+    assert legal_actions4[ActionType.ACTION_TARGET_OPP.value] == True
+    runner4.step(action=ActionType.ACTION_TARGET_OPP)
+
+    # 最終的に物理/属性防御（PHASE_DEFENSE）に遷移し、消費MPは4（火の玉x2のコスト分、蜃気楼は0）となりMPは16であること
+    assert runner4.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    assert runner4.state.get_mp(0) == 16

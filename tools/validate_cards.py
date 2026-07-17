@@ -80,6 +80,18 @@ def validate_cards(file_path):
             if card["hit_curse"] not in valid_hit_curses:
                 errors.append(f"[{name}] Invalid hit_curse: '{card['hit_curse']}'")
 
+        # 7. Check is_group_attack and accuracy consistency
+        is_group = card.get("is_group_attack", False)
+        accuracy = card.get("accuracy", 100)
+        if is_group:
+            if not isinstance(is_group, bool):
+                errors.append(f"[{name}] is_group_attack must be a boolean")
+            if not (0 < accuracy < 100):
+                errors.append(f"[{name}] Group attack must have accuracy between 0 and 100 (accuracy was {accuracy})")
+        else:
+            if ctype in {"weapon", "miracle"} and accuracy != 100:
+                errors.append(f"[{name}] Single target weapon/miracle attack must have accuracy = 100 (accuracy was {accuracy})")
+
     if errors:
         print(f"Validation FAILED with {len(errors)} errors:")
         for e in errors:
