@@ -143,6 +143,9 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("pending_attack_element", &InternalState::pending_attack_element)
         .def_readwrite("pending_absorption", &InternalState::pending_absorption)
         .def_readwrite("pending_is_group_attack", &InternalState::pending_is_group_attack)
+        .def_readwrite("turn_end_state", &InternalState::turn_end_state)
+        .def("get_pending_ascension_bows", [](InternalState &s, int p) { return s.pending_ascension_bows[p]; }, py::arg("player_id"))
+        .def("set_pending_ascension_bows", [](InternalState &s, int p, int v) { s.pending_ascension_bows[p] = v; }, py::arg("player_id"), py::arg("val"))
         // For array members, pybind11 requires special handling to access by index from python.
         // For now, we will add helper methods to InternalState bindings to get/set these arrays.
         .def(

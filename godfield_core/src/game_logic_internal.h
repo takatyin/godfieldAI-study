@@ -131,6 +131,12 @@ void draw_card_to_hand(InternalState &state, int player_id);
  * @param state ゲーム状態。
  */
 void cleanup_phase_end(InternalState &state);
+bool resolve_turn_end_steps(InternalState &state);
+
+/**
+ * @brief カードが現在のフェイズおよび攻撃属性に対してアクティブなリアクション（反射/弾く/阻止）カードであるかを判定します。
+ */
+bool is_active_reaction_card(int card_id, GamePhase phase, Element attack_element);
 
 /**
  * @brief 対象プレイヤーの仮置き場（staged_cards）に積まれているカードのID一覧を取得します。

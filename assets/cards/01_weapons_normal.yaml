@@ -272,6 +272,7 @@
   drop_rate: 1
   id_str: weapons/sword-shield
 - name: 反射剣
+  id_str: weapons/reflection-sword
   description: 無属性武器をはね返す
   type: weapon
   reaction_type: reflect

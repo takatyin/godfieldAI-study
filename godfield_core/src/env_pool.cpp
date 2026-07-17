@@ -33,6 +33,9 @@ void EnvPool::reset(int seed) {
         states_[i].pending_absorption = false;
         states_[i].sickness[0] = 0; states_[i].sickness[1] = 0;
         std::memset(states_[i].curses, 0, sizeof(states_[i].curses));
+        states_[i].turn_end_state = 0;
+        states_[i].pending_ascension_bows[0] = 0; states_[i].pending_ascension_bows[1] = 0;
+        states_[i].heaven_seizure_occurred[0] = false; states_[i].heaven_seizure_occurred[1] = false;
 
         // Draw initial hands
         for (int p=0; p<2; ++p) {

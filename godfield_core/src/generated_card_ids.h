@@ -15,6 +15,7 @@ constexpr int ID_WARRIOR_S_BOW = 16;
 constexpr int ID_JET_YO_YO = 19;
 constexpr int ID_HELL_SCISSORS = 24;
 constexpr int ID_SWORD_SHIELD = 31;
+constexpr int ID_REFLECTION_SWORD = 32;
 constexpr int ID_SPIRITUAL_STAFF = 40;
 constexpr int ID_GOD_SWORD = 51;
 constexpr int ID_TORCH = 53;

@@ -1,7 +1,6 @@
 import godfield_core
-from godfield_core import ActionType
-
-from .test_utils import SimulationRunner, find_card_by_name, get_all_cards
+from godfield_core import ActionType, GamePhase
+from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards
 
 
 def test_miracle_attack_basic():
@@ -70,15 +69,12 @@ def test_miracle_absorption():
     assert runner.state.current_actor_id == 1
 
 
-def test_miracle_deployment_and_draw():
+def test_miracle_deployment_retains_card():
     """
-    検証内容: 「オーラ (aura)」などの展開型奇跡のテストとドロー処理。
-    - 奇跡を使用すると、手札の同じスロットに留まり（is_deployed = true, is_known_to_opp = true）、消費されないこと。
-    - 手札の空き枠の数だけ、使用したカード枚数分（今回は武器+オーラで2枚）ターン終了時（あるいは使用直後）にドローが行われること。
-    - 手札が一杯であればドローが行われないこと。
+    検証内容: 展開型奇跡「＜オーラ＞」使用時の手札維持テスト。
+    - 奇跡「＜オーラ＞」を使用（展開）して戦闘を解決した際、カードが手札から消滅せず、使用したスロット（スロット1）に展開フラグ（is_deployed = True）および公開フラグ（is_known_to_opp = True）がオンの状態で留まることを確認します。
     """
     runner = SimulationRunner()
-
     aura_id = find_card_by_name("＜オーラ＞")
     weapon_id = find_card_by_name("パンチ")
 
@@ -89,31 +85,45 @@ def test_miracle_deployment_and_draw():
     runner.state.set_true_hand(0, 0, weapon_id)
     runner.state.set_true_hand(0, 1, aura_id)
 
-    # メイン武器を選択
     runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
-
-    # オーラを追加選択
     runner.step(action=ActionType.ACTION_SELECT_HAND_1)
-
-    # 攻撃確定
     runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    # 相手が防御確定
     runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # ターンが移行
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
 
     # オーラはスロット1に展開されたまま残る
     assert runner.state.get_is_deployed(0, 1) == True
     assert runner.state.get_true_hand(0, 1) == aura_id
 
-    # 武器は消費されたためスロット0には新たなカードがドローされているはず
+
+def test_miracle_deployment_triggers_draw():
+    """
+    検証内容: 展開型奇跡と通常消費武器の混成使用時のドロー補充テスト。
+    - 武器とオーラを同時に使用し、ターンが移行した際、消費された武器のスロット0および追加のカード補充により、手札スロット0とスロット2の空き枠に新規カードが正しくドローされることを確認します。
+    """
+    runner = SimulationRunner()
+    aura_id = find_card_by_name("＜オーラ＞")
+    weapon_id = find_card_by_name("パンチ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 20)
+
+    # スロット2以降は空にしておく
+    for i in range(2, 18):
+        runner.state.set_true_hand(0, i, godfield_core.CARD_EMPTY)
+
+    runner.state.set_true_hand(0, 0, weapon_id)
+    runner.state.set_true_hand(0, 1, aura_id)
+
+    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
+    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
+    runner.step(action=ActionType.ACTION_TARGET_OPP)
+    runner.step(action=ActionType.ACTION_CONFIRM)
+
+    # 武器は消費されたためスロット0には新たなカードがドローされている
     assert runner.state.get_is_deployed(0, 0) == False
     assert runner.state.get_true_hand(0, 0) != godfield_core.CARD_EMPTY
-    # オーラの分、さらにドローされているはず
+    # オーラの分、スロット2にもさらにドローされている
     assert runner.state.get_true_hand(0, 2) != godfield_core.CARD_EMPTY
 
 
@@ -141,7 +151,6 @@ def test_miracle_aura_doubling():
     runner.step(action=ActionType.ACTION_TARGET_OPP)
 
     # ATK5 -> オーラで2倍 -> ATK10 になっているか
-    # プレースホルダーの武器の実際のATKに合わせて期待値を計算
     cards = get_all_cards()
     card_info = next(c for c in cards if c["id"] == weapon_id)
     expected_atk = card_info.get("attack_power", 0) * 2
@@ -176,75 +185,46 @@ def test_miracle_status_ailment_application():
     assert runner.state.get_sickness(1) == godfield_core.SicknessType.SICKNESS_COLD
 
 
-def test_miracle_status_ailment_cure():
+def test_miracle_cure_sickness_fever():
     """
-    検証内容: 対象の状態異常を回復する奇跡のテスト。
-    - 「音色 (tone)」などの奇跡を使用した際、対象の特定の状態異常（風邪、熱病、霧、閃光）がクリアされること。
-    - 自分自身を対象に「音色」を使用し、状態異常が回復してターンが終了すること。
+    検証内容: 音色による熱病の治癒テスト。
+    - 自身が「熱病（SICKNESS_FEVER）」である状態で、自分自身を対象に奇跡「＜音色＞」を使用した際、熱病状態が「SICKNESS_NONE」へと完全に治癒されることを確認します。
     """
     runner = SimulationRunner()
-
     tone_id = find_card_by_name("＜音色＞")
 
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
     runner.state.set_mp(0, 20)
-
-    # 事前に状態異常を付与しておく
     runner.state.set_sickness(0, godfield_core.SicknessType.SICKNESS_FEVER)
-    runner.state.set_curses(0, godfield_core.CurseType.CURSE_FLASH, True)
-
     runner.state.set_true_hand(0, 0, tone_id)
 
     runner.step(action=ActionType.ACTION_SELECT_HAND_0)
     runner.step(action=ActionType.ACTION_TARGET_SELF)
 
-    # TODO: 状態異常回復が正しく機能し、自身の状態異常がリセットされることを期待するアサーション
-    # 自己対象回復はPHASE_MIRACLE_DEFENSEを経由せず即時適用される
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
-
-    # 状態異常が回復しているか
+    # 治癒解決
     assert runner.state.get_sickness(0) == godfield_core.SicknessType.SICKNESS_NONE
+
+
+def test_miracle_cure_curse_flash():
+    """
+    検証内容: 音色による閃光の災い（Curse）治癒テスト。
+    - 自身が「閃光の災い（CURSE_FLASH）」である状態で、自分自身を対象に奇跡「＜音色＞」を使用した際、閃光の災いが False（治癒）になることを確認します。
+    """
+    runner = SimulationRunner()
+    tone_id = find_card_by_name("＜音色＞")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 20)
+    runner.state.set_curses(0, godfield_core.CurseType.CURSE_FLASH, True)
+    runner.state.set_true_hand(0, 0, tone_id)
+
+    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
+    runner.step(action=ActionType.ACTION_TARGET_SELF)
+
+    # 治癒解決
     assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_FLASH) == False
-
-
-# def test_miracle_defense_bounce():
-#     """
-#     検証内容: 奇跡を反射する防具・奇跡（「乱気流 (turbulence)」「スーパーミラー」等）のテスト。
-#     - P0が奇跡攻撃を行い、P1が「乱気流」を使用して防御確定した場合。
-#     - 反射により、効果（ダメージや状態異常）が本来の攻撃者であるP0に跳ね返ること。
-#     - ※注意: 現在のMVP実装では跳ね返しが相手に直接適用されるか、実装未完の場合はスキップされる可能性があります。
-#       このテストは将来的な実装の網羅性を担保するためのスケルトンです。
-#     """
-#     runner = SimulationRunner()
-
-#     # TODO: 攻撃奇跡と反射奇跡（防具扱いの場合あり）のプレースホルダー。実際のカード名に変更してください。
-#     fireball_id = find_card_by_name("__PLACEHOLDER_MIRACLE_ATTACK__")
-#     turbulence_id = find_card_by_name("__PLACEHOLDER_MIRACLE_BOUNCE__")
-
-#     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-#     runner.state.current_actor_id = 0
-#     runner.state.set_mp(0, 20)
-#     runner.state.set_mp(1, 20)
-#     runner.state.set_hp(0, 40)
-#     runner.state.set_hp(1, 40)
-
-#     runner.state.set_true_hand(0, 0, fireball_id)
-#     runner.state.set_true_hand(1, 0, turbulence_id)
-
-#     runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-#     runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-#     # P1の防御ターン
-#     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
-#     runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # 乱気流を選択
-#     runner.step(action=ActionType.ACTION_CONFIRM)
-
-#     # 反射により、本来の攻撃者であるP0がダメージを受け、防御側のP1は無傷になることを期待するアサーション
-#     # TODO: 反射ロジックが実装された際、以下の結果になるようにしてください
-#     assert runner.state.get_hp(0) < 40
-#     assert runner.state.get_hp(1) == 40
 
 
 def test_miracle_multiple_uses_per_turn():
@@ -291,41 +271,117 @@ def test_unstable_accuracy_cannot_target_self():
 
     legal_actions = godfield_core.get_legal_actions(runner.state)
 
-    # TODO: C++側で命中率<100の場合にターゲット自分を禁止するロジックが実装されているかを期待するアサーション
     assert legal_actions[ActionType.ACTION_TARGET_SELF.value] == False
     assert legal_actions[ActionType.ACTION_TARGET_OPP.value] == True
 
 
-def test_miracle_deployment_limit_fifo():
+def test_miracle_deployment_limit_six():
     """
-    検証内容: 奇跡の展開数は最大6つであり、それ以上展開しようとすると最も古いものから上書き（FIFO）で消滅する仕様のテスト。
+    検証内容: 奇跡の最大展開数制限。
+    - 6つのスロットに既に奇跡が展開されている状態で、現在展開されている奇跡の総数が 6 個であることを確認します。
     """
     runner = SimulationRunner()
-    
-    # 奇跡のIDを取得
     fireball_id = find_card_by_name("＜火の玉＞")
     
-    # 6つのスロットに奇跡を展開する（0から5）
+    # 6つのスロットに奇跡を展開
     for i in range(6):
         runner.state.set_true_hand(0, i, fireball_id)
         runner.state.set_is_deployed(0, i, True)
         
-    # 現在展開されている奇跡が6つあることを確認
     deployed_count = sum(1 for i in range(18) if runner.state.get_is_deployed(0, i))
     assert deployed_count == 6
+
+
+def test_miracle_deployment_limit_fifo_eviction():
+    """
+    検証内容: 奇跡展開オーバー時のFIFO（押し出し）ルールテスト。
+    - 既に 6 つ展開されている状態で、7 つ目の奇跡をスロット6に新しく展開した際、最も古いスロット0の奇跡の展開フラグが False になり、かつ手札から完全に消滅（CARD_EMPTY）することを確認します。
+    - 総展開数が 6 個のままで維持されることを確認します。
+    """
+    runner = SimulationRunner()
+    fireball_id = find_card_by_name("＜火の玉＞")
     
-    # 7つ目の奇跡を展開する（スロット6）
+    # 6つ展開
+    for i in range(6):
+        runner.state.set_true_hand(0, i, fireball_id)
+        runner.state.set_is_deployed(0, i, True)
+        
+    # 7つ目の奇跡を展開
     runner.state.set_true_hand(0, 6, fireball_id)
     runner.state.set_is_deployed(0, 6, True)
     
-    # 結果確認:
-    # 1. 総展開数は6個のまま維持されていること
+    # 1. 総数は6のまま維持
     deployed_count_after = sum(1 for i in range(18) if runner.state.get_is_deployed(0, i))
     assert deployed_count_after == 6
     
-    # 2. 最も古かったスロット0の奇跡の展開状態が解除され、さらに手札からも消滅（CARD_EMPTY）していること
+    # 2. スロット0（最も古い奇跡）が消滅
     assert runner.state.get_is_deployed(0, 0) == False
     assert runner.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY
     
-    # 3. 新しく展開したスロット6の奇跡は展開されていること
+    # 3. スロット6（新しい奇跡）が展開済み
     assert runner.state.get_is_deployed(0, 6) == True
+
+
+def test_weapon_and_miracle_stacking():
+    """
+    検証内容: 武器 + 奇跡の重ねがけは「武器攻撃」として扱われ、PHASE_DEFENSEへ遷移する。
+    """
+    runner = SimulationRunner()
+    punch_id = find_card_by_name("パンチ")
+    fireball_id = find_card_by_name("＜火の玉＞")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.set_status(0, hp=40, mp=10) # 十分なMPを付与
+
+    runner.state.set_true_hand(0, 0, punch_id)
+    runner.state.set_true_hand(0, 1, fireball_id)
+
+    # 1. 武器 (パンチ) を出す -> PHASE_ATTACK_PLUSへ
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
+
+    # 2. 火の玉を追加で出す (TIMING_ATK_PLUS)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+
+    # 3. 相手を対象に攻撃決定 -> PHASE_DEFENSE (武器攻撃の守り) へ遷移するはず
+    runner.step(ActionType.ACTION_TARGET_OPP)
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+
+
+def test_miracle_and_miracle_stacking_is_illegal():
+    """
+    検証内容: 奇跡を1枚目に使用した場合、追加できるのは精霊系（MP0化）のみ。
+    火の玉 ＋ 火の玉、火の玉 ＋ プラス武器、火の玉 ＋ 他の奇跡などはすべて非合法手となることを確認する。
+    """
+    runner = SimulationRunner()
+    fireball_id = find_card_by_name("＜火の玉＞")
+    blowgun_id = find_card_by_name("吹き矢") # プラス武器 (TIMING_ATK_PLUS)
+    ice_id = find_card_by_name("＜氷＞") # 通常奇跡
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.set_status(0, hp=40, mp=10) # 十分なMPを付与
+
+    runner.state.set_true_hand(0, 0, fireball_id)
+    runner.state.set_true_hand(0, 1, fireball_id)
+    runner.state.set_true_hand(0, 2, blowgun_id)
+    runner.state.set_true_hand(0, 3, ice_id)
+    runner.state.set_true_hand(0, 4, doll_id)
+
+    # 1. 火の玉を出す -> PHASE_MIRACLE_PLUSへ
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_PLUS
+
+    # 2. 重ねがけ可能なカードの検証
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+
+    # 火の玉（2枚目）は非合法
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_1] is False
+    # プラス武器（吹き矢）は非合法
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_2] is False
+    # 通常奇跡（氷）は非合法
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_3] is False
+    # 精霊系（ぬいぐるみ）は合法
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_4] is True

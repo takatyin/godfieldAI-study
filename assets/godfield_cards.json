@@ -402,6 +402,7 @@
   },
   {
     "name": "反射剣",
+    "id_str": "weapons/reflection-sword",
     "description": "無属性武器をはね返す",
     "type": "weapon",
     "reaction_type": "reflect",
@@ -2389,7 +2390,8 @@
     "description": "攻撃の属性を取り除く",
     "type": "defense",
     "usage_timing": [
-      "atk_defence_phase"
+      "atk_defence_phase",
+      "miracle_defence_phase"
     ],
     "price": 15,
     "drop_rate": 3,
@@ -2402,7 +2404,10 @@
     "description": "色んな攻撃を跳ね返す",
     "type": "defense",
     "reaction_type": "reflect",
-    "usage_timing": [],
+    "usage_timing": [
+      "atk_defence_phase",
+      "miracle_defence_phase"
+    ],
     "price": 10,
     "drop_rate": 1,
     "id": 184

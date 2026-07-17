@@ -180,6 +180,11 @@ struct alignas(64) InternalState {
     int exchange_sum;
     int exchange_hp;
 
+    // ターン終了時処理 (PHASE_END) のステートマシン用
+    int turn_end_state;              // 0: 死亡判定/お守り/昇天弓, 1: 病気悪化, 2: 病気ダメージ, 3: 引き分け, 4: 守護神, 5: クリーンアップ
+    int pending_ascension_bows[2];   // 各プレイヤーの保留中昇天弓射撃回数
+    bool heaven_seizure_occurred[2]; // 各プレイヤーが天国病悪化（発作）を起こしたか
+
     // === 強化学習 (RL) 用の終了シグナルと報酬 ===
     // OpenAI Gym などの標準的な強化学習インターフェースに合わせるために必要不可欠な変数群です。
     // Python側で各環境が終了したかを判定し、方策(Policy)の更新に使う報酬を取得します。

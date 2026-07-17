@@ -322,7 +322,6 @@ void step_phase_defense(InternalState &state, ActionType action, int me, int opp
         }
     } else if (action == ACTION_CONFIRM) {
         int total_def = 0;
-        bool bounced = false; 
         bool rainbow = false;
 
         for (int i = 0; i < state.num_staged_cards[me]; ++i) {
@@ -334,26 +333,86 @@ void step_phase_defense(InternalState &state, ActionType action, int me, int opp
             if (card_id == ID_RAINBOW_CURTAIN) rainbow = true;
         }
 
-        if (!bounced) {
-            int damage = std::max(0, state.pending_attack_power - total_def);
-
-            if (damage > 0 && state.pending_attack_element == ELEM_DARKNESS && !rainbow) {
-                state.hp[me] = 0;
-            } else {
-                state.hp[me] = std::clamp(state.hp[me] - damage, 0, 99);
+        ReactionType react_type = REACTION_NONE;
+        Element effective_atk_element = rainbow ? ELEM_NONE : state.pending_attack_element;
+        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+            int h_idx = state.staged_cards[me][i];
+            int card_id = state.true_hand[me][h_idx];
+            const CardFeatures &f = g_card_registry[card_id];
+            if (card_id == ID_RAINBOW_CURTAIN) continue;
+            if (is_active_reaction_card(card_id, GamePhase::PHASE_DEFENSE, effective_atk_element)) {
+                react_type = f.reaction_type;
             }
-
-            if (state.hp[me] == 0) {
-                state.is_done = true;
-                state.p0_reward = (me == 0) ? -1.0f : 1.0f;
-                state.p1_reward = (me == 1) ? -1.0f : 1.0f;
-                return;
-            }
-
-            auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
-            apply_card_effects_to_target(state, me, attacker_used_cards);
         }
 
+        int total_mp_cost = calculate_staged_mp_cost(state, me);
+
+        if (react_type == REACTION_BLOCK) {
+            state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
+            state.current_phase = GamePhase::PHASE_END;
+            return;
+        } else if (react_type == REACTION_REFLECT || react_type == REACTION_BOUNCE) {
+            state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
+            bool success = true;
+            if (react_type == REACTION_BOUNCE) {
+                int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
+                success = (roll < 50);
+            }
+            if (success) {
+                // Reflect back to attacker (opp)
+                state.attacker_id = me;
+                state.defender_id = opp;
+                state.current_actor_id = opp;
+                state.current_phase = GamePhase::PHASE_DEFENSE;
+                state.num_staged_cards[me] = 0;
+                state.num_staged_cards[opp] = 0;
+                return;
+            } else {
+                // Bounce failed -> self harm!
+                int damage = std::max(0, state.pending_attack_power - total_def);
+                if (damage > 0 && state.pending_attack_element == ELEM_DARKNESS && !rainbow) {
+                    state.hp[me] = 0;
+                } else {
+                    state.hp[me] = std::clamp(state.hp[me] - damage, 0, 99);
+                }
+
+                if (state.pending_absorption) {
+                    state.hp[me] = std::clamp(state.hp[me] + damage, 0, 99);
+                }
+
+                if (state.hp[me] == 0) {
+                    state.current_phase = GamePhase::PHASE_END;
+                    return;
+                }
+
+                auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
+                apply_card_effects_to_target(state, me, attacker_used_cards);
+                state.current_phase = GamePhase::PHASE_END;
+                return;
+            }
+        }
+
+        // REACTION_NONE (一般防具で軽減)
+        state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
+        int damage = std::max(0, state.pending_attack_power - total_def);
+
+        if (damage > 0 && state.pending_attack_element == ELEM_DARKNESS && !rainbow) {
+            state.hp[me] = 0;
+        } else {
+            state.hp[me] = std::clamp(state.hp[me] - damage, 0, 99);
+        }
+
+        if (state.hp[me] == 0) {
+            state.current_phase = GamePhase::PHASE_END;
+            return;
+        }
+
+        if (state.pending_absorption) {
+            state.hp[opp] = std::clamp(state.hp[opp] + damage, 0, 99);
+        }
+
+        auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
+        apply_card_effects_to_target(state, me, attacker_used_cards);
         state.current_phase = GamePhase::PHASE_END;
     }
 }
@@ -369,10 +428,6 @@ void step_phase_miracle_plus(InternalState &state, ActionType action, int me, in
             int card_id = state.true_hand[me][idx];
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
-            
-            if (is_weapon_attack(state, me)) {
-                state.current_phase = GamePhase::PHASE_ATTACK_PLUS;
-            }
         }
     } else if (action == ACTION_TARGET_OPP || action == ACTION_TARGET_SELF) {
         int target = (action == ACTION_TARGET_SELF) ? me : opp;
@@ -419,42 +474,98 @@ void step_phase_miracle_defense(InternalState &state, ActionType action, int me,
             state.is_used[me][idx] = true;
         }
     } else if (action == ACTION_CONFIRM) {
-        bool bounced = false;
-        int total_mp_cost = 0;
+        int total_def = 0;
+        bool rainbow = false;
+
         for (int i = 0; i < state.num_staged_cards[me]; ++i) {
             int h_idx = state.staged_cards[me][i];
             state.is_known_to_opp[me][h_idx] = true;
             int card_id = state.true_hand[me][h_idx];
-            CardFeatures &f = g_card_registry[card_id];
-            total_mp_cost += f.mp_cost;
-            if (card_id == ID_TURBULENCE || card_id == ID_SUPER_MIRROR) {
-                bounced = true;
-            }
-        }
-        state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
-        
-        int target = me;
-        int attacker = opp;
-        
-        if (bounced) {
-            target = opp;
-            attacker = me;
-        }
-        
-        int total_atk = state.pending_attack_power;
-        int intended_damage = total_atk;
-        state.hp[target] = std::clamp(state.hp[target] - total_atk, 0, 99);
-        
-        if (state.pending_absorption) {
-            state.hp[attacker] = std::clamp(state.hp[attacker] + intended_damage, 0, 99);
+            if (card_id == ID_RAINBOW_CURTAIN) rainbow = true;
+            total_def += g_card_registry[card_id].defense_power;
         }
 
-        auto attacker_used_cards = get_staged_card_ids(state, attacker);
-        apply_card_effects_to_target(state, target, attacker_used_cards);
-        
-        if (!state.is_done) {
-            state.current_phase = GamePhase::PHASE_END;
+        ReactionType react_type = REACTION_NONE;
+        Element effective_atk_element = rainbow ? ELEM_NONE : state.pending_attack_element;
+        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+            int h_idx = state.staged_cards[me][i];
+            int card_id = state.true_hand[me][h_idx];
+            const CardFeatures &f = g_card_registry[card_id];
+            if (card_id == ID_RAINBOW_CURTAIN) continue;
+            if (is_active_reaction_card(card_id, GamePhase::PHASE_MIRACLE_DEFENSE, effective_atk_element)) {
+                react_type = f.reaction_type;
+            }
         }
+
+        int total_mp_cost = calculate_staged_mp_cost(state, me);
+
+        if (react_type == REACTION_BLOCK) {
+            state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
+            state.current_phase = GamePhase::PHASE_END;
+            return;
+        } else if (react_type == REACTION_REFLECT || react_type == REACTION_BOUNCE) {
+            state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
+            bool success = true;
+            if (react_type == REACTION_BOUNCE) {
+                int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
+                success = (roll < 50);
+            }
+            if (success) {
+                // Reflect back to attacker (opp)
+                state.attacker_id = me;
+                state.defender_id = opp;
+                state.current_actor_id = opp;
+                state.current_phase = GamePhase::PHASE_MIRACLE_DEFENSE;
+                state.num_staged_cards[me] = 0;
+                state.num_staged_cards[opp] = 0;
+                return;
+            } else {
+                // Bounce failed -> self harm!
+                int damage = std::max(0, state.pending_attack_power - total_def);
+                if (damage > 0 && state.pending_attack_element == ELEM_DARKNESS && !rainbow) {
+                    state.hp[me] = 0;
+                } else {
+                    state.hp[me] = std::clamp(state.hp[me] - damage, 0, 99);
+                }
+
+                if (state.pending_absorption) {
+                    state.hp[me] = std::clamp(state.hp[me] + damage, 0, 99);
+                }
+
+                if (state.hp[me] == 0) {
+                    state.current_phase = GamePhase::PHASE_END;
+                    return;
+                }
+
+                auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
+                apply_card_effects_to_target(state, me, attacker_used_cards);
+                state.current_phase = GamePhase::PHASE_END;
+                return;
+            }
+        }
+
+        // REACTION_NONE
+        state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
+        int damage = std::max(0, state.pending_attack_power - total_def);
+
+        if (damage > 0 && state.pending_attack_element == ELEM_DARKNESS && !rainbow) {
+            state.hp[me] = 0;
+        } else {
+            state.hp[me] = std::clamp(state.hp[me] - damage, 0, 99);
+        }
+
+        if (state.hp[me] == 0) {
+            state.current_phase = GamePhase::PHASE_END;
+            return;
+        }
+
+        if (state.pending_absorption) {
+            state.hp[opp] = std::clamp(state.hp[opp] + damage, 0, 99);
+        }
+
+        auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
+        apply_card_effects_to_target(state, me, attacker_used_cards);
+        state.current_phase = GamePhase::PHASE_END;
     }
 }
 
@@ -648,9 +759,8 @@ void step_phase_exchange(InternalState &state, ActionType action, int me, int op
 
             if (state.hp[me] <= 0) {
                 state.hp[me] = 0;
-                state.is_done = true;
-                state.p0_reward = (me == 0) ? -1.0f : 1.0f;
-                state.p1_reward = (me == 1) ? -1.0f : 1.0f;
+                state.num_staged_cards[me] = 0;
+                state.current_phase = GamePhase::PHASE_END;
                 return;
             }
 

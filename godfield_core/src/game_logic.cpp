@@ -77,10 +77,10 @@ void step_game(InternalState& state, ActionType action) {
     // ターン終了処理 (PHASE_END) の自動解決ループ
     while (!state.is_done) {
         if (state.current_phase == GamePhase::PHASE_END) {
-            cleanup_phase_end(state);
-            state.current_turn++;
-            state.current_actor_id = state.current_turn % 2;
-            state.current_phase = GamePhase::PHASE_MAIN;
+            bool paused = resolve_turn_end_steps(state);
+            if (paused) {
+                break;
+            }
         } else {
             break;
         }
