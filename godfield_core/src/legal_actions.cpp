@@ -11,17 +11,17 @@ void legal_phase_main(const InternalState &state, bool legal_actions[ACTION_SPAC
     if (can_discard(state, me)) legal_actions[ACTION_DISCARD] = true;
 
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (!state.is_used[me][i] && state.true_hand[me][i] != CARD_EMPTY) {
+        if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
             // 展開済みかつ使用済みの奇跡は使えない
             if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
             
-            CardFeatures &f = g_card_registry[state.true_hand[me][i]];
+            CardFeatures &f = g_card_registry[state.apparent_hand[me][i]];
             
             // 奇跡のMP消費が足りるか（将来的に精霊系カードで0にできる可能性を含めて判定）
             if (!can_afford_staged_plus_card(state, me, i)) continue;
             
             // 売るで売るアイテムがあるか
-            if (state.true_hand[me][i] == ID_SELL && !can_sell_card(state, me, i)) continue;
+            if (state.apparent_hand[me][i] == ID_SELL && !can_sell_card(state, me, i)) continue;
             
             if ((f.usage_timing & TIMING_MAIN_SUNDRY) || (f.usage_timing & TIMING_MAIN_ATK) ||
                 (f.usage_timing & TIMING_MAIN_MIRACLE) || (f.usage_timing & TIMING_MAIN_DEAL)) {
@@ -46,15 +46,15 @@ void legal_phase_main_target_select(const InternalState &state, bool legal_actio
 void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     bool has_unstable_accuracy = false;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        CardFeatures &f = get_registry_size() > 0 ? g_card_registry[state.true_hand[me][state.staged_cards[me][i]]] : g_card_registry[0]; // safety fallback
+        CardFeatures &f = get_registry_size() > 0 ? g_card_registry[state.apparent_hand[me][state.staged_cards[me][i]]] : g_card_registry[0]; // safety fallback
         if (f.accuracy < 100) has_unstable_accuracy = true;
     }
 
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (!state.is_used[me][i] && state.true_hand[me][i] != CARD_EMPTY) {
+        if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
             if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
             
-            int card_id = state.true_hand[me][i];
+            int card_id = state.apparent_hand[me][i];
             CardFeatures &f = g_card_registry[card_id];
             
             if (!can_afford_staged_plus_card(state, me, i)) continue;
@@ -74,16 +74,24 @@ void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTI
         }
     }
 
-    if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
-        legal_actions[ACTION_TARGET_OPP] = true;
-        legal_actions[ACTION_TARGET_SELF] = !has_unstable_accuracy && !state.pending_is_group_attack;
+    if (state.num_staged_cards[me] > 0) {
+        int first_card = state.apparent_hand[me][state.staged_cards[me][0]];
+        if (first_card != CARD_EMPTY) {
+            const CardFeatures &first_feat = g_card_registry[first_card];
+            if (first_feat.usage_timing & TIMING_MAIN_ATK) {
+                if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
+                    legal_actions[ACTION_TARGET_OPP] = true;
+                    legal_actions[ACTION_TARGET_SELF] = !has_unstable_accuracy && !state.pending_is_group_attack;
+                }
+            }
+        }
     }
 }
 
 void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     bool has_mirage = false;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        if (state.true_hand[me][state.staged_cards[me][i]] == ID_MIRAGE) {
+        if (state.apparent_hand[me][state.staged_cards[me][i]] == ID_MIRAGE) {
             has_mirage = true;
             break;
         }
@@ -91,10 +99,10 @@ void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACT
 
     if (has_mirage) {
         for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-            if (!state.is_used[me][i] && state.true_hand[me][i] != CARD_EMPTY) {
+            if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
                 if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
                 
-                int card_id = state.true_hand[me][i];
+                int card_id = state.apparent_hand[me][i];
                 if (card_id == ID_MIRAGE || is_spiritual_zero_mp_card(card_id)) {
                     if (can_afford_staged_plus_card(state, me, i)) {
                         legal_actions[ACTION_SELECT_HAND_0 + i] = true;
@@ -104,17 +112,25 @@ void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACT
         }
     }
 
-    if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
-        legal_actions[ACTION_TARGET_OPP] = true;
+    if (state.num_staged_cards[me] > 0) {
+        int first_card = state.apparent_hand[me][state.staged_cards[me][0]];
+        if (first_card != CARD_EMPTY) {
+            const CardFeatures &first_feat = g_card_registry[first_card];
+            if (first_feat.usage_timing & TIMING_MAIN_ATK) {
+                if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
+                    legal_actions[ACTION_TARGET_OPP] = true;
+                }
+            }
+        }
     }
 }
 
 void legal_phase_group_miracle(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (!state.is_used[me][i] && state.true_hand[me][i] != CARD_EMPTY) {
+        if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
             if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
             
-            int card_id = state.true_hand[me][i];
+            int card_id = state.apparent_hand[me][i];
             if (is_spiritual_zero_mp_card(card_id)) {
                 if (is_last_staged_card_miracle(state, me)) {
                     if (can_afford_staged_plus_card(state, me, i)) {
@@ -125,8 +141,16 @@ void legal_phase_group_miracle(const InternalState &state, bool legal_actions[AC
         }
     }
 
-    if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
-        legal_actions[ACTION_TARGET_OPP] = true;
+    if (state.num_staged_cards[me] > 0) {
+        int first_card = state.apparent_hand[me][state.staged_cards[me][0]];
+        if (first_card != CARD_EMPTY) {
+            const CardFeatures &first_feat = g_card_registry[first_card];
+            if (first_feat.usage_timing & TIMING_MAIN_MIRACLE) {
+                if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
+                    legal_actions[ACTION_TARGET_OPP] = true;
+                }
+            }
+        }
     }
 }
 
@@ -139,7 +163,7 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
     Element effective_atk_element = state.pending_attack_element;
 
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = state.true_hand[me][state.staged_cards[me][i]];
+        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
         if (card_id == ID_RAINBOW_CURTAIN) {
             rainbow = true;
             effective_atk_element = ELEM_NONE;
@@ -151,7 +175,7 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
     bool has_staged_spirit = false;
 
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = state.true_hand[me][state.staged_cards[me][i]];
+        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
         if (card_id == CARD_EMPTY) continue;
         const CardFeatures &f = g_card_registry[card_id];
         if (card_id == ID_RAINBOW_CURTAIN) continue;
@@ -163,7 +187,7 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
         }
     }
 
-    bool has_flash = state.curses[me][static_cast<int>(CurseType::CURSE_FLASH)];
+    bool has_flash = state.curses[me][CURSE_TYPE_FLASH];
     if (has_flash && state.num_staged_cards[me] >= 1) {
         legal_actions[ACTION_CONFIRM] = true;
         return;
@@ -175,7 +199,7 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
     bool has_light = false;
 
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = state.true_hand[me][state.staged_cards[me][i]];
+        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
         if (card_id == CARD_EMPTY) continue;
         if (card_id == ID_RAINBOW_CURTAIN) continue;
         const CardFeatures &f = g_card_registry[card_id];
@@ -197,10 +221,10 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
     else if (has_light) current_def_element = ELEM_LIGHT;
 
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (!state.is_used[me][i] && state.true_hand[me][i] != CARD_EMPTY) {
+        if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
             if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
             
-            int card_id = state.true_hand[me][i];
+            int card_id = state.apparent_hand[me][i];
             const CardFeatures &f = g_card_registry[card_id];
 
             if (!can_afford_staged_plus_card(state, me, i)) continue;
@@ -228,7 +252,7 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
                 if (defense_phase == GamePhase::PHASE_DEFENSE) {
                     // 物理防御：リアクションは「1枚目」または「虹のカーテンの直後」のみ
                     allowed_as_first = (state.num_staged_cards[me] == 0) || 
-                                       (state.num_staged_cards[me] == 1 && state.true_hand[me][state.staged_cards[me][0]] == ID_RAINBOW_CURTAIN);
+                                       (state.num_staged_cards[me] == 1 && state.apparent_hand[me][state.staged_cards[me][0]] == ID_RAINBOW_CURTAIN);
                 } else {
                     // 奇跡防御：虹のカーテンの後にリアクションカードを重ねることは非合法（1枚目のみ許可）
                     allowed_as_first = (state.num_staged_cards[me] == 0);
@@ -297,15 +321,15 @@ void legal_phase_defense(const InternalState &state, bool legal_actions[ACTION_S
 void legal_phase_miracle_plus(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     bool has_unstable_accuracy = false;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        CardFeatures &f = g_card_registry[state.true_hand[me][state.staged_cards[me][i]]];
+        CardFeatures &f = g_card_registry[state.apparent_hand[me][state.staged_cards[me][i]]];
         if (f.accuracy < 100) has_unstable_accuracy = true;
     }
 
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (!state.is_used[me][i] && state.true_hand[me][i] != CARD_EMPTY) {
+        if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
             if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
             
-            int card_id = state.true_hand[me][i];
+            int card_id = state.apparent_hand[me][i];
             CardFeatures &f = g_card_registry[card_id];
             
             if (!can_afford_staged_plus_card(state, me, i)) continue;
@@ -323,9 +347,17 @@ void legal_phase_miracle_plus(const InternalState &state, bool legal_actions[ACT
         }
     }
 
-    if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
-        legal_actions[ACTION_TARGET_OPP] = true;
-        legal_actions[ACTION_TARGET_SELF] = !has_unstable_accuracy && !state.pending_is_group_attack;
+    if (state.num_staged_cards[me] > 0) {
+        int first_card = state.apparent_hand[me][state.staged_cards[me][0]];
+        if (first_card != CARD_EMPTY) {
+            const CardFeatures &first_feat = g_card_registry[first_card];
+            if (first_feat.usage_timing & TIMING_MAIN_MIRACLE) {
+                if (state.mp[me] >= calculate_staged_mp_cost(state, me)) {
+                    legal_actions[ACTION_TARGET_OPP] = true;
+                    legal_actions[ACTION_TARGET_SELF] = !has_unstable_accuracy && !state.pending_is_group_attack;
+                }
+            }
+        }
     }
 }
 
@@ -341,7 +373,7 @@ void legal_phase_miracle_defense(const InternalState &state, bool legal_actions[
  */
 void legal_mirror_selection(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me) {
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (!state.is_used[me][i] && state.true_hand[me][i] == ID_SUPER_MIRROR) {
+        if (!state.is_used[me][i] && state.apparent_hand[me][i] == ID_SUPER_MIRROR) {
             legal_actions[ACTION_SELECT_HAND_0 + i] = true;
         }
     }
@@ -367,7 +399,7 @@ void legal_phase_sundry_select_mirror(const InternalState &state, bool legal_act
  */
 void legal_phase_sell_select(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (state.true_hand[me][i] != CARD_EMPTY && !state.is_deployed[me][i] && !state.is_used[me][i]) {
+        if (state.apparent_hand[me][i] != CARD_EMPTY && !state.is_deployed[me][i] && !state.is_used[me][i]) {
             legal_actions[ACTION_SELECT_HAND_0 + i] = true;
         }
     }
@@ -386,7 +418,7 @@ void legal_phase_sell_select_mirror(const InternalState &state, bool legal_actio
 void legal_phase_buy(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     legal_actions[ACTION_DEAL_NO] = true;
     int revealed_idx = state.staged_cards[opp][0];
-    int card_id = state.true_hand[opp][revealed_idx];
+    int card_id = state.apparent_hand[opp][revealed_idx];
     CardFeatures &f = g_card_registry[card_id];
     if (state.money[me] >= f.price) {
         legal_actions[ACTION_DEAL_YES] = true;
@@ -420,7 +452,7 @@ void legal_phase_exchange(const InternalState &state, bool legal_actions[ACTION_
  */
 void legal_phase_discard(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        int card_id = state.true_hand[me][i];
+        int card_id = state.apparent_hand[me][i];
         if (card_id != CARD_EMPTY && !state.is_used[me][i]) {
             if (is_discardable_card(card_id)) {
                 legal_actions[ACTION_SELECT_HAND_0 + i] = true;

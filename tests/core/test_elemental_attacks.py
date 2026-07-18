@@ -263,3 +263,77 @@ def test_darkness_attack_rainbow_defense():
     # 即死せず、攻撃力分のみ被弾 (40 - 10 = 30)
     assert runner.state.get_hp(0) == 30
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
+
+
+def test_element_mixing_darkness_light():
+    """
+    検証内容: 闇属性と光属性の混成テスト（無属性化）。
+    - 闇属性（ベース: 死神のカマ）に光属性（プラス: 輝きのカケラ）を重ねた場合、光属性が闇属性の代わりになれないため、最終属性が無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    dark_base = find_card_by_name("死神のカマ")
+    light_plus = find_card_by_name("輝きのカケラ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, dark_base)
+    runner.state.set_true_hand(0, 1, light_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # 無属性（ELEM_NONE）になっていることをアサート
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+    assert runner.state.pending_attack_power == 11  # 10 + 1 = 11
+
+
+def test_element_mixing_darkness_darkness():
+    """
+    検証内容: 闇属性と闇属性の混成テスト。
+    - 闇属性（ベース: 死神のカマ）に闇属性（プラス: 冥矢）を重ねた場合、同一属性のため、最終属性が闇属性（ELEM_DARKNESS）に維持されることを確認します。
+    """
+    runner = SimulationRunner()
+    dark_base = find_card_by_name("死神のカマ")
+    dark_plus = find_card_by_name("冥矢")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, dark_base)
+    runner.state.set_true_hand(0, 1, dark_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # 闇属性（ELEM_DARKNESS）のままであることをアサート
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_DARKNESS
+    assert runner.state.pending_attack_power == 15  # 10 + 5 = 15
+
+
+def test_element_mixing_light_darkness():
+    """
+    検証内容: 光属性と闇属性の混成テスト（無属性化、逆順）。
+    - 光属性（ベース: 聖剣）に闇属性（プラス: 冥矢）を重ねた場合、光属性が闇属性の代わりになれないため、最終属性が無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    light_base = find_card_by_name("聖剣")
+    dark_plus = find_card_by_name("冥矢")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, light_base)
+    runner.state.set_true_hand(0, 1, dark_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # 無属性（ELEM_NONE）になっていることをアサート
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+    assert runner.state.pending_attack_power == 14  # 9 + 5 = 14
+
+

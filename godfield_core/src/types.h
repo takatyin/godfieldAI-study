@@ -16,7 +16,7 @@ enum HitCurse {
     CURSE_HEAVEN
 };
 
-enum class SicknessType {
+enum SicknessType {
     SICKNESS_NONE = 0,
     SICKNESS_COLD = 1,
     SICKNESS_FEVER = 2,
@@ -24,7 +24,49 @@ enum class SicknessType {
     SICKNESS_HEAVEN = 4
 };
 
-enum class CurseType { CURSE_FOG = 0, CURSE_FLASH = 1, CURSE_DARK_CLOUD = 2, CURSE_DREAM = 3 };
+enum CurseType { 
+    CURSE_TYPE_FOG = 0, 
+    CURSE_TYPE_FLASH = 1, 
+    CURSE_TYPE_DARK_CLOUD = 2, 
+    CURSE_TYPE_DREAM = 3 
+};
+
+enum GuardianType {
+    GUARDIAN_NONE = 0,
+    GUARDIAN_MARS = 1,
+    GUARDIAN_MERCURY = 2,
+    GUARDIAN_JUPITER = 3,
+    GUARDIAN_SATURN = 4,
+    GUARDIAN_URANUS = 5,
+    GUARDIAN_PLUTO = 6,
+    GUARDIAN_NEPTUNE = 7,
+    GUARDIAN_VENUS = 8,
+    GUARDIAN_EARTH = 9,
+    GUARDIAN_MOON = 10
+};
+
+
+enum class DreamGroup {
+    NONE = 0,                       // 常に確定するグループ（夢の影響を受けない）
+    SUNDRY_NORMAL,                  // 通常雑貨（15種）
+    SUNDRY_PASSIVE,                 // 受動系雑貨（2種: 太陽のお守り, あぶないウス）
+    DEF_MIRACLE_COUNTER,            // 奇跡対策防具（10種）
+    DEF_SPIRITUAL,                  // 精霊系防具（3種）
+    DEF_PLUS_ATK,                   // +攻撃防具（4種）
+    DEF_NONE,                       // 無属性防具（18種、冥王の指輪含む）
+    DEF_FIRE,                       // 火属性防具（10種）
+    DEF_WATER,                      // 水属性防具（9種）
+    DEF_WOOD,                       // 木属性防具（10種）
+    DEF_EARTH,                      // 土属性防具（9種）
+    DEF_LIGHT,                      // 光属性防具（3種）
+    WPN_NORMAL,                     // 通常武器（54種）
+    WPN_GROUP,                      // 全体攻撃武器（17種）
+    WPN_PLUS,                       // プラス武器（19種）
+    WPN_MIRACLE_COUNTER_PLUS,       // 奇跡対策プラス武器（2種）
+    WPN_MIRACLE_COUNTER,            // 奇跡対策武器（4種）
+    WPN_HYBRID,                     // 攻守兼用武器（6種）
+    WPN_REFLECT                     // 無属性反射武器（2種: 反射剣, 乱弾武剣）
+};
 
 // usage_timing flags mask
 constexpr uint32_t TIMING_MAIN_ATK = 1 << 0;
@@ -54,6 +96,7 @@ struct alignas(64) CardFeatures {
     ReactionType reaction_type;
     HitCurse hit_curse;
     bool is_group_attack;
+    DreamGroup dream_group;
 };
 
 enum class GamePhase {
@@ -141,12 +184,15 @@ struct alignas(64) InternalState {
     std::mt19937 rng;     // ゲーム固有の乱数生成器
     int current_actor_id; // 現在行動権を持つプレイヤー (0 or 1)
     int current_turn;     // 現在の実際のターン数 (終末の時判定用)
+    int mushroom_turns;   // きのこ大発生によるご乱心残りターン数 (0なら通常)
 
     // 基本ステータス群 (C++内では正規化前の生の値で管理)
     int hp[2], mp[2], money[2];
 
     // 手札情報と「既知のカード」の管理
     int true_hand[2][MAX_HAND_SIZE];               // 両プレイヤーの真の手札
+    int apparent_hand[2][MAX_HAND_SIZE];           // エージェント/プレイヤーが見る手札（夢状態の幻覚を含む）
+    bool is_confirmed[2][MAX_HAND_SIZE];           // 手札の中身が確定しているか（夢状態による未確定の管理）
     bool is_known_to_opp[2][MAX_HAND_SIZE];        // 相手に中身がバレているか
     bool is_used[2][MAX_HAND_SIZE];                // 今回のターン内で使用され、補充待ちのスロット
     bool is_deployed[2][MAX_HAND_SIZE];            // 奇跡が展開されているか
@@ -155,9 +201,9 @@ struct alignas(64) InternalState {
     int num_deployed_miracles[2];                  // 展開されている奇跡の個数
 
     // 病と災い (Sickness & Curses)
-    int sickness[2];   // 0:なし, 1:風邪, 2:熱病, 3:地獄病, 4:天国病
-    bool curses[2][4]; // 0:霧, 1:閃光, 2:暗雲, 3:夢
-    int guardian[2];   // 守護神ID (0: なし, 1..10: 守護神)
+    SicknessType sickness[2];   // 0:なし, 1:風邪, 2:熱病, 3:地獄病, 4:天国病
+    bool curses[2][4];         // 0:霧, 1:閃光, 2:暗雲, 3:夢
+    GuardianType guardian[2];   // 守護神ID (0: なし, 1..10: 守護神)
 
     // 状態遷移用変数
     GamePhase current_phase;

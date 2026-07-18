@@ -240,10 +240,13 @@
   attack_power: 9
   drop_rate: 1
 - name: スカイハープーン
+  description: 奇跡をはね返す
   type: weapon
+  reaction_type: bounce
   usage_timing:
   - atk_plus_phase
   - main_atk_phase
+  - miracle_defence_phase
   price: 5
   attack_power: 9
   drop_rate: 1

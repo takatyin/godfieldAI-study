@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy
 import numpy.typing
 import typing
-__all__: list[str] = ['ACTION_CONFIRM', 'ACTION_DEAL_NO', 'ACTION_DEAL_YES', 'ACTION_DISCARD', 'ACTION_NUM_0', 'ACTION_NUM_1', 'ACTION_NUM_10', 'ACTION_NUM_11', 'ACTION_NUM_12', 'ACTION_NUM_13', 'ACTION_NUM_14', 'ACTION_NUM_15', 'ACTION_NUM_16', 'ACTION_NUM_17', 'ACTION_NUM_18', 'ACTION_NUM_19', 'ACTION_NUM_2', 'ACTION_NUM_20', 'ACTION_NUM_21', 'ACTION_NUM_22', 'ACTION_NUM_23', 'ACTION_NUM_24', 'ACTION_NUM_25', 'ACTION_NUM_26', 'ACTION_NUM_27', 'ACTION_NUM_28', 'ACTION_NUM_29', 'ACTION_NUM_3', 'ACTION_NUM_30', 'ACTION_NUM_31', 'ACTION_NUM_32', 'ACTION_NUM_33', 'ACTION_NUM_34', 'ACTION_NUM_35', 'ACTION_NUM_36', 'ACTION_NUM_37', 'ACTION_NUM_38', 'ACTION_NUM_39', 'ACTION_NUM_4', 'ACTION_NUM_40', 'ACTION_NUM_41', 'ACTION_NUM_42', 'ACTION_NUM_43', 'ACTION_NUM_44', 'ACTION_NUM_45', 'ACTION_NUM_46', 'ACTION_NUM_47', 'ACTION_NUM_48', 'ACTION_NUM_49', 'ACTION_NUM_5', 'ACTION_NUM_50', 'ACTION_NUM_51', 'ACTION_NUM_52', 'ACTION_NUM_53', 'ACTION_NUM_54', 'ACTION_NUM_55', 'ACTION_NUM_56', 'ACTION_NUM_57', 'ACTION_NUM_58', 'ACTION_NUM_59', 'ACTION_NUM_6', 'ACTION_NUM_60', 'ACTION_NUM_61', 'ACTION_NUM_62', 'ACTION_NUM_63', 'ACTION_NUM_64', 'ACTION_NUM_65', 'ACTION_NUM_66', 'ACTION_NUM_67', 'ACTION_NUM_68', 'ACTION_NUM_69', 'ACTION_NUM_7', 'ACTION_NUM_70', 'ACTION_NUM_71', 'ACTION_NUM_72', 'ACTION_NUM_73', 'ACTION_NUM_74', 'ACTION_NUM_75', 'ACTION_NUM_76', 'ACTION_NUM_77', 'ACTION_NUM_78', 'ACTION_NUM_79', 'ACTION_NUM_8', 'ACTION_NUM_80', 'ACTION_NUM_81', 'ACTION_NUM_82', 'ACTION_NUM_83', 'ACTION_NUM_84', 'ACTION_NUM_85', 'ACTION_NUM_86', 'ACTION_NUM_87', 'ACTION_NUM_88', 'ACTION_NUM_89', 'ACTION_NUM_9', 'ACTION_NUM_90', 'ACTION_NUM_91', 'ACTION_NUM_92', 'ACTION_NUM_93', 'ACTION_NUM_94', 'ACTION_NUM_95', 'ACTION_NUM_96', 'ACTION_NUM_97', 'ACTION_NUM_98', 'ACTION_NUM_99', 'ACTION_PRAY', 'ACTION_SELECT_HAND_0', 'ACTION_SELECT_HAND_1', 'ACTION_SELECT_HAND_10', 'ACTION_SELECT_HAND_11', 'ACTION_SELECT_HAND_12', 'ACTION_SELECT_HAND_13', 'ACTION_SELECT_HAND_14', 'ACTION_SELECT_HAND_15', 'ACTION_SELECT_HAND_16', 'ACTION_SELECT_HAND_17', 'ACTION_SELECT_HAND_2', 'ACTION_SELECT_HAND_3', 'ACTION_SELECT_HAND_4', 'ACTION_SELECT_HAND_5', 'ACTION_SELECT_HAND_6', 'ACTION_SELECT_HAND_7', 'ACTION_SELECT_HAND_8', 'ACTION_SELECT_HAND_9', 'ACTION_TARGET_OPP', 'ACTION_TARGET_SELF', 'ActionType', 'CARD_EMPTY', 'CURSE_COLD', 'CURSE_DARK_CLOUD', 'CURSE_DREAM', 'CURSE_FEVER', 'CURSE_FLASH', 'CURSE_FOG', 'CURSE_HEAVEN', 'CURSE_HELL', 'CURSE_NONE', 'CurseType', 'ELEM_DARKNESS', 'ELEM_FIRE', 'ELEM_LIGHT', 'ELEM_NONE', 'ELEM_STONE', 'ELEM_WATER', 'ELEM_WOOD', 'Element', 'EnvPool', 'GamePhase', 'HitCurse', 'InternalState', 'PHASE_ATTACK_PLUS', 'PHASE_BUY', 'PHASE_BUY_SELECT_MIRROR', 'PHASE_DEFENSE', 'PHASE_DISCARD', 'PHASE_END', 'PHASE_EXCHANGE_HP', 'PHASE_EXCHANGE_MP', 'PHASE_GROUP_MIRACLE', 'PHASE_GROUP_WEAPON', 'PHASE_GUARDIAN', 'PHASE_MAIN', 'PHASE_MAIN_TARGET_SELECT', 'PHASE_MIRACLE_DEFENSE', 'PHASE_MIRACLE_PLUS', 'PHASE_SELL_SELECT', 'PHASE_SELL_SELECT_MIRROR', 'PHASE_SUNDRY_SELECT_MIRROR', 'REACTION_BLOCK', 'REACTION_BOUNCE', 'REACTION_NONE', 'REACTION_REFLECT', 'ReactionType', 'SICKNESS_COLD', 'SICKNESS_FEVER', 'SICKNESS_HEAVEN', 'SICKNESS_HELL', 'SICKNESS_NONE', 'SicknessType', 'TIMING_ATK_DEFENCE', 'TIMING_ATK_PLUS', 'TIMING_MAIN_ATK', 'TIMING_MAIN_DEAL', 'TIMING_MAIN_MIRACLE', 'TIMING_MAIN_SUNDRY', 'TIMING_MIRACLE_DEFENCE', 'TIMING_MIRACLE_PLUS', 'clear_state', 'get_card_name', 'get_legal_actions', 'get_opponent_staged_cards_for_obs', 'get_registry_size', 'init_game_logic', 'step_game']
+__all__: list[str] = ['ACTION_CONFIRM', 'ACTION_DEAL_NO', 'ACTION_DEAL_YES', 'ACTION_DISCARD', 'ACTION_NUM_0', 'ACTION_NUM_1', 'ACTION_NUM_10', 'ACTION_NUM_11', 'ACTION_NUM_12', 'ACTION_NUM_13', 'ACTION_NUM_14', 'ACTION_NUM_15', 'ACTION_NUM_16', 'ACTION_NUM_17', 'ACTION_NUM_18', 'ACTION_NUM_19', 'ACTION_NUM_2', 'ACTION_NUM_20', 'ACTION_NUM_21', 'ACTION_NUM_22', 'ACTION_NUM_23', 'ACTION_NUM_24', 'ACTION_NUM_25', 'ACTION_NUM_26', 'ACTION_NUM_27', 'ACTION_NUM_28', 'ACTION_NUM_29', 'ACTION_NUM_3', 'ACTION_NUM_30', 'ACTION_NUM_31', 'ACTION_NUM_32', 'ACTION_NUM_33', 'ACTION_NUM_34', 'ACTION_NUM_35', 'ACTION_NUM_36', 'ACTION_NUM_37', 'ACTION_NUM_38', 'ACTION_NUM_39', 'ACTION_NUM_4', 'ACTION_NUM_40', 'ACTION_NUM_41', 'ACTION_NUM_42', 'ACTION_NUM_43', 'ACTION_NUM_44', 'ACTION_NUM_45', 'ACTION_NUM_46', 'ACTION_NUM_47', 'ACTION_NUM_48', 'ACTION_NUM_49', 'ACTION_NUM_5', 'ACTION_NUM_50', 'ACTION_NUM_51', 'ACTION_NUM_52', 'ACTION_NUM_53', 'ACTION_NUM_54', 'ACTION_NUM_55', 'ACTION_NUM_56', 'ACTION_NUM_57', 'ACTION_NUM_58', 'ACTION_NUM_59', 'ACTION_NUM_6', 'ACTION_NUM_60', 'ACTION_NUM_61', 'ACTION_NUM_62', 'ACTION_NUM_63', 'ACTION_NUM_64', 'ACTION_NUM_65', 'ACTION_NUM_66', 'ACTION_NUM_67', 'ACTION_NUM_68', 'ACTION_NUM_69', 'ACTION_NUM_7', 'ACTION_NUM_70', 'ACTION_NUM_71', 'ACTION_NUM_72', 'ACTION_NUM_73', 'ACTION_NUM_74', 'ACTION_NUM_75', 'ACTION_NUM_76', 'ACTION_NUM_77', 'ACTION_NUM_78', 'ACTION_NUM_79', 'ACTION_NUM_8', 'ACTION_NUM_80', 'ACTION_NUM_81', 'ACTION_NUM_82', 'ACTION_NUM_83', 'ACTION_NUM_84', 'ACTION_NUM_85', 'ACTION_NUM_86', 'ACTION_NUM_87', 'ACTION_NUM_88', 'ACTION_NUM_89', 'ACTION_NUM_9', 'ACTION_NUM_90', 'ACTION_NUM_91', 'ACTION_NUM_92', 'ACTION_NUM_93', 'ACTION_NUM_94', 'ACTION_NUM_95', 'ACTION_NUM_96', 'ACTION_NUM_97', 'ACTION_NUM_98', 'ACTION_NUM_99', 'ACTION_PRAY', 'ACTION_SELECT_HAND_0', 'ACTION_SELECT_HAND_1', 'ACTION_SELECT_HAND_10', 'ACTION_SELECT_HAND_11', 'ACTION_SELECT_HAND_12', 'ACTION_SELECT_HAND_13', 'ACTION_SELECT_HAND_14', 'ACTION_SELECT_HAND_15', 'ACTION_SELECT_HAND_16', 'ACTION_SELECT_HAND_17', 'ACTION_SELECT_HAND_2', 'ACTION_SELECT_HAND_3', 'ACTION_SELECT_HAND_4', 'ACTION_SELECT_HAND_5', 'ACTION_SELECT_HAND_6', 'ACTION_SELECT_HAND_7', 'ACTION_SELECT_HAND_8', 'ACTION_SELECT_HAND_9', 'ACTION_TARGET_OPP', 'ACTION_TARGET_SELF', 'ActionType', 'CARD_EMPTY', 'CURSE_COLD', 'CURSE_DARK_CLOUD', 'CURSE_DREAM', 'CURSE_FEVER', 'CURSE_FLASH', 'CURSE_FOG', 'CURSE_HEAVEN', 'CURSE_HELL', 'CURSE_NONE', 'CurseType', 'EARTH', 'ELEM_DARKNESS', 'ELEM_FIRE', 'ELEM_LIGHT', 'ELEM_NONE', 'ELEM_STONE', 'ELEM_WATER', 'ELEM_WOOD', 'Element', 'EnvPool', 'GamePhase', 'GuardianType', 'HitCurse', 'InternalState', 'JUPITER', 'MARS', 'MERCURY', 'MOON', 'NEPTUNE', 'NONE', 'PHASE_ATTACK_PLUS', 'PHASE_BUY', 'PHASE_BUY_SELECT_MIRROR', 'PHASE_DEFENSE', 'PHASE_DISCARD', 'PHASE_END', 'PHASE_EXCHANGE_HP', 'PHASE_EXCHANGE_MP', 'PHASE_GROUP_MIRACLE', 'PHASE_GROUP_WEAPON', 'PHASE_GUARDIAN', 'PHASE_MAIN', 'PHASE_MAIN_TARGET_SELECT', 'PHASE_MIRACLE_DEFENSE', 'PHASE_MIRACLE_PLUS', 'PHASE_SELL_SELECT', 'PHASE_SELL_SELECT_MIRROR', 'PHASE_SUNDRY_SELECT_MIRROR', 'PLUTO', 'REACTION_BLOCK', 'REACTION_BOUNCE', 'REACTION_NONE', 'REACTION_REFLECT', 'ReactionType', 'SATURN', 'SICKNESS_COLD', 'SICKNESS_FEVER', 'SICKNESS_HEAVEN', 'SICKNESS_HELL', 'SICKNESS_NONE', 'SicknessType', 'TIMING_ATK_DEFENCE', 'TIMING_ATK_PLUS', 'TIMING_MAIN_ATK', 'TIMING_MAIN_DEAL', 'TIMING_MAIN_MIRACLE', 'TIMING_MAIN_SUNDRY', 'TIMING_MIRACLE_DEFENCE', 'TIMING_MIRACLE_PLUS', 'URANUS', 'VENUS', 'clear_state', 'get_card_name', 'get_legal_actions', 'get_opponent_staged_cards_for_obs', 'get_registry_size', 'init_game_logic', 'step_game']
 class ActionType:
     """
     Members:
@@ -607,6 +607,70 @@ class GamePhase:
     @property
     def value(self) -> int:
         ...
+class GuardianType:
+    """
+    Members:
+    
+      NONE
+    
+      MARS
+    
+      MERCURY
+    
+      JUPITER
+    
+      SATURN
+    
+      URANUS
+    
+      PLUTO
+    
+      NEPTUNE
+    
+      VENUS
+    
+      EARTH
+    
+      MOON
+    """
+    EARTH: typing.ClassVar[GuardianType]  # value = <GuardianType.EARTH: 9>
+    JUPITER: typing.ClassVar[GuardianType]  # value = <GuardianType.JUPITER: 3>
+    MARS: typing.ClassVar[GuardianType]  # value = <GuardianType.MARS: 1>
+    MERCURY: typing.ClassVar[GuardianType]  # value = <GuardianType.MERCURY: 2>
+    MOON: typing.ClassVar[GuardianType]  # value = <GuardianType.MOON: 10>
+    NEPTUNE: typing.ClassVar[GuardianType]  # value = <GuardianType.NEPTUNE: 7>
+    NONE: typing.ClassVar[GuardianType]  # value = <GuardianType.NONE: 0>
+    PLUTO: typing.ClassVar[GuardianType]  # value = <GuardianType.PLUTO: 6>
+    SATURN: typing.ClassVar[GuardianType]  # value = <GuardianType.SATURN: 4>
+    URANUS: typing.ClassVar[GuardianType]  # value = <GuardianType.URANUS: 5>
+    VENUS: typing.ClassVar[GuardianType]  # value = <GuardianType.VENUS: 8>
+    __members__: typing.ClassVar[dict[str, GuardianType]]  # value = {'NONE': <GuardianType.NONE: 0>, 'MARS': <GuardianType.MARS: 1>, 'MERCURY': <GuardianType.MERCURY: 2>, 'JUPITER': <GuardianType.JUPITER: 3>, 'SATURN': <GuardianType.SATURN: 4>, 'URANUS': <GuardianType.URANUS: 5>, 'PLUTO': <GuardianType.PLUTO: 6>, 'NEPTUNE': <GuardianType.NEPTUNE: 7>, 'VENUS': <GuardianType.VENUS: 8>, 'EARTH': <GuardianType.EARTH: 9>, 'MOON': <GuardianType.MOON: 10>}
+    def __eq__(self, other: typing.Any) -> bool:
+        ...
+    def __getstate__(self) -> int:
+        ...
+    def __hash__(self) -> int:
+        ...
+    def __index__(self) -> int:
+        ...
+    def __init__(self, value: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    def __int__(self) -> int:
+        ...
+    def __ne__(self, other: typing.Any) -> bool:
+        ...
+    def __repr__(self) -> str:
+        ...
+    def __setstate__(self, state: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    def __str__(self) -> str:
+        ...
+    @property
+    def name(self) -> str:
+        ...
+    @property
+    def value(self) -> int:
+        ...
 class HitCurse:
     """
     Members:
@@ -677,11 +741,17 @@ class InternalState:
     pending_is_group_attack: bool
     def __init__(self) -> None:
         ...
+    def add_card_to_hand_slot(self, player_id: typing.SupportsInt | typing.SupportsIndex, hand_idx: typing.SupportsInt | typing.SupportsIndex, card_id: typing.SupportsInt | typing.SupportsIndex, is_drawn: bool) -> None:
+        ...
+    def get_apparent_hand(self, player_id: typing.SupportsInt | typing.SupportsIndex, hand_idx: typing.SupportsInt | typing.SupportsIndex) -> int:
+        ...
     def get_curses(self, player_id: typing.SupportsInt | typing.SupportsIndex, curse_idx: CurseType) -> bool:
         ...
     def get_guardian(self, player_id: typing.SupportsInt | typing.SupportsIndex) -> int:
         ...
     def get_hp(self, player_id: typing.SupportsInt | typing.SupportsIndex) -> int:
+        ...
+    def get_is_confirmed(self, player_id: typing.SupportsInt | typing.SupportsIndex, hand_idx: typing.SupportsInt | typing.SupportsIndex) -> bool:
         ...
     def get_is_deployed(self, player_id: typing.SupportsInt | typing.SupportsIndex, hand_idx: typing.SupportsInt | typing.SupportsIndex) -> bool:
         ...
@@ -707,11 +777,15 @@ class InternalState:
         ...
     def seed_rng(self, seed: typing.SupportsInt | typing.SupportsIndex) -> None:
         ...
+    def set_apparent_hand(self, player_id: typing.SupportsInt | typing.SupportsIndex, hand_idx: typing.SupportsInt | typing.SupportsIndex, card_id: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
     def set_curses(self, player_id: typing.SupportsInt | typing.SupportsIndex, curse_idx: CurseType, val: bool) -> None:
         ...
     def set_guardian(self, player_id: typing.SupportsInt | typing.SupportsIndex, val: typing.SupportsInt | typing.SupportsIndex) -> None:
         ...
     def set_hp(self, player_id: typing.SupportsInt | typing.SupportsIndex, hp: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    def set_is_confirmed(self, player_id: typing.SupportsInt | typing.SupportsIndex, hand_idx: typing.SupportsInt | typing.SupportsIndex, is_confirmed: bool) -> None:
         ...
     def set_is_deployed(self, player_id: typing.SupportsInt | typing.SupportsIndex, hand_idx: typing.SupportsInt | typing.SupportsIndex, val: bool) -> None:
         ...
@@ -764,6 +838,12 @@ class InternalState:
         ...
     @defender_id.setter
     def defender_id(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def mushroom_turns(self) -> int:
+        ...
+    @mushroom_turns.setter
+    def mushroom_turns(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
         ...
     @property
     def p0_reward(self) -> float:
@@ -1053,6 +1133,7 @@ CURSE_FOG: CurseType  # value = <CurseType.CURSE_FOG: 0>
 CURSE_HEAVEN: HitCurse  # value = <HitCurse.CURSE_HEAVEN: 8>
 CURSE_HELL: HitCurse  # value = <HitCurse.CURSE_HELL: 7>
 CURSE_NONE: HitCurse  # value = <HitCurse.CURSE_NONE: 0>
+EARTH: GuardianType  # value = <GuardianType.EARTH: 9>
 ELEM_DARKNESS: Element  # value = <Element.ELEM_DARKNESS: 6>
 ELEM_FIRE: Element  # value = <Element.ELEM_FIRE: 1>
 ELEM_LIGHT: Element  # value = <Element.ELEM_LIGHT: 5>
@@ -1060,6 +1141,12 @@ ELEM_NONE: Element  # value = <Element.ELEM_NONE: 0>
 ELEM_STONE: Element  # value = <Element.ELEM_STONE: 4>
 ELEM_WATER: Element  # value = <Element.ELEM_WATER: 2>
 ELEM_WOOD: Element  # value = <Element.ELEM_WOOD: 3>
+JUPITER: GuardianType  # value = <GuardianType.JUPITER: 3>
+MARS: GuardianType  # value = <GuardianType.MARS: 1>
+MERCURY: GuardianType  # value = <GuardianType.MERCURY: 2>
+MOON: GuardianType  # value = <GuardianType.MOON: 10>
+NEPTUNE: GuardianType  # value = <GuardianType.NEPTUNE: 7>
+NONE: GuardianType  # value = <GuardianType.NONE: 0>
 PHASE_ATTACK_PLUS: GamePhase  # value = <GamePhase.PHASE_ATTACK_PLUS: 3>
 PHASE_BUY: GamePhase  # value = <GamePhase.PHASE_BUY: 11>
 PHASE_BUY_SELECT_MIRROR: GamePhase  # value = <GamePhase.PHASE_BUY_SELECT_MIRROR: 12>
@@ -1078,10 +1165,12 @@ PHASE_MIRACLE_PLUS: GamePhase  # value = <GamePhase.PHASE_MIRACLE_PLUS: 5>
 PHASE_SELL_SELECT: GamePhase  # value = <GamePhase.PHASE_SELL_SELECT: 9>
 PHASE_SELL_SELECT_MIRROR: GamePhase  # value = <GamePhase.PHASE_SELL_SELECT_MIRROR: 10>
 PHASE_SUNDRY_SELECT_MIRROR: GamePhase  # value = <GamePhase.PHASE_SUNDRY_SELECT_MIRROR: 13>
+PLUTO: GuardianType  # value = <GuardianType.PLUTO: 6>
 REACTION_BLOCK: ReactionType  # value = <ReactionType.REACTION_BLOCK: 3>
 REACTION_BOUNCE: ReactionType  # value = <ReactionType.REACTION_BOUNCE: 1>
 REACTION_NONE: ReactionType  # value = <ReactionType.REACTION_NONE: 0>
 REACTION_REFLECT: ReactionType  # value = <ReactionType.REACTION_REFLECT: 2>
+SATURN: GuardianType  # value = <GuardianType.SATURN: 4>
 SICKNESS_COLD: SicknessType  # value = <SicknessType.SICKNESS_COLD: 1>
 SICKNESS_FEVER: SicknessType  # value = <SicknessType.SICKNESS_FEVER: 2>
 SICKNESS_HEAVEN: SicknessType  # value = <SicknessType.SICKNESS_HEAVEN: 4>
@@ -1095,3 +1184,5 @@ TIMING_MAIN_MIRACLE: int = 2
 TIMING_MAIN_SUNDRY: int = 4
 TIMING_MIRACLE_DEFENCE: int = 128
 TIMING_MIRACLE_PLUS: int = 32
+URANUS: GuardianType  # value = <GuardianType.URANUS: 5>
+VENUS: GuardianType  # value = <GuardianType.VENUS: 8>

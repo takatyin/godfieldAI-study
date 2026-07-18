@@ -55,11 +55,26 @@ PYBIND11_MODULE(godfield_core, m) {
         .export_values();
 
     py::enum_<CurseType>(m, "CurseType")
-        .value("CURSE_FOG", CurseType::CURSE_FOG)
-        .value("CURSE_FLASH", CurseType::CURSE_FLASH)
-        .value("CURSE_DARK_CLOUD", CurseType::CURSE_DARK_CLOUD)
-        .value("CURSE_DREAM", CurseType::CURSE_DREAM)
+        .value("CURSE_FOG", CurseType::CURSE_TYPE_FOG)
+        .value("CURSE_FLASH", CurseType::CURSE_TYPE_FLASH)
+        .value("CURSE_DARK_CLOUD", CurseType::CURSE_TYPE_DARK_CLOUD)
+        .value("CURSE_DREAM", CurseType::CURSE_TYPE_DREAM)
         .export_values();
+
+    py::enum_<GuardianType>(m, "GuardianType")
+        .value("NONE", GUARDIAN_NONE)
+        .value("MARS", GUARDIAN_MARS)
+        .value("MERCURY", GUARDIAN_MERCURY)
+        .value("JUPITER", GUARDIAN_JUPITER)
+        .value("SATURN", GUARDIAN_SATURN)
+        .value("URANUS", GUARDIAN_URANUS)
+        .value("PLUTO", GUARDIAN_PLUTO)
+        .value("NEPTUNE", GUARDIAN_NEPTUNE)
+        .value("VENUS", GUARDIAN_VENUS)
+        .value("EARTH", GUARDIAN_EARTH)
+        .value("MOON", GUARDIAN_MOON)
+        .export_values();
+
 
     // Export Timing bitmasks
     m.attr("TIMING_MAIN_ATK") = TIMING_MAIN_ATK;
@@ -133,6 +148,7 @@ PYBIND11_MODULE(godfield_core, m) {
         .def("seed_rng", [](InternalState &s, unsigned int seed) { s.rng.seed(seed); }, py::arg("seed"))
         .def_readwrite("current_actor_id", &InternalState::current_actor_id)
         .def_readwrite("current_turn", &InternalState::current_turn)
+        .def_readwrite("mushroom_turns", &InternalState::mushroom_turns)
         .def_readwrite("current_phase", &InternalState::current_phase)
         .def_readwrite("is_done", &InternalState::is_done)
         .def_readwrite("p0_reward", &InternalState::p0_reward)
@@ -171,8 +187,23 @@ PYBIND11_MODULE(godfield_core, m) {
             "get_true_hand", [](InternalState &s, int p, int idx) { return s.true_hand[p][idx]; }, py::arg("player_id"),
             py::arg("hand_idx"))
         .def(
-            "set_true_hand", [](InternalState &s, int p, int idx, int v) { s.true_hand[p][idx] = v; },
+            "set_true_hand", [](InternalState &s, int p, int idx, int v) { s.true_hand[p][idx] = v; s.apparent_hand[p][idx] = v; s.is_confirmed[p][idx] = true; },
             py::arg("player_id"), py::arg("hand_idx"), py::arg("card_id"))
+        .def(
+            "add_card_to_hand_slot", [](InternalState &s, int p, int idx, int card_id, bool is_drawn) { add_card_to_hand_slot(s, p, idx, card_id, is_drawn); },
+            py::arg("player_id"), py::arg("hand_idx"), py::arg("card_id"), py::arg("is_drawn"))
+        .def(
+            "get_apparent_hand", [](InternalState &s, int p, int idx) { return s.apparent_hand[p][idx]; }, py::arg("player_id"),
+            py::arg("hand_idx"))
+        .def(
+            "set_apparent_hand", [](InternalState &s, int p, int idx, int v) { s.apparent_hand[p][idx] = v; },
+            py::arg("player_id"), py::arg("hand_idx"), py::arg("card_id"))
+        .def(
+            "get_is_confirmed", [](InternalState &s, int p, int idx) { return s.is_confirmed[p][idx]; }, py::arg("player_id"),
+            py::arg("hand_idx"))
+        .def(
+            "set_is_confirmed", [](InternalState &s, int p, int idx, bool v) { s.is_confirmed[p][idx] = v; },
+            py::arg("player_id"), py::arg("hand_idx"), py::arg("is_confirmed"))
         .def(
             "get_is_known_to_opp", [](InternalState &s, int p, int idx) { return s.is_known_to_opp[p][idx]; },
             py::arg("player_id"), py::arg("hand_idx"))
@@ -212,17 +243,17 @@ PYBIND11_MODULE(godfield_core, m) {
             "set_miracle_used_this_turn", [](InternalState &s, int p, int idx, bool v) { s.miracle_used_this_turn[p][idx] = v; },
             py::arg("player_id"), py::arg("hand_idx"), py::arg("val"))
         .def(
-            "get_sickness", [](InternalState &s, int p) { return static_cast<SicknessType>(s.sickness[p]); }, py::arg("player_id"))
+            "get_sickness", [](InternalState &s, int p) { return s.sickness[p]; }, py::arg("player_id"))
         .def(
-            "set_sickness", [](InternalState &s, int p, SicknessType v) { s.sickness[p] = static_cast<int>(v); }, py::arg("player_id"), py::arg("val"))
+            "set_sickness", [](InternalState &s, int p, SicknessType v) { s.sickness[p] = v; }, py::arg("player_id"), py::arg("val"))
         .def(
-            "get_curses", [](InternalState &s, int p, CurseType idx) { return s.curses[p][static_cast<int>(idx)]; }, py::arg("player_id"), py::arg("curse_idx"))
+            "get_curses", [](InternalState &s, int p, CurseType idx) { return s.curses[p][idx]; }, py::arg("player_id"), py::arg("curse_idx"))
         .def(
-            "set_curses", [](InternalState &s, int p, CurseType idx, bool v) { s.curses[p][static_cast<int>(idx)] = v; }, py::arg("player_id"), py::arg("curse_idx"), py::arg("val"))
+            "set_curses", [](InternalState &s, int p, CurseType idx, bool v) { s.curses[p][idx] = v; }, py::arg("player_id"), py::arg("curse_idx"), py::arg("val"))
         .def(
-            "get_guardian", [](InternalState &s, int p) { return s.guardian[p]; }, py::arg("player_id"))
+            "get_guardian", [](InternalState &s, int p) { return static_cast<int>(s.guardian[p]); }, py::arg("player_id"))
         .def(
-            "set_guardian", [](InternalState &s, int p, int v) { s.guardian[p] = v; }, py::arg("player_id"), py::arg("val"));
+            "set_guardian", [](InternalState &s, int p, int v) { s.guardian[p] = static_cast<GuardianType>(v); }, py::arg("player_id"), py::arg("val"));
 
     m.def("step_game", &step_game, "Step a single InternalState");
     m.def(

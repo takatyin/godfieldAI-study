@@ -177,6 +177,7 @@
   attack_power: 4
   defense_power: 4
   drop_rate: 1
+  id_str: weapons/homura-maki
 - name: ファイヤークロスボウ
   type: weapon
   usage_timing:

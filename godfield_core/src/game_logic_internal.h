@@ -69,6 +69,10 @@ void deploy_miracle(InternalState &state, int player_id, int slot_idx);
 void undeploy_miracle(InternalState &state, int player_id, int slot_idx);
 
 void clear_hand_slot(InternalState &state, int player_id, int slot_idx);
+void confirm_card(InternalState &state, int player_id, int slot_idx);
+void add_card_to_hand_slot(InternalState &state, int player_id, int slot_idx, int card_id, bool is_drawn);
+DreamGroup get_dream_group(int card_id);
+DreamGroup calculate_dream_group(int card_id);
 
 /**
  * @brief 仮置き場（staged_cards）に積まれているカードの合計消費MPを計算します（精霊補正あり）。
@@ -127,6 +131,16 @@ void discard_one_card_randomly(InternalState &state, int player_id);
 void draw_card_to_hand(InternalState &state, int player_id);
 
 /**
+ * @brief 終末の時を考慮してカードをドローします。25%の確率で悪魔カードが発生し、即時効果を適用した後に再ドローします。
+ */
+int draw_card_with_apocalypse(InternalState &state, int player_id);
+void apply_devil_little(InternalState &state, int player_id);
+void apply_devil_medium(InternalState &state, int player_id);
+void apply_devil_large(InternalState &state, int player_id);
+void apply_devil_prankster(InternalState &state, int player_id);
+void apply_devil_fairy(InternalState &state, int player_id);
+
+/**
  * @brief ターン終了時のクリーンアップ処理（使用済みカードの再ドロー、奇跡の展開、一時変数のリセット）。
  * @param state ゲーム状態。
  */
@@ -159,10 +173,13 @@ std::vector<int> get_staged_card_ids(const InternalState &state, int player);
  */
 void apply_card_effects_to_target(InternalState &state, int target_id, const std::vector<int>& used_card_ids);
 
-/**
- * @brief プレイヤーに状態異常（災い）を適用します。
- */
 void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse);
+
+/**
+ * @brief プレイヤーに病気を適用・悪化させます。
+ */
+void apply_sickness(InternalState &state, int player_id, SicknessType new_sick);
+
 
 /**
  * @brief 死亡判定および昇天弓の発射、お守りでの復活を処理します。

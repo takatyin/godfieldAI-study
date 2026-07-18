@@ -93,6 +93,10 @@ void init_game_logic(pybind11::list cards) {
         weights.push_back(f.drop_rate);
     }
 
+    for (size_t i = 0; i < g_card_registry.size(); ++i) {
+        g_card_registry[i].dream_group = calculate_dream_group(static_cast<int>(i));
+    }
+
     g_drop_distribution = std::discrete_distribution<int>(weights.begin(), weights.end());
     std::cout << "Successfully loaded " << g_card_registry.size() << " cards into game_logic registry." << std::endl;
 }

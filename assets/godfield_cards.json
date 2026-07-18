@@ -354,10 +354,13 @@
   },
   {
     "name": "スカイハープーン",
+    "description": "奇跡をはね返す",
     "type": "weapon",
+    "reaction_type": "bounce",
     "usage_timing": [
       "atk_plus_phase",
-      "main_atk_phase"
+      "main_atk_phase",
+      "miracle_defence_phase"
     ],
     "price": 5,
     "attack_power": 9,
@@ -926,6 +929,7 @@
     "attack_power": 4,
     "defense_power": 4,
     "drop_rate": 1,
+    "id_str": "weapons/homura-maki",
     "id": 71
   },
   {
@@ -3762,5 +3766,55 @@
     "drop_rate": 0,
     "id_str": "phenomena/solar-eclipse",
     "id": 288
+  },
+  {
+    "name": "小悪魔",
+    "id_str": "devils/small-devil",
+    "description": "10dmgを受ける",
+    "type": "sundry",
+    "usage_timing": [],
+    "price": 0,
+    "drop_rate": 0,
+    "id": 289
+  },
+  {
+    "name": "中悪魔",
+    "id_str": "devils/medium-devil",
+    "description": "20dmgを受ける",
+    "type": "sundry",
+    "usage_timing": [],
+    "price": 0,
+    "drop_rate": 0,
+    "id": 290
+  },
+  {
+    "name": "大悪魔",
+    "id_str": "devils/large-devil",
+    "description": "30dmgを受ける",
+    "type": "sundry",
+    "usage_timing": [],
+    "price": 0,
+    "drop_rate": 0,
+    "id": 291
+  },
+  {
+    "name": "イタズラマン",
+    "id_str": "devils/trickster",
+    "description": "自分の神器か起こした奇跡を2つ捨てる",
+    "type": "sundry",
+    "usage_timing": [],
+    "price": 0,
+    "drop_rate": 0,
+    "id": 292
+  },
+  {
+    "name": "めぐみの妖精",
+    "id_str": "devils/charity-fairy",
+    "description": "HP/MP/お金のどれか1つを+10",
+    "type": "sundry",
+    "usage_timing": [],
+    "price": 0,
+    "drop_rate": 0,
+    "id": 293
   }
 ]

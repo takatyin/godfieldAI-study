@@ -156,7 +156,8 @@ def test_observation_fog_masking():
 
 def test_observation_dream_masking():
     """
-    検証内容: 自分が夢(DREAM)状態の時、自分の手札IDがすべて ID_DREAM (219) にマスクされること。
+    検証内容: 自分が夢(DREAM)状態の時、すでに持っている手札は変化せず、
+    夢状態で新たにドローしたカードのみが同じDreamGroupの偽装カードに見えること。
     """
     env = godfield_core.EnvPool(1)
     env.reset(42)
@@ -170,15 +171,28 @@ def test_observation_dream_masking():
     state.set_hp(1, 40)
     
     card_id = find_card_by_name("weapons/bronze-club")
-    state.set_true_hand(0, 0, card_id)
+    state.set_true_hand(0, 0, card_id)  # set_true_hand also sets apparent_hand and is_confirmed = true
     
     # 夢がかかっていない時 ➡ 真のカードIDが見える
     env.set_state(0, state)
     obs = parse_obs(env.get_observations())
     assert obs["hand_cards"][0] == card_id
     
-    # 自分(0)に夢を付与 ➡ 手札のIDがすべて ID_DREAM (219) になる
+    # 自分(0)に夢を付与 ➡ すでに持っている手札は変化しない
     state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
     env.set_state(0, state)
     obs = parse_obs(env.get_observations())
-    assert obs["hand_cards"][0] == 219 # ID_DREAM
+    assert obs["hand_cards"][0] == card_id
+    
+    # 夢状態で新たにドローする ➡ 夢グループ（通常武器）内のいずれかのカードに偽装される
+    # ドローしたカードが武器（銅のこん棒）の場合
+    state.set_true_hand(0, 1, card_id)
+    # 未確定状態にし、偽装を設定
+    state.set_is_confirmed(0, 1, False)
+    state.set_apparent_hand(0, 1, find_card_by_name("weapons/saw-boom-boom"))  # 偽装
+    
+    env.set_state(0, state)
+    obs = parse_obs(env.get_observations())
+    assert obs["hand_cards"][1] == find_card_by_name("weapons/saw-boom-boom")
+    # 真のカードはまだ見えない
+    assert state.get_true_hand(0, 1) == card_id

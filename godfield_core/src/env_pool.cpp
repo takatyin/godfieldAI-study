@@ -33,7 +33,7 @@ void EnvPool::reset(int seed) {
         states_[i].pending_attack_element = ELEM_NONE;
         states_[i].pending_absorption = false;
         states_[i].pending_deal_same_damage = false;
-        states_[i].sickness[0] = 0; states_[i].sickness[1] = 0;
+        states_[i].sickness[0] = SICKNESS_NONE; states_[i].sickness[1] = SICKNESS_NONE;
         std::memset(states_[i].curses, 0, sizeof(states_[i].curses));
         states_[i].turn_end_state = 0;
         states_[i].pending_ascension_bows[0] = 0; states_[i].pending_ascension_bows[1] = 0;
@@ -48,6 +48,8 @@ void EnvPool::reset(int seed) {
                 } else {
                     states_[i].true_hand[p][h] = CARD_EMPTY; // Empty slot
                 }
+                states_[i].apparent_hand[p][h] = states_[i].true_hand[p][h];
+                states_[i].is_confirmed[p][h] = true;
                 states_[i].is_known_to_opp[p][h] = false;
                 states_[i].is_used[p][h] = false;
                 states_[i].is_deployed[p][h] = false;
@@ -127,8 +129,8 @@ void EnvPool::generate_observation(int env_id) {
     int me = state.current_actor_id;
     int opp = 1 - me;
     
-    bool is_me_fog = state.curses[me][static_cast<int>(CurseType::CURSE_FOG)];
-    bool is_me_dream = state.curses[me][static_cast<int>(CurseType::CURSE_DREAM)];
+    bool is_me_fog = state.curses[me][CURSE_TYPE_FOG];
+    bool is_me_dream = state.curses[me][CURSE_TYPE_DREAM];
 
     // Normalizing logic
     obs.hp_me = state.hp[me] / 100.0f;
@@ -168,18 +170,14 @@ void EnvPool::generate_observation(int env_id) {
 
     // Hand cards
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (state.true_hand[me][i] != CARD_EMPTY) {
-            obs.hand_cards[i] = is_me_dream ? ID_DREAM : state.true_hand[me][i];
-        } else {
-            obs.hand_cards[i] = CARD_EMPTY;
-        }
+        obs.hand_cards[i] = state.apparent_hand[me][i];
     }
 
     // Staged cards
     std::fill(std::begin(obs.staged_cards), std::end(obs.staged_cards), CARD_EMPTY);
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
         int h_idx = state.staged_cards[me][i];
-        obs.staged_cards[i] = is_me_dream ? ID_DREAM : state.true_hand[me][h_idx];
+        obs.staged_cards[i] = state.apparent_hand[me][h_idx];
     }
 
     // Opponent hand cards (相手の公開手札のスロット位置リークを防ぐため、左詰めで格納する)
