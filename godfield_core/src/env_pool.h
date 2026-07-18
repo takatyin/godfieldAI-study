@@ -22,6 +22,12 @@ public:
     void step_all(pybind11::array_t<int> actions);
     pybind11::array_t<float> get_observations();
     pybind11::array_t<int> get_ready_env_ids();
+    
+    InternalState get_state(int env_id) const { return states_[env_id]; }
+    void set_state(int env_id, const InternalState &state) {
+        states_[env_id] = state;
+        generate_observation(env_id);
+    }
 
 private:
     int num_envs_;

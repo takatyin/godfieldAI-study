@@ -223,6 +223,7 @@
   attack_power: 5
   drop_rate: 1
 - name: 魔水のワンド
+  id_str: weapons/wand-of-mystic-water
   description: 攻撃が水属性になる
   type: weapon
   usage_timing:

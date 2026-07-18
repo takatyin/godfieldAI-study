@@ -1,5 +1,5 @@
 import godfield_core
-from godfield_core import ActionType, GamePhase
+from godfield_core import ActionType
 from tests.core.test_utils import SimulationRunner, find_card_by_name
 
 
@@ -52,12 +52,12 @@ def test_discard_action_availability():
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
 
-    runner.state.set_true_hand(0, 0, shield_id)      # スロット0: 盾
-    runner.state.set_true_hand(0, 1, weapon_id)      # スロット1: 武器
+    runner.state.set_true_hand(0, 0, shield_id)  # スロット0: 盾
+    runner.state.set_true_hand(0, 1, weapon_id)  # スロット1: 武器
     runner.state.set_true_hand(0, 2, sun_amulet_id)  # スロット2: お守り
 
     actions = godfield_core.get_legal_actions(runner.state)
-    
+
     # 捨てるアクション自体は選択可能であること
     assert actions[ActionType.ACTION_DISCARD] is True
     # 防具（スロット0）はお守り（スロット2）と同様に直接メインフェイズで選択不可であること
@@ -91,7 +91,7 @@ def test_discard_phase_selection_rules():
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DISCARD
 
     actions_discard = godfield_core.get_legal_actions(runner.state)
-    
+
     # 防具（スロット0）のみが選択可能であること
     assert actions_discard[ActionType.ACTION_SELECT_HAND_0] is True
     assert actions_discard[ActionType.ACTION_SELECT_HAND_1] is False

@@ -35,6 +35,7 @@ constexpr uint32_t TIMING_ATK_PLUS = 1 << 4;
 constexpr uint32_t TIMING_MIRACLE_PLUS = 1 << 5;
 constexpr uint32_t TIMING_ATK_DEFENCE = 1 << 6;
 constexpr uint32_t TIMING_MIRACLE_DEFENCE = 1 << 7;
+constexpr uint32_t TIMING_GUARDIAN = 1 << 8;
 
 struct alignas(64) CardFeatures {
     bool is_weapon;
@@ -49,8 +50,6 @@ struct alignas(64) CardFeatures {
     int defense_power;
     int accuracy;
     int mp_cost;
-    int hp_recovery;
-    int mp_recovery;
     Element element;
     ReactionType reaction_type;
     HitCurse hit_curse;
@@ -173,6 +172,7 @@ struct alignas(64) InternalState {
     int pending_attack_power;       // 現在保留中の攻撃力
     Element pending_attack_element; // 現在保留中の攻撃の属性
     bool pending_absorption;        // 現在保留中の攻撃がHP吸収を持つか
+    bool pending_deal_same_damage;  // 現在保留中の攻撃が自傷効果（邪神の大剣）を持つか
     bool pending_is_group_attack;   // 現在保留中の攻撃が全体攻撃であるか
 
 
@@ -184,6 +184,30 @@ struct alignas(64) InternalState {
     int turn_end_state;              // 0: 死亡判定/お守り/昇天弓, 1: 病気悪化, 2: 病気ダメージ, 3: 引き分け, 4: 守護神, 5: クリーンアップ
     int pending_ascension_bows[2];   // 各プレイヤーの保留中昇天弓射撃回数
     bool heaven_seizure_occurred[2]; // 各プレイヤーが天国病悪化（発作）を起こしたか
+
+    // 複数回攻撃（のこぶんぶん・蜃気楼）用
+    int remaining_attacks;
+    int base_attacker_id;
+    int base_defender_id;
+    int base_attack_power;
+    Element base_attack_element;
+    bool base_absorption;
+    bool base_deal_same_damage;
+
+    // === 指輪の反撃予約用スタック ===
+    int num_pending_counters;
+    int pending_counter_attacker[10];
+    int pending_counter_defender[10];
+    int pending_counter_power[10];
+    Element pending_counter_element[10];
+    HitCurse pending_counter_curse[10];
+    bool pending_counter_take_cp[10];
+    int pending_counter_source_id[10];
+
+    // 反撃による災い・没収適用用
+    HitCurse pending_attack_curse;
+    bool pending_take_cp;
+    int pending_attack_source_id; // 現在の攻撃の発生源カードID (-1: なし/空)
 
     // === 強化学習 (RL) 用の終了シグナルと報酬 ===
     // OpenAI Gym などの標準的な強化学習インターフェースに合わせるために必要不可欠な変数群です。

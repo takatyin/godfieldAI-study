@@ -8,9 +8,9 @@ def test_reaction_wall_un_elemental_only():
     検証内容: ＜壁＞は無属性の物理武器攻撃のみ阻止可能。有属性の攻撃に対しては直接選択できない。
     """
     runner = SimulationRunner()
-    punch_id = find_card_by_name("weapons/punch")              # 無属性武器
-    fire_sword_id = find_card_by_name("weapons/torch")         # 火属性武器
-    wall_id = find_card_by_name("miracles/wall")               # 阻止カード
+    punch_id = find_card_by_name("weapons/punch")  # 無属性武器
+    fire_sword_id = find_card_by_name("weapons/torch")  # 火属性武器
+    wall_id = find_card_by_name("miracles/wall")  # 阻止カード
 
     # 1. 無属性武器攻撃に対して壁が合法手となるか
     runner.set_status(0, hp=40, mp=10)
@@ -69,7 +69,7 @@ def test_rainbow_curtain_wall_and_reflection_sword_synergy():
     # 1枚目に壁は置けないが、カーテンは置ける
     actions = godfield_core.get_legal_actions(runner.state)
     assert actions[ActionType.ACTION_SELECT_HAND_1] is False  # 壁はまだ不可
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True   # カーテンは可能
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is True  # カーテンは可能
 
     # カーテンを選択
     runner.step(ActionType.ACTION_SELECT_HAND_0)
@@ -80,7 +80,7 @@ def test_rainbow_curtain_wall_and_reflection_sword_synergy():
     assert actions2[ActionType.ACTION_SELECT_HAND_2] is False  # 2枚目には置けない
 
     # カーテンによって攻撃が無属性化されたため、壁が選択可能になる
-    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True   # 壁が解禁される
+    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True  # 壁が解禁される
 
     # 壁を選択して決定
     runner.step(ActionType.ACTION_SELECT_HAND_1)
@@ -122,10 +122,10 @@ def test_miracle_defense_reaction_rules():
     2. 属性奇跡に対し、虹のカーテンを置いて無属性化した後、無属性の一般防具（木盾等）を重ねてダメージ軽減するルートは合法。
     """
     runner = SimulationRunner()
-    flame_id = find_card_by_name("miracles/flame")                 # 炎 (火奇跡)
+    flame_id = find_card_by_name("miracles/flame")  # 炎 (火奇跡)
     curtain_id = find_card_by_name("armor/rainbow-curtain")
-    turbulence_id = find_card_by_name("miracles/turbulence")       # 奇跡リアクション
-    wood_shield_id = find_card_by_name("armor/wood-shield")       # 一般防具 (守2)
+    turbulence_id = find_card_by_name("miracles/turbulence")  # 奇跡リアクション
+    wood_shield_id = find_card_by_name("armor/wood-shield")  # 一般防具 (守2)
 
     runner.set_status(0, hp=40, mp=10)
     runner.set_status(1, hp=40, mp=10)
@@ -141,8 +141,8 @@ def test_miracle_defense_reaction_rules():
 
     # 最初はカーテンも乱気流も一般防具（対抗属性ではない木盾は非合法）もチェック
     actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True   # カーテンは1枚目なので可能
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True   # 乱気流も可能
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is True  # カーテンは1枚目なので可能
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True  # 乱気流も可能
     assert actions[ActionType.ACTION_SELECT_HAND_2] is False  # 木盾は属性が合わないので不可
 
     # カーテンを選択
@@ -151,7 +151,7 @@ def test_miracle_defense_reaction_rules():
     # カーテン選択後は、乱気流（リアクション）は非合法になるが、無属性化したため木盾（一般防具）が合法になること
     actions2 = godfield_core.get_legal_actions(runner.state)
     assert actions2[ActionType.ACTION_SELECT_HAND_1] is False  # 乱気流は非合法！
-    assert actions2[ActionType.ACTION_SELECT_HAND_2] is True   # 木盾は合法！
+    assert actions2[ActionType.ACTION_SELECT_HAND_2] is True  # 木盾は合法！
 
     # 木盾を選択して決定
     runner.step(ActionType.ACTION_SELECT_HAND_2)
@@ -209,7 +209,7 @@ def test_bounce_success_swaps_attacker_defender():
     runner.state.seed_rng(success_seed)
     runner.set_status(0, hp=40, mp=10)
     runner.set_status(1, hp=5, mp=10)
-    
+
     absorption_id = find_card_by_name("miracles/absorption")
     turbulence_id = find_card_by_name("miracles/turbulence")
     runner.state.set_true_hand(0, 0, absorption_id)
@@ -294,13 +294,13 @@ def test_confirm_illegal_when_staged_mp_exceeds_current_mp():
     精霊等のMP0化カードを追加で重ねるまでは ACTION_CONFIRM が非合法手になること。
     """
     runner = SimulationRunner()
-    flame_id = find_card_by_name("miracles/flame")                # 炎
-    turbulence_id = find_card_by_name("miracles/turbulence")      # 乱気流 (MP 5)
-    doll_id = find_card_by_name("精霊のぬいぐるみ")                 # 精霊のぬいぐるみ
+    flame_id = find_card_by_name("miracles/flame")  # 炎
+    turbulence_id = find_card_by_name("miracles/turbulence")  # 乱気流 (MP 5)
+    doll_id = find_card_by_name("精霊のぬいぐるみ")  # 精霊のぬいぐるみ
 
     runner.set_status(0, hp=40, mp=10)
     runner.set_status(1, hp=40, mp=2)  # P1のMPを2にセット (乱気流のMP 5より少ない)
-    
+
     runner.state.set_true_hand(0, 0, flame_id)
     runner.state.set_true_hand(1, 0, turbulence_id)
     runner.state.set_true_hand(1, 1, doll_id)
@@ -332,7 +332,6 @@ def test_confirm_illegal_when_staged_mp_exceeds_current_mp():
 
     # 6. 確定して解決
     runner.step(ActionType.ACTION_CONFIRM)
-    
+
     # MPが減らずに2のまま維持されていることを確認
     assert runner.state.get_mp(1) == 2
-

@@ -160,6 +160,17 @@ std::vector<int> get_staged_card_ids(const InternalState &state, int player);
 void apply_card_effects_to_target(InternalState &state, int target_id, const std::vector<int>& used_card_ids);
 
 /**
+ * @brief プレイヤーに状態異常（災い）を適用します。
+ */
+void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse);
+
+/**
+ * @brief 死亡判定および昇天弓の発射、お守りでの復活を処理します。
+ * @return 昇天弓の発射などにより防御フェイズが起動され、ゲームループを一時停止する場合は true。
+ */
+bool run_death_check(InternalState &state);
+
+/**
  * @brief 「売る」アクションにおける商品の引き渡しおよび決済の解決を行います。
  * @param state ゲーム状態。
  * @param seller 売り手プレイヤーID。

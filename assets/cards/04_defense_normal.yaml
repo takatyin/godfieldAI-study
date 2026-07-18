@@ -475,6 +475,7 @@
   element: 火
   defense_power: 10
   drop_rate: 1
+  id_str: armor/fever-mask
 - name: きらきらドレス
   type: defense
   usage_timing:

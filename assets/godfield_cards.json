@@ -110,6 +110,7 @@
     "price": 10,
     "attack_power": 3,
     "drop_rate": 1,
+    "id_str": "weapons/saw-boom-boom",
     "id": 8
   },
   {
@@ -190,6 +191,7 @@
   },
   {
     "name": "乱弾武剣",
+    "id_str": "weapons/bouncing-sword",
     "description": "無属性武器を弾く",
     "type": "weapon",
     "reaction_type": "bounce",
@@ -266,6 +268,7 @@
   },
   {
     "name": "ゴーストソード",
+    "id_str": "weapons/ghost-sword",
     "description": "与えたダメージ分HPを吸収する",
     "type": "weapon",
     "usage_timing": [
@@ -492,6 +495,7 @@
   },
   {
     "name": "リアルゴーストソード",
+    "id_str": "weapons/real-ghost-sword",
     "description": "与えたダメージ分HPを吸収する",
     "type": "weapon",
     "usage_timing": [
@@ -593,6 +597,7 @@
   },
   {
     "name": "邪神の大剣",
+    "id_str": "weapons/evil-broadsword",
     "description": "与えたダメージ分自分にダメージ",
     "type": "weapon",
     "usage_timing": [
@@ -657,10 +662,11 @@
   },
   {
     "name": "マジカルステッキ",
+    "id_str": "weapons/magical-stick",
     "description": "MPを全て消費する攻MP*2",
     "type": "weapon",
     "usage_timing": [
-      "main_sundry_phase"
+      "main_atk_phase"
     ],
     "price": 10,
     "drop_rate": 1,
@@ -989,6 +995,7 @@
   },
   {
     "name": "魔水のワンド",
+    "id_str": "weapons/wand-of-mystic-water",
     "description": "攻撃が水属性になる",
     "type": "weapon",
     "usage_timing": [
@@ -2130,6 +2137,7 @@
     "element": "火",
     "defense_power": 10,
     "drop_rate": 1,
+    "id_str": "armor/fever-mask",
     "id": 162
   },
   {
@@ -2347,6 +2355,7 @@
     "price": 10,
     "element": "光",
     "drop_rate": 1,
+    "id_str": "armor/uranus-ring",
     "id": 179
   },
   {
@@ -2359,6 +2368,7 @@
     "price": 10,
     "element": "闇",
     "drop_rate": 1,
+    "id_str": "armor/pluto-ring",
     "id": 180
   },
   {
@@ -2370,6 +2380,7 @@
     ],
     "price": 10,
     "drop_rate": 1,
+    "id_str": "armor/neptune-ring",
     "id": 181
   },
   {
@@ -2458,7 +2469,6 @@
     ],
     "price": 1,
     "drop_rate": 12,
-    "hp_recovery": 5,
     "id": 188
   },
   {
@@ -2471,7 +2481,6 @@
     ],
     "price": 3,
     "drop_rate": 8,
-    "hp_recovery": 10,
     "id": 189
   },
   {
@@ -2484,7 +2493,6 @@
     ],
     "price": 5,
     "drop_rate": 4,
-    "hp_recovery": 15,
     "id": 190
   },
   {
@@ -2497,7 +2505,6 @@
     ],
     "price": 20,
     "drop_rate": 1,
-    "hp_recovery": 20,
     "id": 191
   },
   {
@@ -2510,7 +2517,6 @@
     ],
     "price": 1,
     "drop_rate": 12,
-    "mp_recovery": 5,
     "id": 192
   },
   {
@@ -2523,7 +2529,6 @@
     ],
     "price": 3,
     "drop_rate": 8,
-    "mp_recovery": 10,
     "id": 193
   },
   {
@@ -2536,7 +2541,6 @@
     ],
     "price": 5,
     "drop_rate": 4,
-    "mp_recovery": 15,
     "id": 194
   },
   {
@@ -2550,7 +2554,6 @@
     ],
     "price": 20,
     "drop_rate": 1,
-    "mp_recovery": 20,
     "id": 195
   },
   {
@@ -3091,5 +3094,673 @@
     "mp_cost": 15,
     "drop_rate": 1,
     "id": 236
+  },
+  {
+    "name": "炎のささやき",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "火",
+    "attack_power": 3,
+    "is_group_attack": true,
+    "accuracy": 75,
+    "id_str": "gurdians/fire-whisper",
+    "id": 237
+  },
+  {
+    "name": "炎のつぶやき",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "火",
+    "attack_power": 4,
+    "is_group_attack": true,
+    "accuracy": 75,
+    "id_str": "gurdians/fire-tweet",
+    "id": 238
+  },
+  {
+    "name": "炎のしゃべり",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "火",
+    "attack_power": 5,
+    "is_group_attack": true,
+    "accuracy": 75,
+    "id_str": "gurdians/fire-buzz",
+    "id": 239
+  },
+  {
+    "name": "炎のうなり",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "火",
+    "attack_power": 6,
+    "is_group_attack": true,
+    "accuracy": 75,
+    "id_str": "gurdians/fire-roar",
+    "id": 240
+  },
+  {
+    "name": "炎の叫び",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "火",
+    "attack_power": 7,
+    "is_group_attack": true,
+    "accuracy": 75,
+    "id_str": "gurdians/fire-shout",
+    "id": 241
+  },
+  {
+    "name": "霧雨",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "水",
+    "attack_power": 1,
+    "is_group_attack": true,
+    "accuracy": 50,
+    "hit_curse": "fog",
+    "id_str": "gurdians/drizzle",
+    "id": 242
+  },
+  {
+    "name": "かすむ息",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "水",
+    "attack_power": 2,
+    "hit_curse": "fog",
+    "id_str": "gurdians/misty-breath",
+    "id": 243
+  },
+  {
+    "name": "しぶき",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "水",
+    "attack_power": 3,
+    "is_group_attack": true,
+    "accuracy": 50,
+    "id_str": "gurdians/splash",
+    "id": 244
+  },
+  {
+    "name": "泡",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "水",
+    "attack_power": 3,
+    "id_str": "gurdians/bubbles",
+    "id": 245
+  },
+  {
+    "name": "あられ",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "水",
+    "attack_power": 6,
+    "is_group_attack": true,
+    "accuracy": 50,
+    "id_str": "gurdians/hail",
+    "id": 246
+  },
+  {
+    "name": "枝",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "木",
+    "attack_power": 1,
+    "id_str": "gurdians/branch",
+    "id": 247
+  },
+  {
+    "name": "根っこ",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "木",
+    "attack_power": 2,
+    "id_str": "gurdians/root",
+    "id": 248
+  },
+  {
+    "name": "触手",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "木",
+    "attack_power": 1,
+    "is_group_attack": true,
+    "accuracy": 75,
+    "id_str": "gurdians/tentacles",
+    "id": 249
+  },
+  {
+    "name": "紅葉",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "木",
+    "hit_curse": "dream",
+    "id_str": "gurdians/colored-leaves",
+    "id": 250
+  },
+  {
+    "name": "落ち葉の舞",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "木",
+    "attack_power": 2,
+    "is_group_attack": true,
+    "accuracy": 75,
+    "hit_curse": "dream",
+    "id_str": "gurdians/dance-of-fallen-leaves",
+    "id": 251
+  },
+  {
+    "name": "小石",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "土",
+    "attack_power": 2,
+    "id_str": "gurdians/pebble",
+    "id": 252
+  },
+  {
+    "name": "石",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "土",
+    "attack_power": 4,
+    "id_str": "gurdians/stone",
+    "id": 253
+  },
+  {
+    "name": "大きな石",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "土",
+    "attack_power": 6,
+    "id_str": "gurdians/boulder",
+    "id": 254
+  },
+  {
+    "name": "体当たり",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "土",
+    "attack_power": 9,
+    "id_str": "gurdians/body-press",
+    "id": 255
+  },
+  {
+    "name": "ダイヤモンドアクス",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "土",
+    "attack_power": 15,
+    "id_str": "gurdians/diamond-axe",
+    "id": 256
+  },
+  {
+    "name": "点滅",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "光",
+    "attack_power": 2,
+    "id_str": "gurdians/twinkle",
+    "id": 257
+  },
+  {
+    "name": "電撃",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "光",
+    "attack_power": 4,
+    "is_group_attack": true,
+    "accuracy": 25,
+    "id_str": "gurdians/electric-shock",
+    "id": 258
+  },
+  {
+    "name": "後光",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "光",
+    "hit_curse": "flash",
+    "id_str": "gurdians/halo",
+    "id": 259
+  },
+  {
+    "name": "祝福",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "光",
+    "attack_power": 5,
+    "id_str": "gurdians/blessing",
+    "id": 260
+  },
+  {
+    "name": "レーザービーム",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "光",
+    "attack_power": 10,
+    "is_group_attack": true,
+    "accuracy": 75,
+    "id_str": "gurdians/laser-beam",
+    "id": 261
+  },
+  {
+    "name": "思考",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "闇",
+    "attack_power": 1,
+    "is_group_attack": true,
+    "accuracy": 25,
+    "id_str": "gurdians/thinking",
+    "id": 262
+  },
+  {
+    "name": "まばたき",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "闇",
+    "attack_power": 2,
+    "id_str": "gurdians/wink",
+    "id": 263
+  },
+  {
+    "name": "不吉な予感",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "闇",
+    "hit_curse": "dark cloud",
+    "id_str": "gurdians/ominous-premonition",
+    "id": 264
+  },
+  {
+    "name": "咳払い",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "闇",
+    "attack_power": 4,
+    "id_str": "gurdians/cough",
+    "id": 265
+  },
+  {
+    "name": "挙手",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "闇",
+    "attack_power": 8,
+    "id_str": "gurdians/hand-raising",
+    "id": 266
+  },
+  {
+    "name": "さざ波の音",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/sound-of-ripples",
+    "id": 267
+  },
+  {
+    "name": "潮汁",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/seafood-soup",
+    "id": 268
+  },
+  {
+    "name": "磯の香り",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/beach-aroma",
+    "id": 269
+  },
+  {
+    "name": "あっさりした潮汁",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/healthy-seafood-soup",
+    "id": 270
+  },
+  {
+    "name": "さわやかな磯の香り",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/fresh-beach-aroma",
+    "id": 271
+  },
+  {
+    "name": "小銭ばらまき",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/coin-scattering",
+    "id": 272
+  },
+  {
+    "name": "わいろ",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/bribe",
+    "id": 273
+  },
+  {
+    "name": "罰金",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/fine",
+    "id": 274
+  },
+  {
+    "name": "つまらない物",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/little-something",
+    "id": 275
+  },
+  {
+    "name": "豪華なアクセサリー",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/luxury-accessory",
+    "id": 276
+  },
+  {
+    "name": "もらす",
+    "type": "deal",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "gurdians/drop",
+    "id": 277
+  },
+  {
+    "name": "満月刀",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "attack_power": 10,
+    "id_str": "gurdians/full-moon-blade",
+    "id": 278
+  },
+  {
+    "name": "夕焼け",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "phenomena/afterglow",
+    "id": 279
+  },
+  {
+    "name": "濃霧",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "phenomena/dense-fog",
+    "id": 280
+  },
+  {
+    "name": "きのこ大発生",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "phenomena/mushroom-outbreak",
+    "id": 281
+  },
+  {
+    "name": "竜巻",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "phenomena/tornado",
+    "id": 282
+  },
+  {
+    "name": "巨大なタライ",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "光",
+    "attack_power": 50,
+    "id_str": "phenomena/gigantic-tub",
+    "id": 283
+  },
+  {
+    "name": "ブラックホール",
+    "type": "weapon",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "element": "闇",
+    "attack_power": 30,
+    "accuracy": 75,
+    "is_group_attack": true,
+    "id_str": "phenomena/black-hole",
+    "id": 284
+  },
+  {
+    "name": "暖流",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "phenomena/warm-current",
+    "id": 285
+  },
+  {
+    "name": "金山",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "phenomena/gold-mountain",
+    "id": 286
+  },
+  {
+    "name": "磁気嵐",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "phenomena/magnetic-storm",
+    "id": 287
+  },
+  {
+    "name": "日食",
+    "type": "sundry",
+    "usage_timing": [
+      "guardian_phase"
+    ],
+    "price": 0,
+    "drop_rate": 0,
+    "id_str": "phenomena/solar-eclipse",
+    "id": 288
   }
 ]

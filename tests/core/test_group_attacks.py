@@ -70,7 +70,7 @@ def test_group_attack_original_group_weapon():
     legal_actions = godfield_core.get_legal_actions(runner.state)
     for idx in range(18):
         assert legal_actions[ActionType.ACTION_SELECT_HAND_0.value + idx] is False
-    
+
     assert legal_actions[ActionType.ACTION_TARGET_OPP] is True
     assert legal_actions[ActionType.ACTION_TARGET_SELF] is False
 

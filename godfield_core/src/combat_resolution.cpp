@@ -112,10 +112,15 @@ bool is_weapon_attack(const InternalState &state, int player_id) {
 int calculate_staged_mp_cost(const InternalState &state, int player_id) {
     int total_cost = 0;
     int num_cards = state.num_staged_cards[player_id];
+    bool has_magical_stick = false;
 
     for (int i = 0; i < num_cards; ++i) {
         int card_id = state.true_hand[player_id][state.staged_cards[player_id][i]];
         if (card_id == CARD_EMPTY) continue;
+        if (card_id == ID_MAGICAL_STICK) {
+            has_magical_stick = true;
+            continue;
+        }
         const CardFeatures &f = g_card_registry[card_id];
 
         // 奇跡カードであり、かつ直後（i + 1）に精霊系カードが置かれている場合はMP消費を0にする
@@ -127,6 +132,12 @@ int calculate_staged_mp_cost(const InternalState &state, int player_id) {
         }
         total_cost += f.mp_cost;
     }
+
+    if (has_magical_stick) {
+        int remaining_mp = std::max(0, state.mp[player_id] - total_cost);
+        total_cost += remaining_mp;
+    }
+
     return total_cost;
 }
 
@@ -318,7 +329,12 @@ void cleanup_phase_end(InternalState &state) {
     state.pending_attack_power = 0;
     state.pending_attack_element = ELEM_NONE;
     state.pending_absorption = false;
+    state.pending_deal_same_damage = false;
     state.pending_is_group_attack = false;
+    state.num_pending_counters = 0;
+    state.pending_attack_curse = CURSE_NONE;
+    state.pending_take_cp = false;
+    state.pending_attack_source_id = CARD_EMPTY;
 }
 
 /**
@@ -332,6 +348,42 @@ std::vector<int> get_staged_card_ids(const InternalState &state, int player) {
     return ids;
 }
 
+void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse) {
+    if (curse == CURSE_NONE) return;
+    int new_sick = 0;
+    if (curse == CURSE_COLD) new_sick = 1;
+    else if (curse == CURSE_FEVER) new_sick = 2;
+    else if (curse == CURSE_HELL) new_sick = 3;
+    else if (curse == CURSE_HEAVEN) new_sick = 4;
+
+    if (new_sick > 0) {
+        int cur_sick = state.sickness[player_id];
+        if (cur_sick == 0) {
+            state.sickness[player_id] = new_sick;
+        } else {
+            if (new_sick > cur_sick) {
+                state.sickness[player_id] = new_sick;
+            } else {
+                if (cur_sick == 4) {
+                    state.hp[player_id] = 0;
+                } else {
+                    state.sickness[player_id] = cur_sick + 1;
+                }
+            }
+        }
+    } else {
+        if (curse == CURSE_FOG) {
+            state.curses[player_id][static_cast<int>(CurseType::CURSE_FOG)] = true;
+        } else if (curse == CURSE_FLASH) {
+            state.curses[player_id][static_cast<int>(CurseType::CURSE_FLASH)] = true;
+        } else if (curse == CURSE_DARK_CLOUD) {
+            state.curses[player_id][static_cast<int>(CurseType::CURSE_DARK_CLOUD)] = true;
+        } else if (curse == CURSE_DREAM) {
+            state.curses[player_id][static_cast<int>(CurseType::CURSE_DREAM)] = true;
+        }
+    }
+}
+
 /**
  * @brief 適用対象プレイヤーに対して、使用されたカードの回復や状態異常、またはその他特殊カードの効果を処理します。
  */
@@ -340,42 +392,21 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
     int mp_diff = 0;
     for (int card_id : used_card_ids) {
         CardFeatures &f = g_card_registry[card_id];
-        hp_diff += f.hp_recovery;
-        mp_diff += f.mp_recovery;
+        
+        // 特殊処理：HP回復
+        if (card_id == ID_SMILE_DEW) hp_diff += 5;
+        else if (card_id == ID_HEART_DEW) hp_diff += 10;
+        else if (card_id == ID_ROMANCE_WATER) hp_diff += 15;
+        else if (card_id == ID_GALAXY_GEYSER) hp_diff += 20;
+
+        // 特殊処理：MP回復
+        if (card_id == ID_SMILE_FLOWER) mp_diff += 5;
+        else if (card_id == ID_HEART_FLOWER) mp_diff += 10;
+        else if (card_id == ID_ROMANCE_FRAGRANCE) mp_diff += 15;
+        else if (card_id == ID_HEAVEN_HERB) mp_diff += 20;
 
         if (f.hit_curse != CURSE_NONE) {
-            int new_sick = 0;
-            if (f.hit_curse == CURSE_COLD) new_sick = 1;
-            else if (f.hit_curse == CURSE_FEVER) new_sick = 2;
-            else if (f.hit_curse == CURSE_HELL) new_sick = 3;
-            else if (f.hit_curse == CURSE_HEAVEN) new_sick = 4;
-
-            if (new_sick > 0) {
-                int cur_sick = state.sickness[target_id];
-                if (cur_sick == 0) {
-                    state.sickness[target_id] = new_sick;
-                } else {
-                    if (new_sick > cur_sick) {
-                        state.sickness[target_id] = new_sick;
-                    } else {
-                        if (cur_sick == 4) {
-                            state.hp[target_id] = 0;
-                        } else {
-                            state.sickness[target_id] = cur_sick + 1;
-                        }
-                    }
-                }
-            } else {
-                if (f.hit_curse == CURSE_FOG) {
-                    state.curses[target_id][static_cast<int>(CurseType::CURSE_FOG)] = true;
-                } else if (f.hit_curse == CURSE_FLASH) {
-                    state.curses[target_id][static_cast<int>(CurseType::CURSE_FLASH)] = true;
-                } else if (f.hit_curse == CURSE_DARK_CLOUD) {
-                    state.curses[target_id][static_cast<int>(CurseType::CURSE_DARK_CLOUD)] = true;
-                } else if (f.hit_curse == CURSE_DREAM) {
-                    state.curses[target_id][static_cast<int>(CurseType::CURSE_DREAM)] = true;
-                }
-            }
+            apply_curse_to_player(state, target_id, f.hit_curse);
         }
 
         if (card_id == ID_TONE || card_id == ID_SMILE_SHELL) {
@@ -385,6 +416,17 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
         } else if (card_id == ID_SONG || card_id == ID_HEART_SHELL) {
             state.sickness[target_id] = 0;
             for (int j = 0; j < 4; ++j) state.curses[target_id][j] = false;
+        }
+        
+        if (card_id == ID_RELEASE) {
+            state.guardian[0] = 0;
+            state.guardian[1] = 0;
+        }
+        if (card_id == ID_SPRING) {
+            hp_diff += 10;
+        }
+        if (card_id == ID_TREASURE) {
+            state.money[target_id] = std::clamp(state.money[target_id] + 10, 0, 99);
         }
 
         if (card_id == ID_GUARDIAN_POT) {
@@ -425,6 +467,132 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
                     int discard_idx = target_candidates[k];
                     clear_hand_slot(state, target_id, discard_idx);
                 }
+            }
+        }
+
+        if (card_id == ID_STRING_OF_FATE) {
+            std::uniform_int_distribution<int> dist(0, 9);
+            int phenomenon = dist(state.rng);
+            int opp = 1 - target_id;
+            
+            if (phenomenon == 0) { // 夕焼け: 全員熱病
+                state.sickness[0] = 2;
+                state.sickness[1] = 2;
+            }
+            else if (phenomenon == 1) { // 濃霧: 全員霧
+                state.curses[0][static_cast<int>(CurseType::CURSE_FOG)] = true;
+                state.curses[1][static_cast<int>(CurseType::CURSE_FOG)] = true;
+            }
+            else if (phenomenon == 2) { // きのこ大発生: スキップ
+                // 何もしない
+            }
+            else if (phenomenon == 3) { // 竜巻: 全員HP ➡ 1
+                state.hp[0] = 1;
+                state.hp[1] = 1;
+            }
+            else if (phenomenon == 4) { // 巨大なタライ: 自分か相手に光属性攻50
+                int target_player = std::uniform_int_distribution<int>(0, 1)(state.rng);
+                if (target_player == target_id) { // 自分自身: 防御不可で50ダメ
+                    state.hp[target_id] = std::max(0, state.hp[target_id] - 50);
+                    if (state.hp[target_id] == 0) {
+                        run_death_check(state);
+                    }
+                } else { // 相手: 防御フェイズ起動
+                    state.attacker_id = target_id;
+                    state.defender_id = opp;
+                    state.current_actor_id = opp;
+                    state.current_phase = GamePhase::PHASE_DEFENSE;
+                    state.pending_attack_source_id = ID_GIGANTIC_TUB;
+                    state.pending_attack_power = 50;
+                    state.pending_attack_element = ELEM_LIGHT;
+                    state.pending_absorption = false;
+                    state.pending_deal_same_damage = false;
+                    state.pending_is_group_attack = false;
+                    state.pending_attack_curse = CURSE_NONE;
+                    state.turn_end_state = 5;
+                }
+            }
+            else if (phenomenon == 5) { // ブラックホール: 自分が撃った全体攻撃
+                state.attacker_id = target_id;
+                state.defender_id = opp;
+                state.current_actor_id = opp;
+                state.current_phase = GamePhase::PHASE_DEFENSE;
+                state.pending_attack_source_id = ID_BLACK_HOLE;
+                state.pending_attack_power = 30;
+                state.pending_attack_element = ELEM_DARKNESS;
+                state.pending_absorption = false;
+                state.pending_deal_same_damage = false;
+                state.pending_is_group_attack = true; // 全体攻撃
+                state.pending_attack_curse = CURSE_NONE;
+                state.turn_end_state = 5;
+            }
+            else if (phenomenon == 6) { // 暖流: 自身HP+50
+                hp_diff += 50;
+            }
+            else if (phenomenon == 7) { // 金山: お金集約
+                int total_money = state.money[0] + state.money[1];
+                int lucky = std::uniform_int_distribution<int>(0, 1)(state.rng);
+                state.money[lucky] = std::clamp(total_money, 0, 99);
+                state.money[1 - lucky] = 0;
+            }
+            else if (phenomenon == 8) { // 磁気嵐: 手札相互交換 & known_to_opp 追跡
+                struct ShuffledCard {
+                    int card_id;
+                    int original_owner;
+                    bool original_known;
+                };
+                std::vector<ShuffledCard> pool;
+                int original_counts[2] = {0, 0};
+                
+                for (int p = 0; p < 2; ++p) {
+                    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+                        int cid = state.true_hand[p][i];
+                        if (cid != CARD_EMPTY) {
+                            bool is_staged = false;
+                            for (int k = 0; k < state.num_staged_cards[p]; ++k) {
+                                if (state.staged_cards[p][k] == i) {
+                                    is_staged = true;
+                                    break;
+                                }
+                            }
+                            if (!is_staged) {
+                                pool.push_back({cid, p, state.is_known_to_opp[p][i]});
+                                original_counts[p]++;
+                            }
+                        }
+                    }
+                }
+                
+                std::shuffle(pool.begin(), pool.end(), state.rng);
+                
+                int pool_idx = 0;
+                for (int p = 0; p < 2; ++p) {
+                    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+                        state.true_hand[p][i] = CARD_EMPTY;
+                        state.is_known_to_opp[p][i] = false;
+                    }
+                    for (int i = 0; i < original_counts[p]; ++i) {
+                        if (pool_idx < (int)pool.size()) {
+                            const auto &card = pool[pool_idx++];
+                            state.true_hand[p][i] = card.card_id;
+                            
+                            if (card.original_owner != p) {
+                                state.is_known_to_opp[p][i] = true;
+                            } else {
+                                state.is_known_to_opp[p][i] = card.original_known;
+                            }
+                        }
+                    }
+                }
+            }
+            else if (phenomenon == 9) { // 日食: 重複しない守護神割り当て
+                int g0 = std::uniform_int_distribution<int>(1, 10)(state.rng);
+                int g1 = std::uniform_int_distribution<int>(1, 9)(state.rng);
+                if (g1 >= g0) {
+                    g1 += 1;
+                }
+                state.guardian[0] = g0;
+                state.guardian[1] = g1;
             }
         }
     }
@@ -542,6 +710,9 @@ void execute_sell_resolution(InternalState &state, int seller, int buyer) {
  * @brief 相手のアクションに対して「スーパーミラー」での反射を実行し、アクターIDとスロットをスワップします。
  */
 bool try_execute_super_mirror_reflection(InternalState &state, ActionType action, int me, int opp) {
+    if (state.num_staged_cards[opp] > 0 && state.staged_cards[opp][0] == -1) {
+        return false;
+    }
     if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
         int idx = action - ACTION_SELECT_HAND_0;
         if (state.true_hand[me][idx] == ID_SUPER_MIRROR) {
@@ -566,7 +737,7 @@ bool is_active_reaction_card(int card_id, GamePhase phase, Element attack_elemen
     if (phase == GamePhase::PHASE_DEFENSE) {
         if (card_id == ID_SUPER_MIRROR) return true;
         if (attack_element == ELEM_NONE) {
-            return (card_id == ID_WALL || card_id == ID_SWORD_WARE || card_id == ID_REFLECTION_SWORD);
+            return (card_id == ID_WALL || card_id == ID_SWORD_WARE || card_id == ID_REFLECTION_SWORD || card_id == ID_BOUNCING_SWORD);
         }
     }
     return false;
@@ -606,7 +777,9 @@ bool run_death_check(InternalState &state) {
                 state.pending_attack_power = 30;
                 state.pending_attack_element = ELEM_LIGHT;
                 state.pending_absorption = false;
+                state.pending_deal_same_damage = false;
                 state.pending_is_group_attack = false;
+                state.pending_attack_source_id = ID_ASCENSION_BOW;
                 return true; // 防御フェイズへ移行するため一時中断
             }
             // 命中しなかった場合はwhileにより次の保留中の弓を処理
@@ -777,187 +950,387 @@ bool resolve_turn_end_steps(InternalState &state) {
                         int g_id = state.guardian[opp];
                         
                         if (g_id == 1) { // 火星神
-                            int power = 0;
-                            if (act_idx == 1) power = 25;
-                            else if (act_idx == 2) power = 20;
-                            else if (act_idx == 3) power = 15;
-                            else if (act_idx == 4) power = 10;
-                            else power = 5;
+                            int source_id = CARD_EMPTY;
+                            if (act_idx == 1) { source_id = ID_FIRE_SHOUT; }
+                            else if (act_idx == 2) { source_id = ID_FIRE_ROAR; }
+                            else if (act_idx == 3) { source_id = ID_FIRE_BUZZ; }
+                            else if (act_idx == 4) { source_id = ID_FIRE_TWEET; }
+                            else { source_id = ID_FIRE_WHISPER; }
+                            
+                            const CardFeatures &feat = g_card_registry[source_id];
+                            state.pending_attack_source_id = source_id;
+                            state.pending_attack_curse = feat.hit_curse;
                             
                             state.current_phase = GamePhase::PHASE_DEFENSE;
                             state.attacker_id = opp;
                             state.defender_id = me;
                             state.current_actor_id = me;
-                            state.pending_attack_power = power;
-                            state.pending_attack_element = ELEM_FIRE;
+                            state.pending_attack_power = feat.attack_power;
+                            state.pending_attack_element = feat.element;
                             state.pending_absorption = false;
-                            state.pending_is_group_attack = (act_idx < 5);
+                            state.pending_deal_same_damage = false;
+                            state.pending_is_group_attack = feat.is_group_attack;
                             state.turn_end_state = 5;
                             return true;
                         }
                         else if (g_id == 2) { // 水星神
-                            int power = 0;
-                            if (act_idx == 1) power = 20;
-                            else if (act_idx == 2) power = 15;
-                            else if (act_idx == 3) power = 10;
-                            else if (act_idx == 4) power = 5;
+                            int source_id = CARD_EMPTY;
+                            if (act_idx == 1) { source_id = ID_HAIL; }
+                            else if (act_idx == 2) { source_id = ID_SPLASH; }
+                            else if (act_idx == 3) { source_id = ID_BUBBLES; }
+                            else if (act_idx == 4) { source_id = ID_MISTY_BREATH; }
+                            else { source_id = ID_DRIZZLE; }
                             
-                            state.curses[me][static_cast<int>(CurseType::CURSE_FOG)] = true;
-                            if (power > 0) {
-                                state.current_phase = GamePhase::PHASE_DEFENSE;
-                                state.attacker_id = opp;
-                                state.defender_id = me;
-                                state.current_actor_id = me;
-                                state.pending_attack_power = power;
-                                state.pending_attack_element = ELEM_WATER;
-                                state.pending_absorption = false;
-                                state.pending_is_group_attack = (act_idx < 4);
-                                state.turn_end_state = 5;
-                                return true;
-                            }
-                        }
-                        else if (g_id == 3) { // 木星神
-                            int power = 0;
-                            if (act_idx == 1) power = 15;
-                            else if (act_idx == 2) power = 10;
-                            else if (act_idx == 3) power = 5;
-                            else if (act_idx == 5) power = 5;
-                            
-                            state.curses[me][static_cast<int>(CurseType::CURSE_DREAM)] = true;
-                            if (power > 0) {
-                                state.current_phase = GamePhase::PHASE_DEFENSE;
-                                state.attacker_id = opp;
-                                state.defender_id = me;
-                                state.current_actor_id = me;
-                                state.pending_attack_power = power;
-                                state.pending_attack_element = ELEM_WOOD;
-                                state.pending_absorption = false;
-                                state.pending_is_group_attack = false;
-                                state.turn_end_state = 5;
-                                return true;
-                            }
-                        }
-                        else if (g_id == 4) { // 土星神
-                            int power = 0;
-                            if (act_idx == 1) power = 30;
-                            else if (act_idx == 2) power = 25;
-                            else if (act_idx == 3) power = 20;
-                            else if (act_idx == 4) power = 15;
-                            else power = 10;
+                            const CardFeatures &feat = g_card_registry[source_id];
+                            state.pending_attack_source_id = source_id;
+                            state.pending_attack_curse = feat.hit_curse;
                             
                             state.current_phase = GamePhase::PHASE_DEFENSE;
                             state.attacker_id = opp;
                             state.defender_id = me;
                             state.current_actor_id = me;
-                            state.pending_attack_power = power;
-                            state.pending_attack_element = ELEM_STONE;
+                            state.pending_attack_power = feat.attack_power;
+                            state.pending_attack_element = feat.element;
                             state.pending_absorption = false;
-                            state.pending_is_group_attack = false;
+                            state.pending_deal_same_damage = false;
+                            state.pending_is_group_attack = feat.is_group_attack;
+                            state.turn_end_state = 5;
+                            return true;
+                        }
+                        else if (g_id == 3) { // 木星神
+                            int source_id = CARD_EMPTY;
+                            if (act_idx == 1) { source_id = ID_DANCE_OF_FALLEN_LEAVES; }
+                            else if (act_idx == 2) { source_id = ID_COLORED_LEAVES; }
+                            else if (act_idx == 3) { source_id = ID_TENTACLES; }
+                            else if (act_idx == 4) { source_id = ID_ROOT; }
+                            else { source_id = ID_BRANCH; }
+                            
+                            const CardFeatures &feat = g_card_registry[source_id];
+                            state.pending_attack_source_id = source_id;
+                            state.pending_attack_curse = feat.hit_curse;
+                            
+                            state.current_phase = GamePhase::PHASE_DEFENSE;
+                            state.attacker_id = opp;
+                            state.defender_id = me;
+                            state.current_actor_id = me;
+                            state.pending_attack_power = feat.attack_power;
+                            state.pending_attack_element = feat.element;
+                            state.pending_absorption = (source_id == ID_TENTACLES);
+                            state.pending_deal_same_damage = false;
+                            state.pending_is_group_attack = feat.is_group_attack;
+                            state.turn_end_state = 5;
+                            return true;
+                        }
+                        else if (g_id == 4) { // 土星神
+                            int source_id = CARD_EMPTY;
+                            if (act_idx == 1) { source_id = ID_BOULDER; }
+                            else if (act_idx == 2) { source_id = ID_STONE; }
+                            else if (act_idx == 3) { source_id = ID_PEBBLE; }
+                            else if (act_idx == 4) { source_id = ID_BODY_PRESS; }
+                            else { source_id = ID_DIAMOND_AXE; }
+                            
+                            const CardFeatures &feat = g_card_registry[source_id];
+                            state.pending_attack_source_id = source_id;
+                            state.pending_attack_curse = feat.hit_curse;
+                            
+                            state.current_phase = GamePhase::PHASE_DEFENSE;
+                            state.attacker_id = opp;
+                            state.defender_id = me;
+                            state.current_actor_id = me;
+                            state.pending_attack_power = feat.attack_power;
+                            state.pending_attack_element = feat.element;
+                            state.pending_absorption = false;
+                            state.pending_deal_same_damage = false;
+                            state.pending_is_group_attack = feat.is_group_attack;
                             state.turn_end_state = 5;
                             return true;
                         }
                         else if (g_id == 5) { // 天王神
-                            int power = 0;
-                            if (act_idx == 1) power = 20;
-                            else if (act_idx == 2) power = 15;
-                            else if (act_idx == 3) power = 10;
-                            else if (act_idx == 4) power = 5;
+                            int source_id = CARD_EMPTY;
+                            if (act_idx == 1) { source_id = ID_LASER_BEAM; }
+                            else if (act_idx == 2) { source_id = ID_HALO; }
+                            else if (act_idx == 3) { source_id = ID_BLESSING; }
+                            else if (act_idx == 4) { source_id = ID_ELECTRIC_SHOCK; }
+                            else { source_id = ID_TWINKLE; }
                             
-                            state.curses[me][static_cast<int>(CurseType::CURSE_FLASH)] = true;
-                            if (power > 0) {
-                                state.current_phase = GamePhase::PHASE_DEFENSE;
-                                state.attacker_id = opp;
-                                state.defender_id = me;
-                                state.current_actor_id = me;
-                                state.pending_attack_power = power;
-                                state.pending_attack_element = ELEM_NONE;
-                                state.pending_absorption = false;
-                                state.pending_is_group_attack = (act_idx < 4);
-                                state.turn_end_state = 5;
-                                return true;
-                            }
-                        }
-                        else if (g_id == 6) { // 冥王神
-                            int power = 0;
-                            if (act_idx == 1) power = 25;
-                            else if (act_idx == 2) power = 20;
-                            else if (act_idx == 3) power = 15;
-                            else if (act_idx == 4) power = 10;
-                            else power = 5;
+                            const CardFeatures &feat = g_card_registry[source_id];
+                            state.pending_attack_source_id = source_id;
+                            state.pending_attack_curse = feat.hit_curse;
                             
                             state.current_phase = GamePhase::PHASE_DEFENSE;
                             state.attacker_id = opp;
                             state.defender_id = me;
                             state.current_actor_id = me;
-                            state.pending_attack_power = power;
-                            state.pending_attack_element = ELEM_DARKNESS;
+                            state.pending_attack_power = feat.attack_power;
+                            state.pending_attack_element = feat.element;
+                            state.pending_absorption = (source_id == ID_BLESSING);
+                            state.pending_deal_same_damage = false;
+                            state.pending_is_group_attack = feat.is_group_attack;
+                            state.turn_end_state = 5;
+                            return true;
+                        }
+                        else if (g_id == 6) { // 冥王神
+                            int source_id = CARD_EMPTY;
+                            if (act_idx == 1) { source_id = ID_WINK; }
+                            else if (act_idx == 2) { source_id = ID_THINKING; }
+                            else if (act_idx == 3) { source_id = ID_OMINOUS_PREMONITION; }
+                            else if (act_idx == 4) { source_id = ID_COUGH; }
+                            else { source_id = ID_HAND_RAISING; }
+                            
+                            const CardFeatures &feat = g_card_registry[source_id];
+                            state.pending_attack_source_id = source_id;
+                            state.pending_attack_curse = feat.hit_curse;
+                            
+                            state.current_phase = GamePhase::PHASE_DEFENSE;
+                            state.attacker_id = opp;
+                            state.defender_id = me;
+                            state.current_actor_id = me;
+                            state.pending_attack_power = feat.attack_power;
+                            state.pending_attack_element = feat.element;
                             state.pending_absorption = false;
-                            state.pending_is_group_attack = false;
+                            state.pending_deal_same_damage = false;
+                            state.pending_is_group_attack = feat.is_group_attack;
                             state.turn_end_state = 5;
                             return true;
                         }
                         else if (g_id == 7) { // 海王神
-                            if (act_idx == 1) state.hp[opp] = std::min(99, state.hp[opp] + 25);
-                            else if (act_idx == 2) state.hp[opp] = std::min(99, state.hp[opp] + 15);
-                            else if (act_idx == 3) state.mp[opp] = std::min(99, state.mp[opp] + 20);
-                            else if (act_idx == 4) state.mp[opp] = std::min(99, state.mp[opp] + 10);
+                            int source_id = CARD_EMPTY;
+                            if (act_idx == 1) { state.hp[opp] = std::min(99, state.hp[opp] + 10); source_id = ID_HEALTHY_SEAFOOD_SOUP; }
+                            else if (act_idx == 2) { state.hp[opp] = std::min(99, state.hp[opp] + 5); source_id = ID_SEAFOOD_SOUP; }
+                            else if (act_idx == 3) { state.mp[opp] = std::min(99, state.mp[opp] + 10); source_id = ID_FRESH_BEACH_AROMA; }
+                            else if (act_idx == 4) { state.mp[opp] = std::min(99, state.mp[opp] + 5); source_id = ID_BEACH_AROMA; }
                             else {
                                 state.sickness[opp] = 0;
                                 for (int j = 0; j < 4; ++j) state.curses[opp][j] = false;
+                                source_id = ID_SOUND_OF_RIPPLES;
                             }
+                            state.pending_attack_source_id = source_id;
                         }
                         else if (g_id == 8) { // 金星神
-                            int drain = 0;
-                            if (act_idx == 1) drain = 15;
-                            else if (act_idx == 2) drain = 10;
-                            else if (act_idx == 3) drain = 8;
-                            else if (act_idx == 4) drain = 5;
-                            else drain = 2;
-                            
-                            int total_paid = 0;
-                            if (state.money[me] >= drain) {
-                                state.money[me] -= drain;
-                                total_paid = drain;
-                            } else {
-                                total_paid += state.money[me];
-                                int remaining = drain - state.money[me];
-                                state.money[me] = 0;
-                                
-                                if (state.mp[me] >= remaining) {
-                                    state.mp[me] -= remaining;
-                                    total_paid += remaining;
-                                } else {
-                                    total_paid += state.mp[me];
-                                    remaining -= state.mp[me];
-                                    state.mp[me] = 0;
-                                    state.hp[me] = std::max(0, state.hp[me] - remaining);
-                                }
+                            int source_id = CARD_EMPTY;
+                            if (act_idx == 1) { 
+                                // お互いお金+1
+                                state.money[0] = std::min(99, state.money[0] + 1);
+                                state.money[1] = std::min(99, state.money[1] + 1);
+                                source_id = ID_COIN_SCATTERING; 
                             }
-                            state.money[opp] = std::min(99, state.money[opp] + total_paid);
+                            else if (act_idx == 2) { 
+                                // 自分(opp)にお金+20
+                                state.money[opp] = std::min(99, state.money[opp] + 20);
+                                source_id = ID_LUXURY_ACCESSORY; 
+                            }
+                            else if (act_idx == 3) { 
+                                // 相手(me)にお金+5
+                                state.money[me] = std::min(99, state.money[me] + 5);
+                                source_id = ID_BRIBE; 
+                            }
+                            else if (act_idx == 4) { 
+                                // 自分(opp)にお金+8
+                                state.money[opp] = std::min(99, state.money[opp] + 8);
+                                source_id = ID_LITTLE_SOMETHING; 
+                            }
+                            else { 
+                                // 罰金 (没収3、反射可能)
+                                source_id = ID_FINE; 
+                                state.current_phase = GamePhase::PHASE_DEFENSE;
+                                state.attacker_id = opp;
+                                state.defender_id = me;
+                                state.current_actor_id = me;
+                                state.pending_attack_power = 3;
+                                state.pending_attack_element = ELEM_NONE;
+                                state.pending_absorption = false;
+                                state.pending_deal_same_damage = false;
+                                state.pending_is_group_attack = false;
+                                state.pending_attack_source_id = source_id;
+                                state.turn_end_state = 5;
+                                return true;
+                            }
                             
-                            if (state.hp[me] == 0) {
-                                bool paused = run_death_check(state);
-                                if (paused) {
+                            state.pending_attack_source_id = source_id;
+                        }
+                        else if (g_id == 9) { // 地球神
+                            int drawn_card_id = draw_card(state.rng);
+                            const CardFeatures &feat = g_card_registry[drawn_card_id];
+
+                            // 1. 防具、奇跡、またはメインで使用できない雑貨 ➡ 手札に加わる
+                            bool is_passive_sundry = feat.is_sundry && !(feat.usage_timing & TIMING_MAIN_SUNDRY);
+                            if (feat.is_defense || feat.is_miracle || is_passive_sundry) {
+                                int empty_slot = -1;
+                                for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+                                    if (state.true_hand[opp][i] == CARD_EMPTY) {
+                                        empty_slot = i;
+                                        break;
+                                    }
+                                }
+                                if (empty_slot != -1) {
+                                    state.true_hand[opp][empty_slot] = drawn_card_id;
+                                    state.is_known_to_opp[opp][empty_slot] = false;
+                                    state.is_used[opp][empty_slot] = false;
+                                } else {
+                                    std::vector<int> candidates;
+                                    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+                                        if (!state.is_used[opp][i]) {
+                                            candidates.push_back(i);
+                                        }
+                                    }
+                                    if (!candidates.empty()) {
+                                        int rand_idx = std::uniform_int_distribution<int>(0, candidates.size() - 1)(state.rng);
+                                        int discard_slot = candidates[rand_idx];
+                                        clear_hand_slot(state, opp, discard_slot);
+                                        state.true_hand[opp][discard_slot] = drawn_card_id;
+                                        state.is_known_to_opp[opp][discard_slot] = false;
+                                        state.is_used[opp][discard_slot] = false;
+                                    }
+                                }
+                                state.turn_end_state = 5;
+                            }
+                            // 2. 両替 (ID_EXCHANGE) ➡ 自分に使う
+                            else if (drawn_card_id == ID_EXCHANGE) {
+                                int sum = state.hp[opp] + state.mp[opp] + state.money[opp];
+                                int x = std::uniform_int_distribution<int>(0, sum)(state.rng);
+                                int y = std::uniform_int_distribution<int>(0, sum)(state.rng);
+                                if (x > y) std::swap(x, y);
+                                state.hp[opp] = x;
+                                state.mp[opp] = y - x;
+                                state.money[opp] = sum - y;
+                                if (state.hp[opp] == 0) {
+                                    run_death_check(state);
+                                }
+                                state.turn_end_state = 5;
+                            }
+                            // 3. 売る (ID_SELL) ➡ 対戦相手に使う
+                            else if (drawn_card_id == ID_SELL) {
+                                std::vector<int> sell_candidates;
+                                for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+                                    if (state.true_hand[opp][i] != CARD_EMPTY && !state.is_used[opp][i]) {
+                                        sell_candidates.push_back(i);
+                                    }
+                                }
+                                if (!sell_candidates.empty()) {
+                                    int rand_idx = std::uniform_int_distribution<int>(0, sell_candidates.size() - 1)(state.rng);
+                                    int sell_slot = sell_candidates[rand_idx];
+                                    
+                                    state.attacker_id = opp;
+                                    state.defender_id = me;
+                                    state.current_actor_id = me;
+                                    state.staged_cards[opp][0] = -1; // 地球神フラグ
+                                    state.staged_cards[opp][1] = sell_slot;
+                                    state.num_staged_cards[opp] = 2;
+                                    state.current_phase = GamePhase::PHASE_SELL_SELECT_MIRROR;
                                     state.turn_end_state = 5;
                                     return true;
                                 }
+                                state.turn_end_state = 5;
+                            }
+                            // 4. 買う (ID_BUY) ➡ 対戦相手に使う
+                            else if (drawn_card_id == ID_BUY) {
+                                state.attacker_id = opp;
+                                state.defender_id = me;
+                                state.current_actor_id = me;
+                                state.staged_cards[opp][0] = -1; // 地球神フラグ
+                                state.num_staged_cards[opp] = 1;
+                                state.current_phase = GamePhase::PHASE_BUY_SELECT_MIRROR;
+                                state.turn_end_state = 5;
+                                return true;
+                            }
+                            // 5. 武器 ➡ 対戦相手に使う
+                            else if (feat.is_weapon) {
+                                state.current_phase = GamePhase::PHASE_DEFENSE;
+                                state.attacker_id = opp;
+                                state.defender_id = me;
+                                state.current_actor_id = me;
+                                state.pending_attack_source_id = drawn_card_id;
+                                state.pending_attack_power = feat.attack_power;
+                                state.pending_attack_element = feat.element;
+                                state.pending_absorption = false;
+                                state.pending_deal_same_damage = false;
+                                state.pending_is_group_attack = feat.is_group_attack;
+                                state.turn_end_state = 5;
+                                return true;
+                            }
+                            // 6. 夜空のホウキ (ID_NOCTURNAL_BROOM) ➡ 対戦相手に使う
+                            else if (drawn_card_id == ID_NOCTURNAL_BROOM) {
+                                apply_card_effects_to_target(state, me, {drawn_card_id});
+                                state.turn_end_state = 5;
+                            }
+                            // 7. 女神の石けん (ID_GODDESS_S_SOAP) ➡ 対戦相手に使う
+                            else if (drawn_card_id == ID_GODDESS_S_SOAP) {
+                                apply_card_effects_to_target(state, me, {drawn_card_id});
+                                state.turn_end_state = 5;
+                            }
+                            // 8. その他の雑貨 ➡ 自分に使う
+                            else {
+                                apply_card_effects_to_target(state, opp, {drawn_card_id});
+                                if (state.current_phase == GamePhase::PHASE_DEFENSE || state.current_phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
+                                    state.turn_end_state = 5;
+                                    return true;
+                                }
+                                state.turn_end_state = 5;
                             }
                         }
-                        else if (g_id == 9) { // 地球神
-                            draw_card_to_hand(state, opp);
-                        }
                         else if (g_id == 10) { // 月神
-                            Element random_elem = static_cast<Element>(std::uniform_int_distribution<int>(ELEM_FIRE, ELEM_DARKNESS)(state.rng));
-                            state.current_phase = GamePhase::PHASE_MIRACLE_DEFENSE;
-                            state.attacker_id = opp;
-                            state.defender_id = me;
-                            state.current_actor_id = me;
-                            state.pending_attack_power = 10;
-                            state.pending_attack_element = random_elem;
-                            state.pending_absorption = false;
-                            state.pending_is_group_attack = false;
-                            state.turn_end_state = 5;
-                            return true;
+                            // 28種類の奇跡（壁 ID_WALL と 乱気流 ID_TURBULENCE を除く）
+                            const std::vector<int> MOON_MIRACLES = {
+                                ID_FIREBALL, ID_ICE, ID_DARKNESS, ID_BIG_TREE, ID_ROCK, ID_FLAME, ID_ABSORPTION,
+                                ID_METEOR, ID_WATERFALL, ID_WIND, ID_HEAVEN_WIND, ID_FOG, ID_DREAM, ID_DARK_CLOUD,
+                                ID_FLASH, ID_SMOKE, ID_AVALANCHE, ID_THUNDER, ID_MUDFLOW, ID_MAGMA, ID_ICE_AGE,
+                                ID_AURA, ID_MIRAGE, ID_SPRING, ID_TREASURE, ID_TONE, ID_SONG, ID_RELEASE
+                            };
+                            int rand_idx = std::uniform_int_distribution<int>(0, MOON_MIRACLES.size() - 1)(state.rng);
+                            int chosen_miracle = MOON_MIRACLES[rand_idx];
+
+                            if (chosen_miracle == ID_AURA) { // オーラ + 満月刀 (物理ATK20)
+                                int source_id = ID_FULL_MOON_BLADE;
+                                state.current_phase = GamePhase::PHASE_DEFENSE;
+                                state.attacker_id = opp;
+                                state.defender_id = me;
+                                state.current_actor_id = me;
+                                state.pending_attack_power = 20; // 10 * 2
+                                state.pending_attack_element = ELEM_NONE;
+                                state.pending_absorption = false;
+                                state.pending_deal_same_damage = false;
+                                state.pending_is_group_attack = false;
+                                state.pending_attack_source_id = source_id;
+                                state.turn_end_state = 5;
+                                return true;
+                            }
+                            else if (chosen_miracle == ID_MIRAGE) { // 蜃気楼 + 満月刀 (物理ATK10 全体)
+                                int source_id = ID_FULL_MOON_BLADE;
+                                state.current_phase = GamePhase::PHASE_DEFENSE;
+                                state.attacker_id = opp;
+                                state.defender_id = me;
+                                state.current_actor_id = me;
+                                state.pending_attack_power = 10;
+                                state.pending_attack_element = ELEM_NONE;
+                                state.pending_absorption = false;
+                                state.pending_deal_same_damage = false;
+                                state.pending_is_group_attack = true; // 全体攻撃
+                                state.pending_attack_source_id = source_id;
+                                state.turn_end_state = 5;
+                                return true;
+                            }
+                            else if (chosen_miracle == ID_TONE || chosen_miracle == ID_SONG ||
+                                     chosen_miracle == ID_RELEASE || chosen_miracle == ID_SPRING ||
+                                     chosen_miracle == ID_TREASURE) {
+                                apply_card_effects_to_target(state, opp, {chosen_miracle});
+                                state.turn_end_state = 5;
+                            }
+                            else { // その他奇跡攻撃 21種類: 奇跡防御フェイズ起動
+                                const CardFeatures &feat = g_card_registry[chosen_miracle];
+                                state.current_phase = GamePhase::PHASE_MIRACLE_DEFENSE;
+                                state.attacker_id = opp;
+                                state.defender_id = me;
+                                state.current_actor_id = me;
+                                state.pending_attack_power = feat.attack_power;
+                                state.pending_attack_element = feat.element;
+                                state.pending_absorption = (chosen_miracle == ID_ABSORPTION);
+                                state.pending_deal_same_damage = false;
+                                state.pending_is_group_attack = feat.is_group_attack;
+                                state.pending_attack_curse = feat.hit_curse;
+                                state.pending_attack_source_id = chosen_miracle;
+                                state.turn_end_state = 5;
+                                return true;
+                            }
                         }
                     }
                 }

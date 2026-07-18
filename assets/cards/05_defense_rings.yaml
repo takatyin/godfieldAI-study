@@ -43,6 +43,7 @@
   price: 10
   element: 光
   drop_rate: 1
+  id_str: armor/uranus-ring
 - name: 冥王の指輪
   description: 反撃暗雲
   type: defense
@@ -51,6 +52,7 @@
   price: 10
   element: 闇
   drop_rate: 1
+  id_str: armor/pluto-ring
 - name: 海王の指輪
   description: 反撃+MP{被ダメージ*2}
   type: defense
@@ -58,6 +60,7 @@
   - atk_defence_phase
   price: 10
   drop_rate: 1
+  id_str: armor/neptune-ring
 - name: 金星の指輪
   description: 反撃￥{被ダメージ}没収
   type: defense

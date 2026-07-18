@@ -182,7 +182,7 @@ def test_sickness_damage_and_healing_turn_end():
 
     # 1. 地獄病でのダメージ (悪化しないシードを適当に使うか、ダメージ解決を確認)
     runner = SimulationRunner()
-    runner.state.seed_rng(0) # 悪化が起こらないシード
+    runner.state.seed_rng(0)  # 悪化が起こらないシード
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
     runner.state.set_hp(0, 10)
@@ -229,7 +229,7 @@ def test_guardian_action_mars_fire_attack():
         test_run.state.current_actor_id = 0
         test_run.state.set_hp(0, 40)
         test_run.state.set_hp(1, 40)
-        test_run.state.set_guardian(1, 1) # P1に火星神(1)を設定
+        test_run.state.set_guardian(1, 1)  # P1に火星神(1)を設定
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
@@ -270,7 +270,7 @@ def test_guardian_action_venus_golden_drain():
     """
     shield_id = find_card_by_name("革の服")
 
-    # 行動を引き当てるシードを探索
+    # 罰金（防御フェイズ PHASE_DEFENSE 起動）となるシードを探す
     act_seed = None
     for seed in range(500):
         test_run = SimulationRunner()
@@ -281,14 +281,14 @@ def test_guardian_action_venus_golden_drain():
         test_run.state.set_hp(1, 40)
         test_run.state.set_money(0, 10)
         test_run.state.set_money(1, 10)
-        test_run.state.set_guardian(1, 8) # 金星神(8)
+        test_run.state.set_guardian(1, 8)  # 金星神(8)
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
         test_run.step(ActionType.ACTION_SELECT_HAND_0)
         test_run.step(ActionType.ACTION_CONFIRM)
 
-        if test_run.state.get_money(1) > 10:
+        if test_run.state.current_phase == GamePhase.PHASE_DEFENSE:
             act_seed = seed
             break
 
@@ -309,9 +309,15 @@ def test_guardian_action_venus_golden_drain():
     runner.step(ActionType.ACTION_SELECT_HAND_0)
     runner.step(ActionType.ACTION_CONFIRM)
 
-    # P0からお金がドレインされ、P1のお金が増えていること
-    assert runner.state.get_money(0) < 10
-    assert runner.state.get_money(1) > 10
+    # 防御フェイズになっていることを確認
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    
+    # 防御側(P0)が無防備CONFIRMで被弾
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # P0からお金がドレインされ(10 -> 7)、P1のお金が増えていること(10 -> 13)
+    assert runner.state.get_money(0) == 7
+    assert runner.state.get_money(1) == 13
 
 
 def test_guardian_action_neptune_support_healing():
@@ -330,7 +336,7 @@ def test_guardian_action_neptune_support_healing():
         test_run.state.set_hp(0, 40)
         test_run.state.set_hp(1, 20)
         test_run.state.set_mp(1, 10)
-        test_run.state.set_guardian(1, 7) # 海王神(7)
+        test_run.state.set_guardian(1, 7)  # 海王神(7)
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
@@ -399,7 +405,7 @@ def test_sickness_only_applies_to_active_player():
     runner.state.current_actor_id = 0
     runner.state.set_hp(0, 40)
     runner.state.set_hp(1, 40)
-    runner.state.set_sickness(1, SicknessType.SICKNESS_HELL) # P1 (Passive) が地獄病
+    runner.state.set_sickness(1, SicknessType.SICKNESS_HELL)  # P1 (Passive) が地獄病
     runner.state.set_true_hand(0, 0, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
@@ -426,7 +432,7 @@ def test_normal_attack_kill_and_amulet_revive():
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
     runner.state.set_hp(0, 40)
-    runner.state.set_hp(1, 2) # P1のHPは2 (パンチの攻撃力3で即死)
+    runner.state.set_hp(1, 2)  # P1のHPは2 (パンチの攻撃力3で即死)
     runner.state.set_true_hand(0, 0, punch_id)
     runner.state.set_true_hand(1, 0, amulet_id)
     runner.state.set_true_hand(1, 1, shield_id)
@@ -473,7 +479,7 @@ def test_heaven_escalation_death_amulet_revive_sickness_persists():
         test_run.step(ActionType.ACTION_SELECT_HAND_0)
         test_run.step(ActionType.ACTION_CONFIRM)
 
-        if test_run.state.is_done: # 天国病悪化死で終了したシード
+        if test_run.state.is_done:  # 天国病悪化死で終了したシード
             escalate_seed = seed
             break
 
@@ -511,7 +517,7 @@ def test_kill_opp_bow_counter_sickness_death_amulet_revive():
     runner = SimulationRunner()
     # 昇天弓が確実に命中する乱数シード 0 を使用
     runner.state.seed_rng(0)
-    
+
     punch_id = find_card_by_name("パンチ")
     bow_id = find_card_by_name("昇天弓")
     amulet_id = find_card_by_name("太陽のお守り")
@@ -519,11 +525,11 @@ def test_kill_opp_bow_counter_sickness_death_amulet_revive():
 
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    
-    runner.state.set_hp(0, 20) # 自分(P0)のHPは20
+
+    runner.state.set_hp(0, 20)  # 自分(P0)のHPは20
     runner.state.set_hp(1, 3)  # 相手(P1)のHPは3 (パンチで即死)
-    runner.state.set_guardian(1, 1) # 相手に火星神を設定
-    
+    runner.state.set_guardian(1, 1)  # 相手に火星神を設定
+
     runner.state.set_true_hand(0, 0, punch_id)
     runner.state.set_true_hand(0, 1, amulet_id)
     runner.state.set_true_hand(1, 0, bow_id)
@@ -571,9 +577,9 @@ def test_guardian_attack_kills_player_defeat():
         test_run.state.seed_rng(seed)
         test_run.state.current_phase = GamePhase.PHASE_MAIN
         test_run.state.current_actor_id = 0
-        test_run.state.set_hp(0, 5) # 自分のHPは5（火星神の最低威力5でも死亡する値）
+        test_run.state.set_hp(0, 5)  # 自分のHPは5（火星神の最低威力5でも死亡する値）
         test_run.state.set_hp(1, 40)
-        test_run.state.set_guardian(1, 1) # 相手に火星神を設定
+        test_run.state.set_guardian(1, 1)  # 相手に火星神を設定
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
@@ -622,18 +628,18 @@ def test_kill_opp_bow_counter_kills_player_draw():
     - 双方が死亡した状態になり、ゲームが終了（is_done=True）し、引き分け（p0_reward = p1_reward = 0.0）となることを検証。
     """
     runner = SimulationRunner()
-    runner.state.seed_rng(0) # 昇天弓が確実に命中するシード
-    
+    runner.state.seed_rng(0)  # 昇天弓が確実に命中するシード
+
     punch_id = find_card_by_name("パンチ")
     bow_id = find_card_by_name("昇天弓")
     shield_id = find_card_by_name("革の服")
 
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    
-    runner.state.set_hp(0, 15) # 自分のHPは15 (昇天弓の威力30で即死)
+
+    runner.state.set_hp(0, 15)  # 自分のHPは15 (昇天弓の威力30で即死)
     runner.state.set_hp(1, 3)  # 相手のHPは3
-    
+
     runner.state.set_true_hand(0, 0, punch_id)
     runner.state.set_true_hand(1, 0, bow_id)
     runner.state.set_true_hand(1, 1, shield_id)
@@ -671,19 +677,19 @@ def test_kill_opp_bow_counter_hp1_sickness_death_draw():
     - お守りがないためそのまま双方が死亡した状態になり、ゲーム終了（is_done=True）、引き分け（報酬 0.0）となることを検証。
     """
     runner = SimulationRunner()
-    runner.state.seed_rng(0) # 昇天弓が確実に命中するシード
-    
+    runner.state.seed_rng(0)  # 昇天弓が確実に命中するシード
+
     punch_id = find_card_by_name("パンチ")
     bow_id = find_card_by_name("昇天弓")
     shield_id = find_card_by_name("革の服")
 
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    
-    runner.state.set_hp(0, 31) # 自分のHPは31
+
+    runner.state.set_hp(0, 31)  # 自分のHPは31
     runner.state.set_hp(1, 3)  # 相手のHPは3
-    runner.state.set_sickness(0, SicknessType.SICKNESS_COLD) # 自分は風邪
-    
+    runner.state.set_sickness(0, SicknessType.SICKNESS_COLD)  # 自分は風邪
+
     runner.state.set_true_hand(0, 0, punch_id)
     runner.state.set_true_hand(1, 0, bow_id)
     runner.state.set_true_hand(1, 1, shield_id)
@@ -738,7 +744,7 @@ def test_heaven_wind_mutual_seizure_draw():
         test_run.state.set_hp(1, 40)
         test_run.state.set_sickness(0, SicknessType.SICKNESS_HEAVEN)
         test_run.state.set_sickness(1, SicknessType.SICKNESS_HEAVEN)
-        
+
         test_run.state.set_true_hand(0, 0, wind_id)
         test_run.state.set_true_hand(1, 0, bow_id)
         test_run.state.set_true_hand(1, 1, shield_id)
@@ -764,7 +770,11 @@ def test_heaven_wind_mutual_seizure_draw():
         test_run.step(ActionType.ACTION_CONFIRM)
 
         # 双方が死亡して引き分け終了となったシードを採用
-        if test_run.state.is_done and test_run.state.get_hp(0) == 0 and test_run.state.get_hp(1) == 0:
+        if (
+            test_run.state.is_done
+            and test_run.state.get_hp(0) == 0
+            and test_run.state.get_hp(1) == 0
+        ):
             draw_seed = seed
             break
 
@@ -776,12 +786,12 @@ def test_heaven_wind_mutual_seizure_draw():
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
     runner.state.set_mp(0, 20)
-    
-    runner.state.set_hp(0, 31) # 自分のHPは31
-    runner.state.set_hp(1, 40) # 相手のHPは40
-    runner.state.set_sickness(0, SicknessType.SICKNESS_HEAVEN) # 自分も天国病
-    runner.state.set_sickness(1, SicknessType.SICKNESS_HEAVEN) # 相手も天国病
-    
+
+    runner.state.set_hp(0, 31)  # 自分のHPは31
+    runner.state.set_hp(1, 40)  # 相手のHPは40
+    runner.state.set_sickness(0, SicknessType.SICKNESS_HEAVEN)  # 自分も天国病
+    runner.state.set_sickness(1, SicknessType.SICKNESS_HEAVEN)  # 相手も天国病
+
     runner.state.set_true_hand(0, 0, wind_id)
     runner.state.set_true_hand(1, 0, bow_id)
     runner.state.set_true_hand(1, 1, shield_id)
@@ -823,8 +833,8 @@ def test_heaven_wind_on_self_revive_heals():
     - その後ターン終了時、発作はこのターン終了時には起きていないため、通常の天国病の+5回復が適用されて最終HPが15になる。
     """
     runner = SimulationRunner()
-    runner.state.seed_rng(0) # ターン終了時に悪化（5%）しないシード
-    
+    runner.state.seed_rng(0)  # ターン終了時に悪化（5%）しないシード
+
     wind_id = find_card_by_name("＜天国風＞")
     amulet_id = find_card_by_name("太陽のお守り")
     shield_id = find_card_by_name("革の服")
@@ -832,10 +842,10 @@ def test_heaven_wind_on_self_revive_heals():
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
     runner.state.set_mp(0, 20)
-    
+
     runner.state.set_hp(0, 40)
     runner.state.set_sickness(0, SicknessType.SICKNESS_HEAVEN)
-    
+
     runner.state.set_true_hand(0, 0, wind_id)
     runner.state.set_true_hand(0, 1, amulet_id)
     runner.state.set_true_hand(0, 2, shield_id)
@@ -863,22 +873,22 @@ def test_simultaneous_death_ascension_bow_no_trigger_draw():
     """
     runner = SimulationRunner()
     runner.state.seed_rng(0)
-    
+
     bow_id = find_card_by_name("昇天弓")
     shield_id = find_card_by_name("革の服")
 
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    
+
     # 両者のHPを0（同時死亡状態）に設定
     runner.state.set_hp(0, 0)
     runner.state.set_hp(1, 0)
-    
+
     # 手札をすべてクリアしてから、必要なカードのみを設定（太陽のお守りがない状態を作る）
     for i in range(9):
         runner.state.set_true_hand(0, i, godfield_core.CARD_EMPTY)
         runner.state.set_true_hand(1, i, godfield_core.CARD_EMPTY)
-    
+
     # P0は手札0に革の服（捨てる用）、手札1に昇天弓を所持。P1は手札0に革の服を所持。
     runner.state.set_true_hand(0, 0, shield_id)
     runner.state.set_true_hand(0, 1, bow_id)
@@ -898,21 +908,22 @@ def test_simultaneous_death_ascension_bow_no_trigger_draw():
 
 def test_venus_drain_kills_active_bow_counter_resumes_state5():
     """
-    検証内容: 金星神（Venus）のドレインにより手番プレイヤーが死亡して昇天弓反撃が発生し一時中断した際、
-    防御完了後に金星神の行動が再評価（無限実行）されず、正常にState 5へ遷移してクリーンアップされること。
+    検証内容: 金星神（Venus）の罰金により手番プレイヤーが死亡して昇天弓反撃が発生した際、
+    ゲームが正常に終了することを確認。
     """
     # 金星神の行動を引くシードを探索
     act_seed = None
     shield_id = find_card_by_name("革の服")
     bow_id = find_card_by_name("昇天弓")
-    
+
     for seed in range(500):
         test_run = SimulationRunner()
         test_run.state.seed_rng(seed)
         test_run.state.current_phase = GamePhase.PHASE_MAIN
         test_run.state.current_actor_id = 0
-        test_run.state.set_hp(0, 2)  # 金星神のドレイン（最低2）で死亡する値
+        test_run.state.set_hp(0, 2)
         test_run.state.set_hp(1, 40)
+        test_run.state.set_money(0, 0) # お金 0 にすることで、没収3が直接 HP にいき死亡するようにする
         test_run.state.set_guardian(1, 8)  # 相手(P1)に金星神を設定
         test_run.state.set_true_hand(0, 0, shield_id)
         test_run.state.set_true_hand(0, 1, bow_id)
@@ -921,12 +932,15 @@ def test_venus_drain_kills_active_bow_counter_resumes_state5():
         test_run.step(ActionType.ACTION_SELECT_HAND_0)
         test_run.step(ActionType.ACTION_CONFIRM)
 
-        # ドレインにより昇天弓反撃フェイズ（PHASE_DEFENSE, アクターP1）へ遷移したシードを探す
-        if test_run.state.current_phase == GamePhase.PHASE_DEFENSE and test_run.state.current_actor_id == 1:
+        # 罰金は防御フェイズ（PHASE_DEFENSE, アクターP0）へ遷移する
+        if (
+            test_run.state.current_phase == GamePhase.PHASE_DEFENSE
+            and test_run.state.current_actor_id == 0
+        ):
             act_seed = seed
             break
 
-    assert act_seed is not None, "金星神のドレイン撃破シードが見つかりませんでした"
+    assert act_seed is not None, "金星神の罰金攻撃シードが見つかりませんでした"
 
     runner = SimulationRunner()
     runner.state.seed_rng(act_seed)
@@ -934,6 +948,7 @@ def test_venus_drain_kills_active_bow_counter_resumes_state5():
     runner.state.current_actor_id = 0
     runner.state.set_hp(0, 2)
     runner.state.set_hp(1, 40)
+    runner.state.set_money(0, 0)
     runner.state.set_guardian(1, 8)
     runner.state.set_true_hand(0, 0, shield_id)
     runner.state.set_true_hand(0, 1, bow_id)
@@ -943,16 +958,23 @@ def test_venus_drain_kills_active_bow_counter_resumes_state5():
     runner.step(ActionType.ACTION_SELECT_HAND_0)
     runner.step(ActionType.ACTION_CONFIRM)
 
-    # 金星神にドレインされてP0が死亡、昇天弓が起動してP1の防御フェイズへ遷移していること
+    # 金星神の罰金による防御フェイズ(P0)になっていること
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 0
+
+    # 2. P0が被弾する(CONFIRM) -> 没収3が直接HPにきて死亡 -> 昇天弓が起動
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 昇天弓が起動してP1の防御フェイズへ遷移していること
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
     assert runner.state.current_actor_id == 1
     assert runner.state.get_hp(0) == 0
 
-    # 2. P1が反撃を防御せずに素通し（Confirm）
+    # 3. P1が反撃を防御せずに素通し（Confirm）
     runner.step(ActionType.ACTION_CONFIRM)
 
     # P0はすでに死亡しており、P1は生き残っている。
-    # 金星神の再判定はスキップされて正常にゲームが終了し、P1の勝利となっていること。
+    # ゲームが終了し、P1の勝利となっていること。
     assert runner.state.is_done is True
     assert runner.state.p0_reward == -1.0
     assert runner.state.p1_reward == 1.0
@@ -1014,8 +1036,129 @@ def test_ascension_bow_multiple_first_miss_second_hit():
     assert runner.state.get_pending_ascension_bows(0) == 0
 
 
+def test_colored_leaves_reflection():
+    """
+    検証内容: 木星神の「紅葉」(夢付与、攻撃力0)が反射可能であることの検証。
+    - 相手(P1)の木星神が「紅葉」を使い、P0がスーパーミラーで反射。
+    - 反射された結果、P1自身が夢状態になり、P0は無事であることを確認。
+    """
+    super_mirror_id = find_card_by_name("スーパーミラー")
+    shield_id = find_card_by_name("革の服")
+    
+    act_seed = None
+    for seed in range(500):
+        test_run = SimulationRunner()
+        test_run.state.seed_rng(seed)
+        test_run.state.current_phase = GamePhase.PHASE_MAIN
+        test_run.state.current_actor_id = 0
+        test_run.state.set_hp(0, 40)
+        test_run.state.set_hp(1, 40)
+        test_run.state.set_mp(0, 40)
+        test_run.state.set_mp(1, 40)
+        test_run.state.set_guardian(1, 3)  # 木星神(3)
+        test_run.state.set_true_hand(0, 0, super_mirror_id)
+        test_run.state.set_true_hand(0, 1, shield_id)
+
+        # メインフェイズで手札1を捨てる
+        test_run.step(ActionType.ACTION_DISCARD)
+        test_run.step(ActionType.ACTION_SELECT_HAND_1)
+        test_run.step(ActionType.ACTION_CONFIRM)
+
+        # 紅葉(COLORED_LEAVES)の防御フェイズに移行したシードを探す
+        if (
+            test_run.state.current_phase == GamePhase.PHASE_DEFENSE
+            and test_run.state.pending_attack_source_id == find_card_by_name("gurdians/colored-leaves")
+        ):
+            act_seed = seed
+            break
+
+    assert act_seed is not None, "木星神の紅葉シードが見つかりませんでした"
+
+    runner = SimulationRunner()
+    runner.state.seed_rng(act_seed)
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_hp(0, 40)
+    runner.state.set_hp(1, 40)
+    runner.state.set_mp(0, 40)
+    runner.state.set_mp(1, 40)
+    runner.state.set_guardian(1, 3)
+    runner.state.set_true_hand(0, 0, super_mirror_id)
+    runner.state.set_true_hand(0, 1, shield_id)
+
+    # 1. ターン終了 Confirm (手札1を捨てる)
+    runner.step(ActionType.ACTION_DISCARD)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 防御フェイズ(P0)へ
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 0
+
+    # 2. スーパーミラーを選択して反射(CONFIRM)
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 反射されて相手(P1)の防御フェイズになること
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    # 3. 相手(P1)が防御せずCONFIRM (被弾)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 元の攻撃者(P1)が夢状態になり、P0は正常であること
+    assert runner.state.get_curses(1, godfield_core.CurseType.CURSE_DREAM) is True
+    assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_DREAM) is False
 
 
+def test_little_something_targets_self():
+    """
+    検証内容: 金星神の「つまらないもの」(自分お金+8)および「高級アクセサリー」(自分お金+20)の検証。
+    - 相手(P1)の金星神がこれらを実行した際、P1自身にお金が加算されることを確認。
+    """
+    shield_id = find_card_by_name("革の服")
 
+    # つまらないもの または 高級アクセサリーが起動するシードを探す
+    target_seed = None
+    for seed in range(500):
+        test_run = SimulationRunner()
+        test_run.state.seed_rng(seed)
+        test_run.state.current_phase = GamePhase.PHASE_MAIN
+        test_run.state.current_actor_id = 0
+        test_run.state.set_hp(0, 40)
+        test_run.state.set_hp(1, 40)
+        test_run.state.set_money(0, 10)
+        test_run.state.set_money(1, 10)
+        test_run.state.set_guardian(1, 8)  # 金星神(8)
+        test_run.state.set_true_hand(0, 0, shield_id)
 
+        test_run.step(ActionType.ACTION_DISCARD)
+        test_run.step(ActionType.ACTION_SELECT_HAND_0)
+        test_run.step(ActionType.ACTION_CONFIRM)
+
+        # 10 + 8 = 18 または 10 + 20 = 30 になっているシード
+        if test_run.state.get_money(1) in (18, 30):
+            target_seed = seed
+            break
+
+    assert target_seed is not None, "金星神の自己バフシードが見つかりませんでした"
+
+    runner = SimulationRunner()
+    runner.state.seed_rng(target_seed)
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_hp(0, 40)
+    runner.state.set_hp(1, 40)
+    runner.state.set_money(0, 10)
+    runner.state.set_money(1, 10)
+    runner.state.set_guardian(1, 8)
+    runner.state.set_true_hand(0, 0, shield_id)
+
+    runner.step(ActionType.ACTION_DISCARD)
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # P1のお金が増えており(18 または 30)、P0は変化なし(10)であることを確認
+    assert runner.state.get_money(1) in (18, 30)
+    assert runner.state.get_money(0) == 10
 

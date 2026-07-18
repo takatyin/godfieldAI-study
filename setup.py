@@ -1,6 +1,7 @@
-from setuptools import setup, Extension
-import pybind11
 import sys
+
+import pybind11
+from setuptools import Extension, setup
 
 # Platform-specific flags
 if sys.platform == "win32":

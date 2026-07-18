@@ -1,12 +1,11 @@
 import asyncio
-import json
-import time
+
+import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
 
-from godfield_rl.env_wrapper import GodFieldVectorEnv
 from godfield_rl.agents.random_agent import RandomAgent
+from godfield_rl.env_wrapper import GodFieldVectorEnv
 
 app = FastAPI()
 
@@ -23,34 +22,36 @@ env = GodFieldVectorEnv(num_envs=1)
 agent_p0 = RandomAgent(env.action_space)
 agent_p1 = RandomAgent(env.action_space)
 
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    
+
     # Reset environment
     obs, _ = env.reset()
-    
+
     try:
         while True:
             # 1. Send current state to the client
             state_json = env.core_env.get_state_json(0)
             await websocket.send_text(state_json)
-            
+
             # Wait for client to request next step (or just auto-step)
             data = await websocket.receive_text()
             if data == "step":
                 # Both agents take an action
                 action_p0 = agent_p0.predict_batch(obs)
                 # env.step handles action_p1 internally as random for now in the wrapper
-                # Wait, our wrapper generates random actions for p1. 
+                # Wait, our wrapper generates random actions for p1.
                 # Let's just use the wrapper's built-in step.
                 obs, rewards, dones, _, _ = env.step(action_p0)
-                
+
                 # Small delay to make it viewable if it's auto-stepping
                 await asyncio.sleep(0.1)
-                
+
     except Exception as e:
         print(f"WebSocket connection closed: {e}")
+
 
 if __name__ == "__main__":
     print("Starting visualization server on http://localhost:8000")

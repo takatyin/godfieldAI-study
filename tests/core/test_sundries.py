@@ -1,5 +1,5 @@
 import godfield_core
-from godfield_core import ActionType, CurseType, SicknessType, GamePhase
+from godfield_core import ActionType, CurseType, GamePhase, SicknessType
 from tests.core.test_utils import SimulationRunner, find_card_by_name, find_card_by_type
 
 
@@ -192,7 +192,7 @@ def test_guardian_pot_dwells_guardian():
     """
     runner = SimulationRunner()
     pot_id = find_card_by_name("守護封印のつぼ")
-    
+
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
     runner.state.set_guardian(0, 0)
@@ -212,7 +212,7 @@ def test_thump_tear_random_healing_or_damage():
     """
     runner = SimulationRunner()
     tear_id = find_card_by_name("ドキドキ涙")
-    
+
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
     runner.state.set_hp(0, 40)

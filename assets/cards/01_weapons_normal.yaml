@@ -75,6 +75,7 @@
   price: 10
   attack_power: 3
   drop_rate: 1
+  id_str: weapons/saw-boom-boom
 - name: ブーメラン
   type: weapon
   usage_timing:
@@ -128,6 +129,7 @@
   defense_power: 7
   drop_rate: 1
 - name: 乱弾武剣
+  id_str: weapons/bouncing-sword
   description: 無属性武器を弾く
   type: weapon
   reaction_type: bounce
@@ -180,6 +182,7 @@
   attack_power: 7
   drop_rate: 8
 - name: ゴーストソード
+  id_str: weapons/ghost-sword
   description: 与えたダメージ分HPを吸収する
   type: weapon
   usage_timing:
@@ -334,6 +337,7 @@
   attack_power: 12
   drop_rate: 4
 - name: リアルゴーストソード
+  id_str: weapons/real-ghost-sword
   description: 与えたダメージ分HPを吸収する
   type: weapon
   usage_timing:
@@ -403,6 +407,7 @@
   attack_power: 14
   drop_rate: 3
 - name: 邪神の大剣
+  id_str: weapons/evil-broadsword
   description: 与えたダメージ分自分にダメージ
   type: weapon
   usage_timing:
@@ -447,10 +452,11 @@
   drop_rate: 1
   id_str: weapons/god-sword
 - name: マジカルステッキ
+  id_str: weapons/magical-stick
   description: MPを全て消費する攻MP*2
   type: weapon
   usage_timing:
-  - main_sundry_phase
+  - main_atk_phase
   price: 10
   drop_rate: 1
   attack_power: 0

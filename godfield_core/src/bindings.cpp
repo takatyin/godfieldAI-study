@@ -142,8 +142,15 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("pending_attack_power", &InternalState::pending_attack_power)
         .def_readwrite("pending_attack_element", &InternalState::pending_attack_element)
         .def_readwrite("pending_absorption", &InternalState::pending_absorption)
+        .def_readwrite("pending_deal_same_damage", &InternalState::pending_deal_same_damage)
         .def_readwrite("pending_is_group_attack", &InternalState::pending_is_group_attack)
+        .def_readwrite("pending_attack_source_id", &InternalState::pending_attack_source_id)
         .def_readwrite("turn_end_state", &InternalState::turn_end_state)
+        .def_readwrite("remaining_attacks", &InternalState::remaining_attacks)
+        .def_readwrite("base_attack_power", &InternalState::base_attack_power)
+        .def_readwrite("base_attack_element", &InternalState::base_attack_element)
+        .def_readwrite("base_absorption", &InternalState::base_absorption)
+        .def_readwrite("base_deal_same_damage", &InternalState::base_deal_same_damage)
         .def("get_pending_ascension_bows", [](InternalState &s, int p) { return s.pending_ascension_bows[p]; }, py::arg("player_id"))
         .def("set_pending_ascension_bows", [](InternalState &s, int p, int v) { s.pending_ascension_bows[p] = v; }, py::arg("player_id"), py::arg("val"))
         // For array members, pybind11 requires special handling to access by index from python.
@@ -186,6 +193,9 @@ PYBIND11_MODULE(godfield_core, m) {
         .def(
             "get_staged_card", [](InternalState &s, int p, int idx) { return s.staged_cards[p][idx]; },
             py::arg("player_id"), py::arg("staged_idx"))
+        .def(
+            "set_staged_card", [](InternalState &s, int p, int idx, int v) { s.staged_cards[p][idx] = v; },
+            py::arg("player_id"), py::arg("staged_idx"), py::arg("val"))
         .def(
             "get_is_deployed", [](InternalState &s, int p, int idx) { return s.is_deployed[p][idx]; },
             py::arg("player_id"), py::arg("hand_idx"))
@@ -235,10 +245,28 @@ PYBIND11_MODULE(godfield_core, m) {
         },
         "Zero out the state memory preserving RNG");
 
+    m.def(
+        "get_opponent_staged_cards_for_obs", [](const InternalState &state, int me) -> py::list {
+            int opp = 1 - me;
+            py::list result;
+            if (state.num_staged_cards[opp] > 0) {
+                for (int i = 0; i < state.num_staged_cards[opp]; ++i) {
+                    int h_idx = state.staged_cards[opp][i];
+                    result.append(state.true_hand[opp][h_idx]);
+                }
+            } else if (state.pending_attack_source_id != CARD_EMPTY) {
+                result.append(state.pending_attack_source_id);
+            }
+            return result;
+        },
+        "Get opponent staged cards for observation integration validation");
+
     py::class_<EnvPool>(m, "EnvPool")
         .def(py::init<int>(), py::arg("num_envs") = NUM_ENVS)
         .def("reset", &EnvPool::reset, py::arg("seed"))
         .def("step_all", &EnvPool::step_all, py::arg("actions"))
         .def("get_observations", &EnvPool::get_observations)
-        .def("get_ready_env_ids", &EnvPool::get_ready_env_ids);
+        .def("get_ready_env_ids", &EnvPool::get_ready_env_ids)
+        .def("get_state", &EnvPool::get_state, py::arg("env_id"))
+        .def("set_state", &EnvPool::set_state, py::arg("env_id"), py::arg("state"));
 }

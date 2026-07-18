@@ -1,0 +1,76 @@
+# 超常現象 (Phenomena)
+- name: 夕焼け
+  type: sundry
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  id_str: phenomena/afterglow
+
+- name: 濃霧
+  type: sundry
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  id_str: phenomena/dense-fog
+
+- name: きのこ大発生
+  type: sundry
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  id_str: phenomena/mushroom-outbreak
+
+- name: 竜巻
+  type: sundry
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  id_str: phenomena/tornado
+
+- name: 巨大なタライ
+  type: weapon
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  element: 光
+  attack_power: 50
+  id_str: phenomena/gigantic-tub
+
+- name: ブラックホール
+  type: weapon
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  element: 闇
+  attack_power: 30
+  accuracy: 75
+  is_group_attack: true
+  id_str: phenomena/black-hole
+
+- name: 暖流
+  type: sundry
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  id_str: phenomena/warm-current
+
+- name: 金山
+  type: sundry
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  id_str: phenomena/gold-mountain
+
+- name: 磁気嵐
+  type: sundry
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  id_str: phenomena/magnetic-storm
+
+- name: 日食
+  type: sundry
+  usage_timing: [guardian_phase]
+  price: 0
+  drop_rate: 0
+  id_str: phenomena/solar-eclipse

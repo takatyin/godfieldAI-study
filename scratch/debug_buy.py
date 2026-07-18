@@ -1,7 +1,7 @@
 import sys
-sys.path.append('.')
-import godfield_core
-from godfield_core import GamePhase, ActionType
+
+sys.path.append(".")
+from godfield_core import ActionType, GamePhase
 from tests.core.test_utils import SimulationRunner, find_card_by_name
 
 runner2 = SimulationRunner()
@@ -21,11 +21,15 @@ for i in range(1, 18):
 runner2.state.set_true_hand(1, 0, pot_id)
 
 runner2.step(action=ActionType.ACTION_SELECT_HAND_0)
-print(f"After select: {runner2.state.current_phase}, staged: {runner2.state.get_staged_cards(0,0)}")
+print(
+    f"After select: {runner2.state.current_phase}, staged: {runner2.state.get_staged_cards(0, 0)}"
+)
 runner2.step(action=ActionType.ACTION_TARGET_OPP)
 print(f"After target: {runner2.state.current_phase}, actor: {runner2.state.current_actor_id}")
 runner2.step(action=ActionType.ACTION_CONFIRM)
-print(f"After confirm: {runner2.state.current_phase}, actor: {runner2.state.current_actor_id}, staged1: {runner2.state.get_staged_cards(1,0)}")
+print(
+    f"After confirm: {runner2.state.current_phase}, actor: {runner2.state.current_actor_id}, staged1: {runner2.state.get_staged_cards(1, 0)}"
+)
 runner2.step(action=ActionType.ACTION_DEAL_YES)
 print(f"After deal: {runner2.state.current_phase}")
 print(f"Money0: {runner2.state.get_money(0)}, Money1: {runner2.state.get_money(1)}")

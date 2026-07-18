@@ -1,5 +1,5 @@
 import godfield_core
-from godfield_core import ActionType, GamePhase
+from godfield_core import ActionType
 from tests.core.test_utils import SimulationRunner, find_card_by_name
 
 
@@ -104,7 +104,7 @@ def test_high_cost_miracle_cannot_target_without_doll():
 
     # 闇を選択した直後
     runner.step(ActionType.ACTION_SELECT_HAND_0)
-    
+
     # まだコストが踏み倒されていない（不足状態）ため、ターゲット指定は非合法であること
     legal_actions = godfield_core.get_legal_actions(runner.state)
     assert legal_actions[ActionType.ACTION_TARGET_OPP] is False

@@ -1,5 +1,5 @@
 import godfield_core
-from godfield_core import ActionType, GamePhase
+from godfield_core import ActionType
 from tests.core.test_utils import SimulationRunner, find_card_by_name, find_card_by_type
 
 
@@ -21,7 +21,7 @@ def test_element_mixing_light_light():
     runner.step(ActionType.ACTION_SELECT_HAND_0)
     runner.step(ActionType.ACTION_SELECT_HAND_1)
     runner.step(ActionType.ACTION_TARGET_OPP)
-    
+
     assert runner.state.pending_attack_element == godfield_core.Element.ELEM_LIGHT
 
 

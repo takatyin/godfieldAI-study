@@ -68,7 +68,7 @@ def test_exchange_logic_zero_hp_death():
 
     runner.step(action=ActionType.ACTION_SELECT_HAND_0)
     runner.step(action=ActionType.ACTION_TARGET_SELF)
-    runner.step(action=ActionType.ACTION_NUM_0)   # HPを 0 に指定
+    runner.step(action=ActionType.ACTION_NUM_0)  # HPを 0 に指定
     runner.step(action=ActionType.ACTION_NUM_20)  # MPを 20 に指定して確定
 
     # 即死判定
@@ -88,8 +88,8 @@ def test_sell_to_self():
 
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    runner.state.set_money(0, 5)   # お金 5 (5不足)
-    runner.state.set_mp(0, 8)      # MPで5支払う (残り3)
+    runner.state.set_money(0, 5)  # お金 5 (5不足)
+    runner.state.set_mp(0, 8)  # MPで5支払う (残り3)
     runner.state.set_hp(0, 50)
 
     runner.state.set_true_hand(0, 0, sell_id)
@@ -118,8 +118,8 @@ def test_sell_to_opp_accept():
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
     runner.state.set_money(0, 0)
-    runner.state.set_money(1, 4)   # 相手のお金 4 (6不足)
-    runner.state.set_mp(1, 10)     # 相手のMP 10 (残り6支払って4)
+    runner.state.set_money(1, 4)  # 相手のお金 4 (6不足)
+    runner.state.set_mp(1, 10)  # 相手のMP 10 (残り6支払って4)
 
     runner.state.set_true_hand(0, 0, sell_id)
     runner.state.set_true_hand(0, 1, pot_id)
@@ -237,7 +237,7 @@ def test_sell_to_opp_mirror_reflect():
     # 自分がつぼを買い戻した結果の検証
     assert runner.state.get_money(0) == 0
     assert runner.state.get_money(1) == 10
-    
+
     found = False
     for j in range(18):
         if runner.state.get_true_hand(0, j) == pot_id:
@@ -376,7 +376,7 @@ def test_buy_from_opp_mirror_reflect():
     assert runner.state.get_money(1) == 10
     assert runner.state.get_money(0) == 10
     assert runner.state.get_true_hand(0, revealed_idx) == godfield_core.CARD_EMPTY
-    
+
     found = False
     for j in range(18):
         if runner.state.get_true_hand(1, j) == pot_id:
@@ -487,8 +487,8 @@ def test_buy_refusal_known_deployed_miracle():
     runner.state.current_actor_id = 0
     runner.state.set_money(0, 20)
     runner.state.set_true_hand(0, 0, buy_id)
-    runner.state.set_true_hand(1, 0, fire_miracle_id) # 手札（非公開）
-    runner.state.set_true_hand(1, 1, fire_miracle_id) # 展開済み（既知）
+    runner.state.set_true_hand(1, 0, fire_miracle_id)  # 手札（非公開）
+    runner.state.set_true_hand(1, 1, fire_miracle_id)  # 展開済み（既知）
     runner.state.set_is_deployed(1, 1, True)
     runner.state.set_is_known_to_opp(1, 1, True)
 
@@ -500,7 +500,7 @@ def test_buy_refusal_known_deployed_miracle():
 
     # 拒否
     runner.step(ActionType.ACTION_DEAL_NO)
-    
+
     # 展開済みのものとは別扱いのため、手札のコピーも True のまま維持される
     assert runner.state.get_is_known_to_opp(1, 0) is True
     assert runner.state.get_is_known_to_opp(1, 1) is True

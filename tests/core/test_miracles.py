@@ -1,5 +1,5 @@
 import godfield_core
-from godfield_core import ActionType, GamePhase
+from godfield_core import ActionType
 from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards
 
 
@@ -282,12 +282,12 @@ def test_miracle_deployment_limit_six():
     """
     runner = SimulationRunner()
     fireball_id = find_card_by_name("＜火の玉＞")
-    
+
     # 6つのスロットに奇跡を展開
     for i in range(6):
         runner.state.set_true_hand(0, i, fireball_id)
         runner.state.set_is_deployed(0, i, True)
-        
+
     deployed_count = sum(1 for i in range(18) if runner.state.get_is_deployed(0, i))
     assert deployed_count == 6
 
@@ -300,24 +300,24 @@ def test_miracle_deployment_limit_fifo_eviction():
     """
     runner = SimulationRunner()
     fireball_id = find_card_by_name("＜火の玉＞")
-    
+
     # 6つ展開
     for i in range(6):
         runner.state.set_true_hand(0, i, fireball_id)
         runner.state.set_is_deployed(0, i, True)
-        
+
     # 7つ目の奇跡を展開
     runner.state.set_true_hand(0, 6, fireball_id)
     runner.state.set_is_deployed(0, 6, True)
-    
+
     # 1. 総数は6のまま維持
     deployed_count_after = sum(1 for i in range(18) if runner.state.get_is_deployed(0, i))
     assert deployed_count_after == 6
-    
+
     # 2. スロット0（最も古い奇跡）が消滅
     assert runner.state.get_is_deployed(0, 0) == False
     assert runner.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY
-    
+
     # 3. スロット6（新しい奇跡）が展開済み
     assert runner.state.get_is_deployed(0, 6) == True
 
@@ -332,7 +332,7 @@ def test_weapon_and_miracle_stacking():
 
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    runner.set_status(0, hp=40, mp=10) # 十分なMPを付与
+    runner.set_status(0, hp=40, mp=10)  # 十分なMPを付与
 
     runner.state.set_true_hand(0, 0, punch_id)
     runner.state.set_true_hand(0, 1, fireball_id)
@@ -356,13 +356,13 @@ def test_miracle_and_miracle_stacking_is_illegal():
     """
     runner = SimulationRunner()
     fireball_id = find_card_by_name("＜火の玉＞")
-    blowgun_id = find_card_by_name("吹き矢") # プラス武器 (TIMING_ATK_PLUS)
-    ice_id = find_card_by_name("＜氷＞") # 通常奇跡
+    blowgun_id = find_card_by_name("吹き矢")  # プラス武器 (TIMING_ATK_PLUS)
+    ice_id = find_card_by_name("＜氷＞")  # 通常奇跡
     doll_id = find_card_by_name("精霊のぬいぐるみ")
 
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    runner.set_status(0, hp=40, mp=10) # 十分なMPを付与
+    runner.set_status(0, hp=40, mp=10)  # 十分なMPを付与
 
     runner.state.set_true_hand(0, 0, fireball_id)
     runner.state.set_true_hand(0, 1, fireball_id)

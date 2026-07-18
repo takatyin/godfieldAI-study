@@ -6,7 +6,6 @@
   - main_sundry_phase
   price: 1
   drop_rate: 12
-  hp_recovery: 5
 - name: ハートのしずく
   id_str: sundries/heart-dew
   description: +HP10
@@ -15,7 +14,6 @@
   - main_sundry_phase
   price: 3
   drop_rate: 8
-  hp_recovery: 10
 - name: ロマンスウォーター
   id_str: sundries/romance-water
   description: +HP15
@@ -24,7 +22,6 @@
   - main_sundry_phase
   price: 5
   drop_rate: 4
-  hp_recovery: 15
 - name: 天の川のおいしい水
   id_str: sundries/galaxy-geyser
   description: +HP20
@@ -33,7 +30,6 @@
   - main_sundry_phase
   price: 20
   drop_rate: 1
-  hp_recovery: 20
 - name: スマイルの花
   id_str: sundries/smile-flower
   description: +MP5
@@ -42,7 +38,6 @@
   - main_sundry_phase
   price: 1
   drop_rate: 12
-  mp_recovery: 5
 - name: ハートの花
   id_str: sundries/heart-flower
   description: +MP10
@@ -51,7 +46,6 @@
   - main_sundry_phase
   price: 3
   drop_rate: 8
-  mp_recovery: 10
 - name: ロマンスの香木
   id_str: sundries/romance-fragrance
   description: +MP15
@@ -60,7 +54,6 @@
   - main_sundry_phase
   price: 5
   drop_rate: 4
-  mp_recovery: 15
 - name: 天国草
   id_str: sundries/heaven-herb
   description: +MP20天国病になる
@@ -70,7 +63,6 @@
   - main_sundry_phase
   price: 20
   drop_rate: 1
-  mp_recovery: 20
 - name: スマイルの貝がら
   id_str: sundries/smile-shell
   description: 風邪、熱病、霧、閃光の災いを払う

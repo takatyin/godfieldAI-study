@@ -46,6 +46,7 @@ void init_game_logic(pybind11::list cards) {
             else if (t == "miracle_plus_phase") f.usage_timing |= TIMING_MIRACLE_PLUS;
             else if (t == "atk_defence_phase") f.usage_timing |= TIMING_ATK_DEFENCE;
             else if (t == "miracle_defence_phase") f.usage_timing |= TIMING_MIRACLE_DEFENCE;
+            else if (t == "guardian_phase") f.usage_timing |= TIMING_GUARDIAN;
         }
 
         f.price = card.contains("price") ? card["price"].cast<int>() : 0;
@@ -54,8 +55,6 @@ void init_game_logic(pybind11::list cards) {
         f.defense_power = card.contains("defense_power") ? card["defense_power"].cast<int>() : 0;
         f.accuracy = card.contains("accuracy") ? card["accuracy"].cast<int>() : 100;
         f.mp_cost = card.contains("mp_cost") ? card["mp_cost"].cast<int>() : 0;
-        f.hp_recovery = card.contains("hp_recovery") ? card["hp_recovery"].cast<int>() : 0;
-        f.mp_recovery = card.contains("mp_recovery") ? card["mp_recovery"].cast<int>() : 0;
 
         if (card.contains("element")) {
             std::string el = card["element"].cast<std::string>();
