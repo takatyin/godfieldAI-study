@@ -54,7 +54,7 @@
   element: 闇
   attack_power: 1
   drop_rate: 1
-  id_str: weapons/abyss-dart
+  id_str: weapons/pri-pri-pricker
 - name: あちちナイフ
   type: weapon
   usage_timing:
@@ -122,6 +122,7 @@
   element: 火
   attack_power: 3
   drop_rate: 1
+  id_str: weapons/fire-whip
 - name: 霧鉄砲
   description: ダメージを与えた対象を霧状態にする
   hit_curse: fog
@@ -132,6 +133,7 @@
   element: 水
   attack_power: 3
   drop_rate: 1
+  id_str: weapons/fog-gun
 - name: いがナッツ
   type: weapon
   usage_timing:
@@ -140,6 +142,7 @@
   element: 木
   attack_power: 3
   drop_rate: 1
+  id_str: weapons/bur-nut
 - name: 熟成ゴムの弓
   type: weapon
   usage_timing:
@@ -149,6 +152,7 @@
   element: 木
   attack_power: 3
   drop_rate: 1
+  id_str: weapons/mature-rubber-bow
 - name: スタースタッフ
   type: weapon
   usage_timing:
@@ -157,6 +161,7 @@
   element: 光
   attack_power: 3
   drop_rate: 1
+  id_str: weapons/star-staff
 - name: コブラ
   type: weapon
   usage_timing:
@@ -177,7 +182,7 @@
   attack_power: 4
   defense_power: 4
   drop_rate: 1
-  id_str: weapons/homura-maki
+  id_str: weapons/flaming-roll
 - name: ファイヤークロスボウ
   type: weapon
   usage_timing:
@@ -187,6 +192,7 @@
   element: 火
   attack_power: 4
   drop_rate: 1
+  id_str: weapons/fire-crossbow
 - name: 氷結ハンマー
   type: weapon
   usage_timing:
@@ -206,6 +212,7 @@
   element: 木
   attack_power: 4
   drop_rate: 1
+  id_str: weapons/dream-mallet
 - name: さよならの剣
   type: weapon
   usage_timing:
@@ -223,6 +230,7 @@
   element: 火
   attack_power: 5
   drop_rate: 1
+  id_str: weapons/blaze-blade
 - name: 魔水のワンド
   id_str: weapons/wand-of-mystic-water
   description: 攻撃が水属性になる
@@ -243,6 +251,7 @@
   element: 土
   attack_power: 5
   drop_rate: 1
+  id_str: weapons/paleolithic-javelin
 - name: ジャスティスランス
   type: weapon
   usage_timing:
@@ -251,6 +260,7 @@
   element: 光
   attack_power: 5
   drop_rate: 1
+  id_str: weapons/justice-lance
 - name: キラーフォーク
   type: weapon
   usage_timing:
@@ -259,6 +269,7 @@
   element: 闇
   attack_power: 5
   drop_rate: 1
+  id_str: weapons/killer-fork
 - name: 冥矢
   type: weapon
   usage_timing:
@@ -268,6 +279,7 @@
   element: 闇
   attack_power: 5
   drop_rate: 1
+  id_str: weapons/abyss-dart
 - name: 新石器トマホーク
   type: weapon
   usage_timing:
@@ -277,6 +289,7 @@
   element: 土
   attack_power: 7
   drop_rate: 1
+  id_str: weapons/neolithic-tomahawk
 - name: 火竜一角
   type: weapon
   usage_timing:
@@ -285,6 +298,7 @@
   element: 火
   attack_power: 8
   drop_rate: 1
+  id_str: weapons/fire-dragon-s-horn
 - name: 水竜一角
   type: weapon
   usage_timing:
@@ -293,6 +307,7 @@
   element: 水
   attack_power: 8
   drop_rate: 1
+  id_str: weapons/water-dragon-s-horn
 - name: 聖剣
   type: weapon
   usage_timing:
@@ -319,6 +334,7 @@
   element: 土
   attack_power: 13
   drop_rate: 1
+  id_str: weapons/diamond-sword
 - name: あぶないキネ
   id_str: weapons/dangerous-pestle
   description: 攻撃対象をランダムに取る

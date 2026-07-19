@@ -57,13 +57,18 @@ void undeploy_miracle(InternalState &state, int player_id, int slot_idx) {
     }
     state.is_deployed[player_id][slot_idx] = false;
 
-    // 展開キューから該当スロットを削除してシフト
     int found_idx = -1;
     for (int k = 0; k < state.num_deployed_miracles[player_id]; ++k) {
         if (state.deployed_miracles_order[player_id][k] == slot_idx) {
             found_idx = k;
             break;
         }
+    }
+    if (found_idx != -1) {
+        for (int k = found_idx + 1; k < state.num_deployed_miracles[player_id]; ++k) {
+            state.deployed_miracles_order[player_id][k - 1] = state.deployed_miracles_order[player_id][k];
+        }
+        state.num_deployed_miracles[player_id]--;
     }
 }
 
@@ -98,7 +103,7 @@ DreamGroup calculate_dream_group(int card_id) {
         card_id == ID_STRENGTH_POWDER || 
         card_id == ID_SPIRITUAL_STAFF || 
         card_id == ID_JINN_S_ROCKING_HORSE || 
-        card_id == ID_HOMURA_MAKI) {
+        card_id == ID_FLAMING_ROLL) {
         return DreamGroup::NONE;
     }
     
@@ -962,7 +967,7 @@ bool is_active_reaction_card(int card_id, GamePhase phase, Element attack_elemen
     if (card_id == CARD_EMPTY) return false;
     if (phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
         const CardFeatures &f = g_card_registry[card_id];
-        return f.reaction_type != REACTION_NONE;
+        return (f.reaction_type != REACTION_NONE) && (f.usage_timing & TIMING_MIRACLE_DEFENCE);
     }
     if (phase == GamePhase::PHASE_DEFENSE) {
         if (card_id == ID_SUPER_MIRROR) return true;

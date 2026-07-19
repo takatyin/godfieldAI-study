@@ -480,7 +480,7 @@ def test_magical_stick_damage_flow():
 
     # 攻撃力: マジカルステッキ(10-7)*2=6 + 流星10 = 16
     assert runner_2.state.pending_attack_power == 16
-    assert runner_2.state.pending_attack_element == godfield_core.Element.ELEM_LIGHT
+    assert runner_2.state.pending_attack_element == godfield_core.Element.ELEM_NONE
 
     runner_2.step(ActionType.ACTION_CONFIRM)
     assert runner_2.state.get_mp(0) == 0
@@ -506,7 +506,7 @@ def test_magical_stick_damage_flow():
 
     # 攻撃力: マジカルステッキ(10-0)*2=20 + 流星10 = 30
     assert runner_3.state.pending_attack_power == 30
-    assert runner_3.state.pending_attack_element == godfield_core.Element.ELEM_LIGHT
+    assert runner_3.state.pending_attack_element == godfield_core.Element.ELEM_NONE
 
     runner_3.step(ActionType.ACTION_CONFIRM)
     assert runner_3.state.get_mp(0) == 0

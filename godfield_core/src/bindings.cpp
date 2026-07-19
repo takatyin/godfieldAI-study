@@ -237,6 +237,12 @@ PYBIND11_MODULE(godfield_core, m) {
             },
             py::arg("player_id"), py::arg("hand_idx"), py::arg("val"))
         .def(
+            "get_num_deployed_miracles", [](const InternalState &s, int p) { return s.num_deployed_miracles[p]; },
+            py::arg("player_id"))
+        .def(
+            "get_deployed_miracle_order", [](const InternalState &s, int p, int idx) { return s.deployed_miracles_order[p][idx]; },
+            py::arg("player_id"), py::arg("order_idx"))
+        .def(
             "get_miracle_used_this_turn", [](InternalState &s, int p, int idx) { return s.miracle_used_this_turn[p][idx]; },
             py::arg("player_id"), py::arg("hand_idx"))
         .def(
@@ -268,6 +274,7 @@ PYBIND11_MODULE(godfield_core, m) {
             return result;
         },
         "Get a boolean list of legal actions");
+    m.def("get_single_legal_action", &get_single_legal_action, "Get single legal action ID if only one is available, else -1");
     m.def(
         "clear_state", [](InternalState &s) {
             auto saved_rng = s.rng;
@@ -291,6 +298,91 @@ PYBIND11_MODULE(godfield_core, m) {
             return result;
         },
         "Get opponent staged cards for observation integration validation");
+
+    m.def("get_observation", &get_observation, "Get Observation from InternalState for player_id");
+
+    py::class_<Observation>(m, "Observation")
+        .def(py::init<>())
+        .def_readwrite("hp_me", &Observation::hp_me)
+        .def_readwrite("hp_opp", &Observation::hp_opp)
+        .def_readwrite("mp_me", &Observation::mp_me)
+        .def_readwrite("mp_opp", &Observation::mp_opp)
+        .def_readwrite("money_me", &Observation::money_me)
+        .def_readwrite("money_opp", &Observation::money_opp)
+        .def_readwrite("incoming_damage", &Observation::incoming_damage)
+        .def_readwrite("current_staged_defense", &Observation::current_staged_defense)
+        .def_readwrite("is_apocalypse", &Observation::is_apocalypse)
+        .def_readwrite("history_head", &Observation::history_head)
+        .def_readwrite("pending_card", &Observation::pending_card)
+        .def("get_sickness_me", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < 5; ++i) res.append(obs.sickness_me[i]);
+            return res;
+        })
+        .def("get_sickness_opp", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < 5; ++i) res.append(obs.sickness_opp[i]);
+            return res;
+        })
+        .def("get_curses_me", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < 4; ++i) res.append(obs.curses_me[i]);
+            return res;
+        })
+        .def("get_curses_opp", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < 4; ++i) res.append(obs.curses_opp[i]);
+            return res;
+        })
+        .def("get_guardian_me", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < 11; ++i) res.append(obs.guardian_me[i]);
+            return res;
+        })
+        .def("get_guardian_opp", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < 11; ++i) res.append(obs.guardian_opp[i]);
+            return res;
+        })
+        .def("get_phase_one_hot", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < 7; ++i) res.append(obs.phase_one_hot[i]);
+            return res;
+        })
+        .def("get_hand_cards", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < MAX_HAND_SIZE; ++i) res.append(obs.hand_cards[i]);
+            return res;
+        })
+        .def("get_staged_cards", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < MAX_HAND_SIZE; ++i) res.append(obs.staged_cards[i]);
+            return res;
+        })
+        .def("get_opponent_hand_cards", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < MAX_HAND_SIZE; ++i) res.append(obs.opponent_hand_cards[i]);
+            return res;
+        })
+        .def("get_opponent_staged_cards", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < MAX_HAND_SIZE; ++i) res.append(obs.opponent_staged_cards[i]);
+            return res;
+        })
+        .def("get_action_mask", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < ACTION_SPACE_SIZE; ++i) res.append(obs.action_mask[i]);
+            return res;
+        })
+        .def("to_numpy", [](const Observation& obs) {
+            size_t total_floats = sizeof(Observation) / sizeof(float);
+            return py::array_t<float>(
+                total_floats,
+                reinterpret_cast<const float*>(&obs)
+            );
+        })
+        .def("__copy__", [](const Observation& self) { return Observation(self); })
+        .def("__deepcopy__", [](const Observation& self, py::dict memo) { return Observation(self); });
 
     py::class_<EnvPool>(m, "EnvPool")
         .def(py::init<int>(), py::arg("num_envs") = NUM_ENVS)

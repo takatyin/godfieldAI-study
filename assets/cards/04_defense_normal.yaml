@@ -5,6 +5,7 @@
   price: 1
   defense_power: 1
   drop_rate: 10
+  id_str: armor/leather-cap
 - name: スカイブーツ
   description: 奇跡を弾く
   type: defense
@@ -24,6 +25,7 @@
   element: 水
   defense_power: 1
   drop_rate: 1
+  id_str: armor/aqua-shoes
 - name: 草かんむり
   type: defense
   usage_timing:
@@ -32,6 +34,7 @@
   element: 木
   defense_power: 1
   drop_rate: 1
+  id_str: armor/laurel-wreath
 - name: 石版
   type: defense
   usage_timing:
@@ -40,6 +43,7 @@
   element: 土
   defense_power: 1
   drop_rate: 1
+  id_str: armor/slate
 - name: 革の服
   type: defense
   usage_timing:
@@ -65,6 +69,7 @@
   element: 水
   defense_power: 2
   drop_rate: 1
+  id_str: armor/aqua-glove
 - name: 木の盾
   type: defense
   usage_timing:
@@ -90,6 +95,7 @@
   price: 3
   defense_power: 3
   drop_rate: 8
+  id_str: armor/iron-gauntlet
 - name: 鬼のくつ
   description: +攻5
   type: defense
@@ -100,6 +106,7 @@
   defense_power: 3
   attack_power: 5
   drop_rate: 1
+  id_str: armor/ogre-s-shoes
 - name: スカイガントレット
   description: 奇跡を弾く
   type: defense
@@ -110,6 +117,7 @@
   price: 5
   defense_power: 3
   drop_rate: 1
+  id_str: armor/sky-gauntlet
 - name: フレイムブーツ
   type: defense
   usage_timing:
@@ -118,6 +126,7 @@
   element: 火
   defense_power: 3
   drop_rate: 1
+  id_str: armor/flame-boots
 - name: アイスブーツ
   type: defense
   usage_timing:
@@ -126,6 +135,7 @@
   element: 水
   defense_power: 3
   drop_rate: 1
+  id_str: armor/ice-boots
 - name: 御神木の小手
   type: defense
   usage_timing:
@@ -134,6 +144,7 @@
   element: 木
   defense_power: 3
   drop_rate: 1
+  id_str: armor/sacred-tree-gauntlet
 - name: 結晶板
   type: defense
   usage_timing:
@@ -142,6 +153,7 @@
   element: 土
   defense_power: 3
   drop_rate: 1
+  id_str: armor/crystal-board
 - name: アイアンシールド
   type: defense
   usage_timing:
@@ -149,6 +161,7 @@
   price: 4
   defense_power: 4
   drop_rate: 8
+  id_str: armor/iron-shield
 - name: フレイムヘルム
   type: defense
   usage_timing:
@@ -157,6 +170,7 @@
   element: 火
   defense_power: 4
   drop_rate: 1
+  id_str: armor/flame-helm
 - name: アイスヘルム
   type: defense
   usage_timing:
@@ -165,6 +179,7 @@
   element: 水
   defense_power: 4
   drop_rate: 1
+  id_str: armor/ice-helm
 - name: 林の盾
   type: defense
   usage_timing:
@@ -173,6 +188,7 @@
   element: 木
   defense_power: 4
   drop_rate: 1
+  id_str: armor/grove-shield
 - name: 大地のくつ
   type: defense
   usage_timing:
@@ -189,6 +205,7 @@
   price: 5
   defense_power: 5
   drop_rate: 8
+  id_str: armor/iron-armor
 - name: 鬼の小手
   description: +攻10
   type: defense
@@ -199,6 +216,7 @@
   defense_power: 5
   attack_power: 10
   drop_rate: 1
+  id_str: armor/ogre-s-gauntlet
 - name: スカイヘルム
   description: 奇跡を弾く
   type: defense
@@ -209,6 +227,7 @@
   price: 5
   defense_power: 5
   drop_rate: 1
+  id_str: armor/sky-helm
 - name: フレイムシールド
   type: defense
   usage_timing:
@@ -217,6 +236,7 @@
   element: 火
   defense_power: 5
   drop_rate: 1
+  id_str: armor/flame-shield
 - name: アイスシールド
   type: defense
   usage_timing:
@@ -225,6 +245,7 @@
   element: 水
   defense_power: 5
   drop_rate: 1
+  id_str: armor/ice-shield
 - name: 樹脂で編んだ法衣
   type: defense
   usage_timing:
@@ -233,6 +254,7 @@
   element: 木
   defense_power: 5
   drop_rate: 1
+  id_str: armor/resin-knit-robe
 - name: 大地の小手
   type: defense
   usage_timing:
@@ -249,6 +271,7 @@
   price: 6
   defense_power: 6
   drop_rate: 6
+  id_str: armor/steel-gauntlet
 - name: 精霊の足袋
   description: MP消費なしで奇跡を使える
   type: defense
@@ -276,6 +299,7 @@
   element: 水
   defense_power: 6
   drop_rate: 1
+  id_str: armor/ice-armor
 - name: 森の盾
   type: defense
   usage_timing:
@@ -284,6 +308,7 @@
   element: 木
   defense_power: 6
   drop_rate: 1
+  id_str: armor/forest-shield
 - name: 大地のかぶと
   type: defense
   usage_timing:
@@ -292,6 +317,7 @@
   element: 土
   defense_power: 6
   drop_rate: 1
+  id_str: armor/terra-helm
 - name: ぴかぴかハイヒール
   type: defense
   usage_timing:
@@ -300,6 +326,7 @@
   element: 光
   defense_power: 6
   drop_rate: 1
+  id_str: armor/shining-high-heels
 - name: はがねのかぶと
   type: defense
   usage_timing:
@@ -307,6 +334,7 @@
   price: 7
   defense_power: 7
   drop_rate: 6
+  id_str: armor/steel-helm
 - name: 鬼のかぶと
   description: +攻10
   type: defense
@@ -317,6 +345,7 @@
   defense_power: 7
   attack_power: 10
   drop_rate: 1
+  id_str: armor/ogre-s-helm
 - name: スカイシールド
   description: 奇跡を弾く
   type: defense
@@ -336,6 +365,7 @@
   element: 火
   defense_power: 7
   drop_rate: 1
+  id_str: armor/burning-shield
 - name: スノーミトン
   type: defense
   usage_timing:
@@ -344,6 +374,7 @@
   element: 水
   defense_power: 7
   drop_rate: 1
+  id_str: armor/snow-mitten
 - name: はがねの盾
   type: defense
   usage_timing:
@@ -352,6 +383,7 @@
   element: 木
   defense_power: 8
   drop_rate: 6
+  id_str: armor/steel-shield
 - name: 美しいガラス細工
   type: defense
   usage_timing:
@@ -360,6 +392,7 @@
   element: 土
   defense_power: 8
   drop_rate: 1
+  id_str: armor/beautiful-glasswork
 - name: 月光のかぶと
   description: 奇跡をはね返す
   type: defense
@@ -370,6 +403,7 @@
   price: 10
   defense_power: 8
   drop_rate: 1
+  id_str: armor/moonlight-helm
 - name: バーニングジャケット
   type: defense
   usage_timing:
@@ -378,6 +412,7 @@
   element: 火
   defense_power: 8
   drop_rate: 1
+  id_str: armor/burning-jacket
 - name: スノーマスク
   type: defense
   usage_timing:
@@ -386,6 +421,7 @@
   element: 水
   defense_power: 8
   drop_rate: 1
+  id_str: armor/snow-mask
 - name: コハクの胸当て
   type: defense
   usage_timing:
@@ -394,6 +430,7 @@
   element: 木
   defense_power: 8
   drop_rate: 1
+  id_str: armor/amber-breastplate
 - name: 大地のよろい
   type: defense
   usage_timing:
@@ -410,6 +447,7 @@
   price: 9
   defense_power: 9
   drop_rate: 6
+  id_str: armor/steel-armor
 - name: 鬼のよろい
   description: +攻15
   type: defense
@@ -420,6 +458,7 @@
   defense_power: 9
   attack_power: 15
   drop_rate: 1
+  id_str: armor/ogre-s-armor
 - name: 精霊の頭巾
   description: MP消費なしで奇跡を使える
   type: defense
@@ -448,6 +487,7 @@
   price: 15
   defense_power: 9
   drop_rate: 1
+  id_str: armor/angel-gauntlet
 - name: エナジーヘルム
   type: defense
   usage_timing:
@@ -455,6 +495,7 @@
   price: 10
   defense_power: 10
   drop_rate: 4
+  id_str: armor/energy-helm
 - name: 月光の盾
   description: 奇跡をはね返す
   type: defense
@@ -484,6 +525,7 @@
   element: 光
   defense_power: 10
   drop_rate: 1
+  id_str: armor/glittering-dress
 - name: エナジーアーマー
   type: defense
   usage_timing:
@@ -491,6 +533,7 @@
   price: 10
   defense_power: 11
   drop_rate: 4
+  id_str: armor/energy-armor
 - name: エンゼルの帽子
   description: 奇跡を止める
   type: defense
@@ -501,6 +544,7 @@
   price: 15
   defense_power: 11
   drop_rate: 1
+  id_str: armor/angel-cap
 - name: コアバリヤー
   type: defense
   usage_timing:
@@ -508,6 +552,7 @@
   price: 10
   defense_power: 12
   drop_rate: 2
+  id_str: armor/core-barrier
 - name: 精霊の帯
   description: MP消費なしで奇跡を使える
   type: defense
@@ -542,6 +587,7 @@
   price: 10
   defense_power: 13
   drop_rate: 2
+  id_str: armor/core-protector
 - name: エンゼルシールド
   description: 奇跡を止める
   type: defense
@@ -552,6 +598,7 @@
   price: 15
   defense_power: 13
   drop_rate: 1
+  id_str: armor/angel-shield
 - name: 夢見る帽子
   description: 使用者を夢状態にする使用者の神器を一新する
   type: defense
@@ -572,6 +619,7 @@
   price: 15
   defense_power: 15
   drop_rate: 1
+  id_str: armor/angel-armor
 - name: 神の盾
   type: defense
   usage_timing:

@@ -93,9 +93,11 @@ def test_rainbow_curtain_wall_and_reflection_sword_synergy():
     # 2. 虹のカーテン ＋ 反射剣 -> 相手に反射して攻守交代
     runner.reset_state()
     reflection_sword_id = find_card_by_name("weapons/reflection-sword")
+    wood_shield_id = find_card_by_name("armor/wood-shield")
     runner.set_status(0, hp=40, mp=10)
     runner.set_status(1, hp=40, mp=10)
     runner.state.set_true_hand(0, 0, fire_sword_id)
+    runner.state.set_true_hand(0, 1, wood_shield_id)  # 反射後の防御用
     runner.state.set_true_hand(1, 0, curtain_id)
     runner.state.set_true_hand(1, 1, reflection_sword_id)
 
@@ -113,6 +115,20 @@ def test_rainbow_curtain_wall_and_reflection_sword_synergy():
     assert runner.state.defender_id == 0
     assert runner.state.current_actor_id == 0
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    
+    # カーテンによって攻撃が無属性（ELEM_NONE）になっていることを検証
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+
+    # P0 が無属性防御カード（木盾）で防御可能か確認
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True
+
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # たいまつ(1) - 木盾(2) = 0 ダメージ。HPは 40 のまま維持
+    assert runner.state.get_hp(0) == 40
+    assert runner.state.current_phase == GamePhase.PHASE_MAIN
 
 
 def test_miracle_defense_reaction_rules():
@@ -335,3 +351,124 @@ def test_confirm_illegal_when_staged_mp_exceeds_current_mp():
 
     # MPが減らずに2のまま維持されていることを確認
     assert runner.state.get_mp(1) == 2
+
+
+def test_bouncing_sword_flow():
+    """
+    検証内容: 乱弾武剣（weapons/bouncing-sword）で弾きが成功した場合の全フローの検証。
+    - 攻撃者（P0）がブーメラン（無属性物理武器）で攻撃する。
+    - 防御者（P1）が乱弾武剣で防御し、弾きが成功する。
+    - 攻守が交代し、攻撃者（P0）が防御側（defender）となり、フェイズが PHASE_DEFENSE のままアクターが P0 になることを確認。
+    - 攻撃者（P0）が防御（パス、または盾等）を行い、正しくダメージが P0 に適用されることを確認。
+    """
+    boomerang_id = find_card_by_name("weapons/boomerang")
+    bouncing_sword_id = find_card_by_name("weapons/bouncing-sword")
+    wood_shield_id = find_card_by_name("armor/wood-shield")
+
+    # 弾きが成功するRNGシードを探索
+    success_seed = None
+    for seed in range(100):
+        runner = SimulationRunner()
+        runner.state.seed_rng(seed)
+        runner.set_status(0, hp=40, mp=10)
+        runner.set_status(1, hp=40, mp=10)
+        runner.state.set_true_hand(0, 0, boomerang_id)
+        runner.state.set_true_hand(1, 0, bouncing_sword_id)
+
+        runner.step(ActionType.ACTION_SELECT_HAND_0)
+        runner.step(ActionType.ACTION_TARGET_OPP)
+        runner.step(ActionType.ACTION_SELECT_HAND_0)
+        runner.step(ActionType.ACTION_CONFIRM)
+
+        if runner.state.current_phase == GamePhase.PHASE_DEFENSE and runner.state.defender_id == 0:
+            success_seed = seed
+            break
+
+    assert success_seed is not None, "乱弾武剣の反射成功シードが見つかりませんでした"
+
+    # テスト開始
+    runner = SimulationRunner()
+    runner.state.seed_rng(success_seed)
+    runner.set_status(0, hp=40, mp=10)
+    runner.set_status(1, hp=40, mp=10)
+    runner.state.set_true_hand(0, 0, boomerang_id)
+    runner.state.set_true_hand(0, 1, wood_shield_id)  # 反射されたとき用の盾
+    runner.state.set_true_hand(1, 0, bouncing_sword_id)
+
+    # 1. P0 がブーメランで攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    # 2. P1 が乱弾武剣で対抗し、決定
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 弾きが成功したため、攻守が交代し、アクターが P0 になり、フェイズは PHASE_DEFENSE のまま
+    assert runner.state.attacker_id == 1
+    assert runner.state.defender_id == 0
+    assert runner.state.current_actor_id == 0
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+
+    # 3. P0 が防御カードとして木盾（ウッドシールド、守2）を使用可能か検証
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True  # 盾が選択可能
+
+    # 4. P0 が木盾を使用して防御確定
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # ブーメランの攻撃力3 - 木盾の守備力2 = 1ダメージ。
+    # P0のHPは 40 - 1 = 39 になるはずです。
+    assert runner.state.get_hp(0) == 39
+    # ターンが終了してメインフェイズに戻ることを確認
+    assert runner.state.current_phase == GamePhase.PHASE_MAIN
+
+
+def test_miracle_defense_physical_armor_strictly_illegal():
+    """
+    検証内容:
+    1. 奇跡攻撃（例：ダメージのある火奇跡＜炎＞）に対し、虹のカーテンがない場合、
+       対抗属性であるはずの物理防具（例：アクアシューズ）を出すことは非合法であること。
+    2. 虹のカーテンを1枚目に出した後は、無属性の一般物理防具（例：革の帽子）を出すことが合法になること。
+    """
+    runner = SimulationRunner()
+    flame_id = find_card_by_name("miracles/flame")  # ＜炎＞ (火属性奇跡, 攻4)
+    curtain_id = find_card_by_name("armor/rainbow-curtain")
+    aqua_shoes_id = find_card_by_name("armor/aqua-shoes")  # アクアシューズ (水属性/物理防具, 守1)
+    leather_cap_id = find_card_by_name("armor/leather-cap")  # 革の帽子 (無属性/物理防具, 守1)
+
+    runner.set_status(0, hp=40, mp=10)
+    runner.set_status(1, hp=40, mp=10)
+    runner.state.set_true_hand(0, 0, flame_id)
+    runner.state.set_true_hand(1, 0, curtain_id)
+    runner.state.set_true_hand(1, 1, aqua_shoes_id)
+    runner.state.set_true_hand(1, 2, leather_cap_id)
+
+    # P0 が ＜炎＞ で攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
+
+    # 虹のカーテンなしでは、アクアシューズ（水属性だが物理防具）も革の帽子も「非合法」
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is True  # カーテンは1枚目かつ攻撃力>0なので合法
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is False # アクアシューズは物理用なので非合法！
+    assert actions[ActionType.ACTION_SELECT_HAND_2] is False # 革の帽子も物理用なので非合法！
+
+    # カーテンを選択
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+
+    # カーテンを置いた後は、無属性化したため物理防具であるアクアシューズも革の帽子も「合法」になる
+    actions2 = godfield_core.get_legal_actions(runner.state)
+    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True  # アクアシューズも合法化！
+    assert actions2[ActionType.ACTION_SELECT_HAND_2] is True  # 革の帽子も無属性物理防具なので合法！
+
+    # 決定
+    runner.step(ActionType.ACTION_SELECT_HAND_2)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # ターン終了
+    assert runner.state.current_phase == GamePhase.PHASE_MAIN
+

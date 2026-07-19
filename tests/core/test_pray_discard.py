@@ -126,3 +126,45 @@ def test_discard_confirm_executes_discard():
     # スロットが空になり、かつ is_used は False のままであることを確認
     assert runner.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY
     assert runner.state.get_is_used(0, 0) is False
+
+
+def test_discard_action_available_and_executes_for_deployed_miracles():
+    """
+    検証内容: 展開済みの奇跡のみの場合に「捨てる」アクションが合法手になり、かつ正常に破棄できるかのテスト。
+    - 手札に展開済みの奇跡（例: 雷）しかない場合でも、メインフェイズで「捨てる（ACTION_DISCARD）」アクションが合法手となることを確認します。
+    - 破棄フェイズで展開済みの奇跡を選択して確定すると、スロットが空になり、展開フラグ（is_deployed）が解除されることを確認します。
+    """
+    runner = SimulationRunner()
+    thunder_id = find_card_by_name("＜雷＞")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+
+    # スロット0に雷を設定し、展開済み(is_deployed = True)にする
+    runner.state.set_true_hand(0, 0, thunder_id)
+    runner.state.set_is_deployed(0, 0, True)
+
+    # 他のスロットはすべて空
+    for i in range(1, 18):
+        runner.state.set_true_hand(0, i, godfield_core.CARD_EMPTY)
+
+    actions = godfield_core.get_legal_actions(runner.state)
+
+    # 展開済みの奇跡であっても捨てるアクションは合法であること
+    assert actions[ActionType.ACTION_DISCARD] is True
+
+    # 捨てるを選択
+    runner.step(action=ActionType.ACTION_DISCARD)
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DISCARD
+
+    actions_discard = godfield_core.get_legal_actions(runner.state)
+    # 展開済みの奇跡（スロット0）が破棄対象として選択可能であること
+    assert actions_discard[ActionType.ACTION_SELECT_HAND_0] is True
+
+    # スロット0を選択して確定する
+    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
+    runner.step(action=ActionType.ACTION_CONFIRM)
+
+    # スロットが空になり、かつ展開フラグも解除されていることを確認
+    assert runner.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY
+    assert runner.state.get_is_deployed(0, 0) is False

@@ -114,6 +114,50 @@ def test_element_mixing_fire_none():
     assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
 
 
+def test_element_mixing_none_fire():
+    """
+    検証内容: 無属性に有属性（火プラス）を混ぜた混成テスト（無属性化）。
+    - 無属性ベース（ブーメラン）に火プラス（ファイヤークロスボウ）を重ねた場合、最終属性が無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    none_base = find_card_by_name("ブーメラン")
+    fire_plus = find_card_by_name("ファイヤークロスボウ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, none_base)
+    runner.state.set_true_hand(0, 1, fire_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+
+
+def test_element_mixing_none_light():
+    """
+    検証内容: 無属性に光属性を混ぜた混成テスト（無属性化）。
+    - 無属性ベース（ブーメラン）に光プラス（輝きのカケラ）を重ねた場合、最終属性が無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    none_base = find_card_by_name("ブーメラン")
+    light_plus = find_card_by_name("輝きのカケラ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, none_base)
+    runner.state.set_true_hand(0, 1, light_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+
+
 def test_element_defense_masking_matching_rules():
     """
     検証内容: 属性防御時の防具マスク制限ルール。

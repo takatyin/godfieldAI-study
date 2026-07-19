@@ -33,6 +33,10 @@ void EnvPool::reset(int seed) {
         states_[i].pending_attack_element = ELEM_NONE;
         states_[i].pending_absorption = false;
         states_[i].pending_deal_same_damage = false;
+        states_[i].num_pending_counters = 0;
+        states_[i].pending_attack_curse = CURSE_NONE;
+        states_[i].pending_take_cp = false;
+        states_[i].pending_attack_source_id = CARD_EMPTY;
         states_[i].sickness[0] = SICKNESS_NONE; states_[i].sickness[1] = SICKNESS_NONE;
         std::memset(states_[i].curses, 0, sizeof(states_[i].curses));
         states_[i].turn_end_state = 0;
@@ -122,92 +126,7 @@ void EnvPool::step_env(int env_id, int action) {
 }
 
 void EnvPool::generate_observation(int env_id) {
-    InternalState& state = states_[env_id];
-    Observation& obs = obs_buffers_[env_id];
-    std::memset(&obs, 0, sizeof(Observation));
-    
-    int me = state.current_actor_id;
-    int opp = 1 - me;
-    
-    bool is_me_fog = state.curses[me][CURSE_TYPE_FOG];
-    bool is_me_dream = state.curses[me][CURSE_TYPE_DREAM];
-
-    // Normalizing logic
-    obs.hp_me = state.hp[me] / 100.0f;
-    obs.mp_me = state.mp[me] / 100.0f;
-    obs.money_me = state.money[me] / 100.0f;
-
-    if (is_me_fog) {
-        obs.hp_opp = 0.0f;
-        obs.mp_opp = 0.0f;
-        obs.money_opp = 0.0f;
-    } else {
-        obs.hp_opp = state.hp[opp] / 100.0f;
-        obs.mp_opp = state.mp[opp] / 100.0f;
-        obs.money_opp = state.money[opp] / 100.0f;
-    }
-    
-    obs.sickness_me[state.sickness[me]] = 1.0f;
-    if (!is_me_fog) {
-        obs.sickness_opp[state.sickness[opp]] = 1.0f;
-    }
-    
-    obs.guardian_me[state.guardian[me]] = 1.0f;
-    if (!is_me_fog) {
-        obs.guardian_opp[state.guardian[opp]] = 1.0f;
-    }
-
-    for (int i = 0; i < 4; ++i) {
-        obs.curses_me[i] = state.curses[me][i] ? 1.0f : 0.0f;
-        if (is_me_fog) {
-            obs.curses_opp[i] = 0.0f;
-        } else {
-            obs.curses_opp[i] = state.curses[opp][i] ? 1.0f : 0.0f;
-        }
-    }
-    
-    obs.is_apocalypse = (state.current_turn >= APOCALYPSE_TURN) ? 1.0f : 0.0f;
-
-    // Hand cards
-    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        obs.hand_cards[i] = state.apparent_hand[me][i];
-    }
-
-    // Staged cards
-    std::fill(std::begin(obs.staged_cards), std::end(obs.staged_cards), CARD_EMPTY);
-    for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int h_idx = state.staged_cards[me][i];
-        obs.staged_cards[i] = state.apparent_hand[me][h_idx];
-    }
-
-    // Opponent hand cards (相手の公開手札のスロット位置リークを防ぐため、左詰めで格納する)
-    int known_count = 0;
-    std::fill(std::begin(obs.opponent_hand_cards), std::end(obs.opponent_hand_cards), 0);
-    if (!is_me_fog) {
-        for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-            if (state.is_known_to_opp[opp][i] || state.is_deployed[opp][i]) {
-                obs.opponent_hand_cards[known_count++] = state.true_hand[opp][i];
-            }
-        }
-    }
-
-    // Opponent staged cards
-    std::fill(std::begin(obs.opponent_staged_cards), std::end(obs.opponent_staged_cards), CARD_EMPTY);
-    if (state.num_staged_cards[opp] > 0) {
-        for (int i = 0; i < state.num_staged_cards[opp]; ++i) {
-            int h_idx = state.staged_cards[opp][i];
-            obs.opponent_staged_cards[i] = state.true_hand[opp][h_idx];
-        }
-    } else if (state.pending_attack_source_id != CARD_EMPTY) {
-        obs.opponent_staged_cards[0] = state.pending_attack_source_id;
-    }
-
-    // Legal actions mask
-    bool legal_actions[ACTION_SPACE_SIZE];
-    get_legal_actions(state, legal_actions);
-    for (int i = 0; i < ACTION_SPACE_SIZE; ++i) {
-        obs.action_mask[i] = legal_actions[i] ? 1.0f : 0.0f;
-    }
+    make_observation(states_[env_id], states_[env_id].current_actor_id, obs_buffers_[env_id]);
 }
 
 void EnvPool::check_done(int env_id) {

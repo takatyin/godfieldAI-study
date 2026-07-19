@@ -5,18 +5,18 @@ from tests.core.test_utils import SimulationRunner, find_card_by_name
 
 def test_apocalypse_turn_threshold():
     """
-    検証内容: APOCALYPSE_TURN (300) に達した時、ゲームが「終末の時」に入ることを確認する。
+    検証内容: APOCALYPSE_TURN (150) に達した時、ゲームが「終末の時」に入ることを確認する。
     """
     runner = SimulationRunner()
     runner.reset_state()
     
-    # 300ターン未満は通常モード
-    runner.state.current_turn = 299
-    assert runner.state.current_turn < 300
+    # 150ターン未満は通常モード
+    runner.state.current_turn = 149
+    assert runner.state.current_turn < 150
     
-    # 300ターン以上は終末の時
-    runner.state.current_turn = 300
-    assert runner.state.current_turn >= 300
+    # 150ターン以上は終末の時
+    runner.state.current_turn = 150
+    assert runner.state.current_turn >= 150
 
 
 def test_apocalypse_pray_draws_devil_cards():
@@ -34,7 +34,7 @@ def test_apocalypse_pray_draws_devil_cards():
         runner = SimulationRunner()
         runner.reset_state()
         runner.state.seed_rng(i)  # 各試行の乱数シードを個別に設定
-        runner.state.current_turn = 300  # 終末の時
+        runner.state.current_turn = 150  # 終末の時
         runner.set_status(player=0, hp=40, mp=10, money=10)
         runner.set_hand(player=0, cards=[])  # 手札を空にする
         
@@ -82,7 +82,7 @@ def test_apocalypse_prankster_discard():
         runner = SimulationRunner()
         runner.reset_state()
         runner.state.seed_rng(i)  # 各試行の乱数シードを個別に設定
-        runner.state.current_turn = 300  # 終末 of 時
+        runner.state.current_turn = 150  # 終末 of 時
         runner.set_status(player=0, hp=40, mp=10, money=10)
         
         # 手札をセット（イタズラマンが破棄する候補、武器以外である必要があるため革の服のみ）
@@ -127,7 +127,7 @@ def test_apocalypse_sacrifice_refills_hand():
     # --- 終末の時の検証 ---
     runner_apocalypse = SimulationRunner()
     runner_apocalypse.reset_state()
-    runner_apocalypse.state.current_turn = 300  # 終末の時
+    runner_apocalypse.state.current_turn = 150  # 終末の時
     runner_apocalypse.state.set_true_hand(0, 0, shield_id)
     
     # ささげるフェーズに入り、スロット0を選択して確定

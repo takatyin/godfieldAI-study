@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GodField Visualizer (Vue + Tailwind)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0b0f19',
+                        panelbg: 'rgba(30, 41, 59, 0.45)',
+                        borderglow: 'rgba(96, 165, 250, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+JP:wght@300;400;700&display=swap');
+        body {
+            font-family: 'Outfit', 'Noto Sans JP', sans-serif;
+            background-color: #0b0f19;
+        }
+        .glass {
+            backdrop-filter: blur(12px);
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .card-back {
+            background: repeating-linear-gradient(
+                45deg,
+                #1e293b,
+                #1e293b 10px,
+                #0f172a 10px,
+                #0f172a 20px
+            );
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.5);
+        }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col p-4 gap-4">
+    <div id="app" class="flex flex-col flex-grow gap-4 min-h-0">
+        
+        <!-- Connection overlay -->
+        <div v-if="!connected || !data" class="fixed inset-0 bg-slate-950 flex flex-col items-center justify-content-center z-50 p-8 justify-center">
+            <h1 class="text-2xl font-bold mb-4 text-white">GodField可視化サーバーに接続中...</h1>
+            <p class="text-slate-400">`python visualize_server.py` が起動しているか確認してください。</p>
+        </div>
+
+        <!-- Header -->
+        <header class="glass flex justify-between items-center px-6 py-3 rounded-2xl shadow-xl">
+            <div class="flex items-center gap-3">
+                <h1 class="text-xl font-extrabold tracking-wider bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                    GodField Visualizer
+                </h1>
+                <span class="text-xs text-slate-400 px-2 py-0.5 rounded bg-slate-800 border border-slate-700">Vue.js Client</span>
+            </div>
+
+            <!-- Controls -->
+            <div class="flex items-center gap-6" v-if="data">
+                <div class="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-lg text-sm border border-slate-800">
+                    <input type="checkbox" id="aiToggle" v-model="aiEnabled" @change="toggleAI" class="cursor-pointer">
+                    <label htmlFor="aiToggle" class="cursor-pointer font-semibold select-none">相手(P1)をAI操作にする</label>
+                </div>
+
+                <button @click="resetGame" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 font-semibold rounded-lg border border-slate-700 transition">
+                    リセット
+                </button>
+            </div>
+
+            <!-- Status Indicator -->
+            <div class="flex items-center gap-2 text-sm">
+                <span :class="['w-2.5 h-2.5 rounded-full', connected ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500']"></span>
+                <span>{{ connected ? '接続中' : 'オフライン' }}</span>
+            </div>
+        </header>
+
+        <!-- Game Flow & Combat Dashboard -->
+        <div class="glass rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 border border-slate-800 shadow-xl" v-if="data">
+            <div class="flex items-center gap-3">
+                <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full font-bold text-xs uppercase tracking-widest animate-pulse">
+                    {{ getPhaseLabel(data.current_phase) }}
+                </span>
+                <div class="text-sm font-semibold text-slate-300">
+                    ターン: <span class="text-white font-bold">{{ data.p0_obs.current_turn }}</span>
+                </div>
+            </div>
+            
+            <div class="flex-grow flex items-center justify-center">
+                <!-- Attack/Defense Status Alert -->
+                <div v-if="data.pending_attack_power > 0" class="px-6 py-2 bg-red-950/40 border border-red-500/40 rounded-xl flex items-center gap-3 text-red-300 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    </span>
+                    <span class="text-xs font-bold">
+                        プレイヤー {{ data.attacker_id }} から プレイヤー {{ data.defender_id }} へ 
+                        <span class="bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 rounded text-white font-extrabold text-sm mx-1">
+                            {{ data.pending_attack_power }}
+                        </span> 
+                        の攻撃中 (属性: {{ getElementLabel(data.pending_attack_element) }})
+                    </span>
+                </div>
+                <div v-else class="text-xs font-bold text-slate-500">
+                    静穏状態（攻撃は発生していません）
+                </div>
+            </div>
+            
+            <div class="text-xs text-slate-400">
+                現在操作中: 
+                <span :class="['px-2.5 py-0.5 rounded-md font-extrabold text-xs ml-1', data.current_actor_id === 0 ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-[0_0_8px_rgba(59,130,246,0.2)]' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30 shadow-[0_0_8px_rgba(168,85,247,0.2)]']">
+                    プレイヤー {{ data.current_actor_id }}
+                </span>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div class="grid grid-cols-1 md:grid-cols-[1fr_240px_1fr] flex-grow gap-4 min-h-0" v-if="data">
+            
+            <!-- Player 0 (You) -->
+            <div :class="['flex flex-col glass rounded-2xl p-4 min-h-0 relative', currentActorId === 0 ? 'ring-2 ring-blue-500/30 border-blue-500/30' : '']">
+                <!-- Game Over overlay -->
+                <div v-if="data.p0_obs.is_done || data.p1_obs.is_done" class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-content-center justify-center p-6 text-center z-40">
+                    <h2 class="text-3xl font-extrabold mb-2 bg-gradient-to-r from-yellow-400 to-red-500 bg-clip-text text-transparent">
+                        {{ data.p0_obs.hp_me <= 0 ? '敗 北' : (data.p0_obs.hp_opp <= 0 ? '勝 利' : '引き分け') }}
+                    </h2>
+                    <p class="text-slate-400 mb-6">対戦が終了しました。</p>
+                    <button @click="resetGame" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 font-bold rounded-lg transition shadow-lg shadow-blue-500/30">
+                        もう一度遊ぶ
+                    </button>
+                </div>
+
+                <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-800">
+                    <span class="font-bold text-lg text-blue-400">あなた (プレイヤー0)</span>
+                    <span v-if="currentActorId === 0" class="text-xs bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 rounded-full font-bold animate-pulse">思考中</span>
+                </div>
+
+                <!-- Compact Stats & Ailments -->
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 p-2 rounded-xl border border-slate-800/80 mb-3 text-[11px]">
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-1">
+                            <span class="text-slate-500 font-medium">HP</span>
+                            <span class="text-rose-500 font-extrabold text-sm">{{ data.p0_obs.hp_me }}</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="text-slate-500 font-medium">MP</span>
+                            <span class="text-cyan-400 font-extrabold text-sm">{{ data.p0_obs.mp_me }}</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="text-slate-500 font-medium">所持金</span>
+                            <span class="text-amber-500 font-extrabold text-sm">{{ data.p0_obs.money_me }}円</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-1.5">
+                        <span v-if="data.p0_obs.guardian_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 font-bold text-[9px] leading-none">
+                            {{ data.p0_obs.guardian_me }}
+                        </span>
+                        <span v-if="data.p0_obs.sickness_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30 font-bold text-[9px] leading-none">
+                            {{ data.p0_obs.sickness_me }}
+                        </span>
+                        <span v-for="c in data.p0_obs.curses_me" :key="c" class="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 font-bold text-[9px] leading-none">
+                            {{ c }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Staged Row (moved above hand) -->
+                <div class="mb-3">
+                    <h3 class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">場に出しているカード</h3>
+                    <div class="bg-slate-950/40 rounded-lg p-1.5 flex gap-1.5 min-h-[36px] items-center border border-slate-900 mb-2">
+                        <span v-if="data.p0_obs.staged.length === 0" class="text-xs text-slate-600 w-full text-center py-1">場にカードを出していません</span>
+                        <span v-for="(card, idx) in data.p0_obs.staged" :key="idx" :class="['text-[9px] px-2 py-0.5 rounded font-bold border shadow-sm', getCardColorClass(card)]">
+                            {{ card.name }}
+                        </span>
+                    </div>
+                    <div class="bg-slate-950/40 rounded-lg p-1.5 flex gap-1.5 min-h-[36px] items-center border border-slate-900">
+                        <span v-if="data.p0_obs.opponent_staged.length === 0" class="text-xs text-slate-600 w-full text-center py-1">相手はカードを出していません</span>
+                        <span v-for="(card, idx) in data.p0_obs.opponent_staged" :key="idx" :class="['text-[9px] px-2 py-0.5 rounded font-bold border shadow-sm', getCardColorClass(card)]">
+                            {{ card.name }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Hand -->
+                <div class="flex flex-col flex-grow min-h-0 mb-4">
+                    <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">手札 ({{ countCards(data.p0_obs.hand) }}枚)</h3>
+                    <div class="grid grid-cols-9 gap-1.5 overflow-y-auto pr-1">
+                        <div v-for="slot in getSortedHand(data.p0_obs.hand)" :key="slot.originalIndex" 
+                             :class="[
+                                'rounded-lg border select-none transition flex flex-col items-center bg-slate-900 overflow-hidden relative shadow', 
+                                isCardPlayable(0, slot.originalIndex) ? 'cursor-pointer ring-2 ring-emerald-500/50 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)] hover:-translate-y-0.5' : 'opacity-50 border-slate-800',
+                                slot.card && slot.card.selected ? 'ring-2 ring-amber-500 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105 z-10' : '',
+                                slot.card && slot.card.deployed ? 'border-purple-500/70 border-dashed shadow-[0_0_10px_rgba(168,85,247,0.4)]' : ''
+                             ]"
+                             @click="isCardPlayable(0, slot.originalIndex) && sendAction(slot.originalIndex)">
+                            <template v-if="slot.card">
+                                <!-- Square Image -->
+                                <div class="w-full aspect-square overflow-hidden bg-slate-950/40 relative">
+                                    <img v-if="!slot.card.hidden && slot.card.id_str" 
+                                         :src="'/assets/image/items/' + slot.card.id_str + '.webp'" 
+                                         class="w-full h-full object-cover object-center" />
+                                    <div v-else-if="slot.card.hidden" class="absolute inset-0 flex items-center justify-center text-[16px] text-purple-400 font-extrabold card-back">？</div>
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-[9px] text-slate-600">No Image</div>
+                                    
+                                    <!-- Deployed Badge -->
+                                    <div v-if="slot.card.deployed" class="absolute top-1 left-1 bg-purple-600/90 text-white font-black text-[7px] px-1 py-0.5 rounded border border-purple-400 leading-none shadow z-20">展開中</div>
+                                </div>
+
+                                <!-- Power Label -->
+                                <div v-if="hasPowerLabel(slot.card, data.p0_obs.current_phase, 0)"
+                                     :class="['w-full h-[18px] flex items-center justify-center text-[11px] font-extrabold border-t border-black/10 leading-none', getPowerLabelClass(slot.card, data.p0_obs.current_phase, 0)]"
+                                     :style="getPowerLabelStyle(slot.card, data.p0_obs.current_phase, 0)">
+                                    {{ getPowerLabelText(slot.card, data.p0_obs.current_phase, 0) }}
+                                </div>
+                                <div v-else class="w-full h-[18px] border-t border-black/10 bg-slate-950/10"></div>
+                            </template>
+                            <template v-else>
+                                <!-- Empty slot -->
+                                <div class="w-full aspect-square flex items-center justify-center text-[9px] text-slate-700 font-bold border-b border-slate-800 border-dashed">
+                                    空
+                                </div>
+                                <div class="w-full h-[18px] flex items-center justify-center text-[8px] text-slate-500 bg-slate-950/20 font-bold leading-none">
+                                    Slot {{ slot.originalIndex }}
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Legal Actions -->
+                <div v-if="currentActorId === 0" class="flex flex-col gap-2 mt-auto">
+                    <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider">選択可能なアクション</h3>
+                    <div class="flex flex-col gap-1.5 overflow-y-auto max-height-[180px] pr-1">
+                        <button v-for="act in getNonCardActions(data.p0_obs)" :key="act.action_id"
+                                :class="['w-full py-2 px-3 text-xs font-bold rounded-lg text-left border transition', getActionButtonClass(act.action_id)]"
+                                @click="sendAction(act.action_id)">
+                            {{ act.description }}
+                        </button>
+                    </div>
+
+                    <!-- Money exchange values -->
+                    <div v-if="getNumberActions(data.p0_obs).length > 0" class="flex flex-col gap-1 mt-2">
+                        <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">両替数値を選択</span>
+                        <div class="grid grid-cols-6 gap-1 bg-slate-950/30 p-1.5 rounded-lg max-h-[100px] overflow-y-auto">
+                            <button v-for="act in getNumberActions(data.p0_obs)" :key="act.action_id"
+                                    class="py-1 px-2 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 transition text-center"
+                                    @click="sendAction(act.action_id)">
+                                {{ act.action_id - 22 }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Central Column -->
+            <div class="flex flex-col gap-4">
+                
+                <!-- Match Meta -->
+                <div class="glass rounded-2xl p-4 text-center">
+                    <div class="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">ターン</div>
+                    <div class="text-3xl font-extrabold bg-gradient-to-r from-yellow-300 to-amber-500 bg-clip-text text-transparent mb-3">
+                        {{ data.p0_obs.current_turn }}
+                    </div>
+                    
+                    <div class="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">フェーズ</div>
+                    <div class="inline-block bg-slate-950/60 border border-slate-800 px-4 py-1 rounded-full text-xs font-bold mb-4">
+                        {{ getPhaseLabel(data.p0_obs.current_phase) }}
+                    </div>
+
+                    <div class="flex flex-col items-center">
+                        <div class="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1.5">現在の手番</div>
+                        <div :class="['px-5 py-1.5 rounded-lg font-extrabold text-sm border shadow-md transition', 
+                                     currentActorId === 0 ? 'bg-blue-600/20 text-blue-400 border-blue-500/40' : 'bg-purple-600/20 text-purple-400 border-purple-500/40']">
+                            Player {{ currentActorId }} {{ currentActorId === 0 ? '(あなた)' : '(相手)' }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pending target display -->
+                <div class="glass rounded-2xl p-4 flex flex-col items-center text-center gap-3 border border-slate-800">
+                    <div class="text-xs text-slate-400 uppercase tracking-widest font-bold">保留中のターゲット</div>
+                    
+                    <div v-if="getActiveObs() && getActiveObs().pending_card" class="w-[84px]">
+                        <div class="rounded-lg border border-slate-700 bg-slate-900 overflow-hidden flex flex-col items-center select-none shadow-md">
+                            <!-- Square Image -->
+                            <div class="w-full aspect-square overflow-hidden bg-slate-950/40 relative">
+                                <img v-if="getActiveObs().pending_card.id_str" 
+                                     :src="'/assets/image/items/' + getActiveObs().pending_card.id_str + '.webp'" 
+                                     class="w-full h-full object-cover object-center" />
+                                <div v-else class="absolute inset-0 flex items-center justify-center text-[9px] text-slate-600">No Image</div>
+                            </div>
+
+                            <!-- Power Label -->
+                            <div v-if="hasPowerLabel(getActiveObs().pending_card, getActiveObs().current_phase, currentActorId)"
+                                 :class="['w-full h-[18px] flex items-center justify-center text-[11px] font-extrabold border-t border-black/10 leading-none', getPowerLabelClass(getActiveObs().pending_card, getActiveObs().current_phase, currentActorId)]"
+                                 :style="getPowerLabelStyle(getActiveObs().pending_card, getActiveObs().current_phase, currentActorId)">
+                                {{ getPowerLabelText(getActiveObs().pending_card, getActiveObs().current_phase, currentActorId) }}
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-xs text-slate-500 italic my-4">
+                        保留中のカードはありません
+                    </div>
+                </div>
+
+                <!-- Instructions -->
+                <div class="glass rounded-2xl p-4 text-xs text-slate-400 flex flex-col gap-2 flex-grow">
+                    <div class="text-xs text-slate-300 uppercase tracking-widest font-bold mb-1">遊び方・ヘルプ</div>
+                    <p>1. ハイライトされた手札カードをクリックすると、場に仮置き（Staged）されます。</p>
+                    <p>2. その後、手番プレイヤー画面の下部に「相手を対象にする」「自分を対象にする」「確定」などのボタンが表示されるので、それをクリックすると効果が解決されます。</p>
+                    <p>3. 相手(P1)をAIにしている場合、自動で相手は思考を行います。チェックを外せば2Pの手動操作が可能です。</p>
+                </div>
+            </div>
+
+            <!-- Player 1 (Opponent) -->
+            <div :class="['flex flex-col glass rounded-2xl p-4 min-h-0 relative', currentActorId === 1 ? 'ring-2 ring-purple-500/30 border-purple-500/30' : '']">
+                <!-- Game Over overlay -->
+                <div v-if="data.p0_obs.is_done || data.p1_obs.is_done" class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-content-center justify-center p-6 text-center z-40">
+                    <h2 class="text-3xl font-extrabold mb-2 bg-gradient-to-r from-yellow-400 to-red-500 bg-clip-text text-transparent">
+                        {{ data.p1_obs.hp_me <= 0 ? '敗 北' : (data.p1_obs.hp_opp <= 0 ? '勝 利' : '引き分け') }}
+                    </h2>
+                    <p class="text-slate-400 mb-6">対戦が終了しました。</p>
+                    <button @click="resetGame" class="px-6 py-2 bg-purple-600 hover:bg-purple-500 font-bold rounded-lg transition shadow-lg shadow-purple-500/30">
+                        もう一度遊ぶ
+                    </button>
+                </div>
+
+                <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-800">
+                    <span class="font-bold text-lg text-purple-400">相手 (プレイヤー1)</span>
+                    <span v-if="currentActorId === 1" class="text-xs bg-gradient-to-r from-purple-500 to-blue-500 px-2 py-0.5 rounded-full font-bold animate-pulse">思考中</span>
+                </div>
+
+                <!-- Compact Stats & Ailments -->
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 p-2 rounded-xl border border-slate-800/80 mb-3 text-[11px]">
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-1">
+                            <span class="text-slate-500 font-medium">HP</span>
+                            <span class="text-rose-500 font-extrabold text-sm">{{ data.p1_obs.hp_me }}</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="text-slate-500 font-medium">MP</span>
+                            <span class="text-cyan-400 font-extrabold text-sm">{{ data.p1_obs.mp_me }}</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="text-slate-500 font-medium">所持金</span>
+                            <span class="text-amber-500 font-extrabold text-sm">{{ data.p1_obs.money_me }}円</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-1.5">
+                        <span v-if="data.p1_obs.guardian_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 font-bold text-[9px] leading-none">
+                            {{ data.p1_obs.guardian_me }}
+                        </span>
+                        <span v-if="data.p1_obs.sickness_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30 font-bold text-[9px] leading-none">
+                            {{ data.p1_obs.sickness_me }}
+                        </span>
+                        <span v-for="c in data.p1_obs.curses_me" :key="c" class="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 font-bold text-[9px] leading-none">
+                            {{ c }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Staged Row (moved above hand) -->
+                <div class="mb-3">
+                    <h3 class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">場に出しているカード</h3>
+                    <div class="bg-slate-950/40 rounded-lg p-1.5 flex gap-1.5 min-h-[36px] items-center border border-slate-900 mb-2">
+                        <span v-if="data.p1_obs.staged.length === 0" class="text-xs text-slate-600 w-full text-center py-1">場にカードを出していません</span>
+                        <span v-for="(card, idx) in data.p1_obs.staged" :key="idx" :class="['text-[9px] px-2 py-0.5 rounded font-bold border shadow-sm', getCardColorClass(card)]">
+                            {{ card.name }}
+                        </span>
+                    </div>
+                    <div class="bg-slate-950/40 rounded-lg p-1.5 flex gap-1.5 min-h-[36px] items-center border border-slate-900">
+                        <span v-if="data.p1_obs.opponent_staged.length === 0" class="text-xs text-slate-600 w-full text-center py-1">相手はカードを出していません</span>
+                        <span v-for="(card, idx) in data.p1_obs.opponent_staged" :key="idx" :class="['text-[9px] px-2 py-0.5 rounded font-bold border shadow-sm', getCardColorClass(card)]">
+                            {{ card.name }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Hand -->
+                <div class="flex flex-col flex-grow min-h-0 mb-4">
+                    <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">
+                        手札 ({{ countCards(data.p1_obs.hand) }}枚) 
+                        <span v-if="aiEnabled" class="text-[10px] text-slate-500 normal-case">(AI自動操作中)</span>
+                    </h3>
+                    <div class="grid grid-cols-9 gap-1.5 overflow-y-auto pr-1">
+                        <div v-for="slot in getSortedHand(data.p1_obs.hand)" :key="slot.originalIndex" 
+                             :class="[
+                                'rounded-lg border select-none transition flex flex-col items-center bg-slate-900 overflow-hidden relative shadow', 
+                                isCardPlayable(1, slot.originalIndex) ? 'cursor-pointer ring-2 ring-emerald-500/50 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)] hover:-translate-y-0.5' : 'opacity-50 border-slate-800',
+                                slot.card && slot.card.selected ? 'ring-2 ring-amber-500 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105 z-10' : '',
+                                slot.card && slot.card.deployed ? 'border-purple-500/70 border-dashed shadow-[0_0_10px_rgba(168,85,247,0.4)]' : ''
+                             ]"
+                             @click="isCardPlayable(1, slot.originalIndex) && sendAction(slot.originalIndex)">
+                            <template v-if="slot.card">
+                                <!-- Square Image -->
+                                <div class="w-full aspect-square overflow-hidden bg-slate-950/40 relative">
+                                    <img v-if="!slot.card.hidden && slot.card.id_str" 
+                                         :src="'/assets/image/items/' + slot.card.id_str + '.webp'" 
+                                         class="w-full h-full object-cover object-center" />
+                                    <div v-else-if="slot.card.hidden" class="absolute inset-0 flex items-center justify-center text-[16px] text-purple-400 font-extrabold card-back">？</div>
+                                    <div v-else class="absolute inset-0 flex items-center justify-center text-[9px] text-slate-600">No Image</div>
+                                    
+                                    <!-- Deployed Badge -->
+                                    <div v-if="slot.card.deployed" class="absolute top-1 left-1 bg-purple-600/90 text-white font-black text-[7px] px-1 py-0.5 rounded border border-purple-400 leading-none shadow z-20">展開中</div>
+                                </div>
+
+                                <!-- Power Label -->
+                                <div v-if="hasPowerLabel(slot.card, data.p1_obs.current_phase, 1)"
+                                     :class="['w-full h-[18px] flex items-center justify-center text-[11px] font-extrabold border-t border-black/10 leading-none', getPowerLabelClass(slot.card, data.p1_obs.current_phase, 1)]"
+                                     :style="getPowerLabelStyle(slot.card, data.p1_obs.current_phase, 1)">
+                                    {{ getPowerLabelText(slot.card, data.p1_obs.current_phase, 1) }}
+                                </div>
+                                <div v-else class="w-full h-[18px] border-t border-black/10 bg-slate-950/10"></div>
+                            </template>
+                            <template v-else>
+                                <!-- Empty slot -->
+                                <div class="w-full aspect-square flex items-center justify-center text-[9px] text-slate-700 font-bold border-b border-slate-800 border-dashed">
+                                    空
+                                </div>
+                                <div class="w-full h-[18px] flex items-center justify-center text-[8px] text-slate-500 bg-slate-950/20 font-bold leading-none">
+                                    Slot {{ slot.originalIndex }}
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Legal Actions -->
+                <div v-if="currentActorId === 1 && !aiEnabled" class="flex flex-col gap-2 mt-auto">
+                    <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider">選択可能なアクション</h3>
+                    <div class="flex flex-col gap-1.5 overflow-y-auto max-height-[180px] pr-1">
+                        <button v-for="act in getNonCardActions(data.p1_obs)" :key="act.action_id"
+                                :class="['w-full py-2 px-3 text-xs font-bold rounded-lg text-left border transition', getActionButtonClass(act.action_id)]"
+                                @click="sendAction(act.action_id)">
+                            {{ act.description }}
+                        </button>
+                    </div>
+
+                    <!-- Money exchange values -->
+                    <div v-if="getNumberActions(data.p1_obs).length > 0" class="flex flex-col gap-1 mt-2">
+                        <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">両替数値を選択</span>
+                        <div class="grid grid-cols-6 gap-1 bg-slate-950/30 p-1.5 rounded-lg max-h-[100px] overflow-y-auto">
+                            <button v-for="act in getNumberActions(data.p1_obs)" :key="act.action_id"
+                                    class="py-1 px-2 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 transition text-center"
+                                    @click="sendAction(act.action_id)">
+                                {{ act.action_id - 22 }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        const CardVisuals = {
+            isSellRelatedPhase(phase) {
+                if (phase === 'PHASE_SELL_SELECT' || phase === 'PHASE_SELL_SELECT_MIRROR') {
+                    return true;
+                }
+                if (phase === 'PHASE_MAIN_TARGET_SELECT') {
+                    const hasStagedSell = (this.data?.p0_obs?.staged?.some(c => c && c.name === '売る') || 
+                                          this.data?.p1_obs?.staged?.some(c => c && c.name === '売る'));
+                    if (hasStagedSell) {
+                        return true;
+                    }
+                }
+                return false;
+            },
+            canReactInPhase(card, phase) {
+                if (!card || !card.reaction_type) return false;
+                if (!card.usage_timing) return false;
+                
+                if (phase === 'PHASE_DEFENSE') {
+                    return card.usage_timing.includes('atk_defence_phase');
+                }
+                if (phase === 'PHASE_MIRACLE_DEFENSE') {
+                    return card.usage_timing.includes('miracle_defence_phase');
+                }
+                return false;
+            },
+            getCardColorClass(card) {
+                if (!card) return 'bg-slate-900/10 border-slate-800 text-slate-600';
+                if (card.hidden) return 'border-purple-900/30 card-back text-purple-400';
+                
+                const elem = card.element.toLowerCase();
+                if (elem === 'fire') return 'bg-red-950/20 border-red-500/30 text-red-300';
+                if (elem === 'water') return 'bg-blue-950/20 border-blue-500/30 text-blue-300';
+                if (elem === 'wood') return 'bg-green-950/20 border-green-500/30 text-green-300';
+                if (elem === 'stone') return 'bg-stone-900/40 border-stone-500/30 text-stone-300';
+                if (elem === 'light') return 'bg-yellow-950/20 border-yellow-500/30 text-yellow-300';
+                if (elem === 'darkness') return 'bg-purple-950/20 border-purple-500/30 text-purple-300';
+                return 'bg-slate-900 border-slate-800 text-slate-300';
+            },
+            hasPowerLabel(card, phase, playerId) {
+                if (!card) return false;
+                if (card.hidden) return true;
+                
+                if (this.isSellRelatedPhase(phase) && playerId === this.currentActorId) {
+                    return true;
+                }
+                
+                const isSpirit = card.name && card.name.includes('精霊');
+                if (phase === 'PHASE_MIRACLE_PLUS' && isSpirit && playerId === this.currentActorId) {
+                    return true;
+                }
+                
+                if (card.type === 'weapon' || card.type === 'defense') return true;
+                if (card.type === 'miracle' && (card.attack_power > 0 || card.defense_power > 0)) return true;
+                return false;
+            },
+            getPowerLabelText(card, phase, playerId) {
+                if (!card) return '';
+                if (card.hidden) return '？';
+                
+                if (this.isSellRelatedPhase(phase) && playerId === this.currentActorId) {
+                    return `¥${card.price || 0}`;
+                }
+                
+                const isDefensePhase = phase === 'PHASE_DEFENSE' || phase === 'PHASE_MIRACLE_DEFENSE';
+                
+                if (isDefensePhase && playerId === this.currentActorId && this.canReactInPhase(card, phase)) {
+                    if (card.reaction_type === 'bounce') return '弾く';
+                    if (card.reaction_type === 'reflect') return 'はね返す';
+                    if (card.reaction_type === 'block') return '止める';
+                }
+                
+                const isSpirit = card.name && card.name.includes('精霊');
+                if (phase === 'PHASE_MIRACLE_PLUS' && isSpirit && playerId === this.currentActorId) {
+                    return 'コスト0';
+                }
+                const isPlus = card.usage_timing && (card.usage_timing.includes('atk_plus_phase') || card.usage_timing.includes('miracle_plus_phase'));
+                const prefix = isPlus ? '+' : '';
+                
+                if (card.type === 'weapon') {
+                    const canDefend = card.usage_timing && (card.usage_timing.includes('atk_defence_phase') || card.usage_timing.includes('miracle_defence_phase'));
+                    if (isDefensePhase && playerId === this.currentActorId && canDefend) {
+                        const defVal = card.defense_power > 0 ? card.defense_power : card.attack_power;
+                        return `守${defVal}`;
+                    } else {
+                        const pct = (!isDefensePhase && card.is_group_attack) ? `${card.accuracy}%` : '';
+                        return `${pct}${prefix}攻${card.attack_power}`;
+                    }
+                }
+                
+                if (card.type === 'defense') {
+                    if (phase === 'PHASE_ATTACK_PLUS' && isPlus && playerId === this.currentActorId) {
+                        return `+攻${card.defense_power}`;
+                    }
+                    return `守${card.defense_power}`;
+                }
+                
+                if (card.type === 'miracle') {
+                    if (isDefensePhase && playerId === this.currentActorId) {
+                        if (card.defense_power > 0) {
+                            return `守${card.defense_power}`;
+                        } else if (card.attack_power > 0) {
+                            return `守${card.attack_power}`;
+                        }
+                    } else {
+                        const pct = (!isDefensePhase && card.is_group_attack) ? `${card.accuracy}%` : '';
+                        if (card.attack_power > 0) {
+                            return `${pct}${prefix}攻${card.attack_power}`;
+                        } else if (card.defense_power > 0) {
+                            return `${pct}${prefix}守${card.defense_power}`;
+                        }
+                    }
+                }
+                
+                return '';
+            },
+            getPowerLabelClass(card, phase, playerId) {
+                if (!card || card.hidden) return 'bg-slate-950/40';
+                
+                const isDefensePhase = phase === 'PHASE_DEFENSE' || phase === 'PHASE_MIRACLE_DEFENSE';
+                if (isDefensePhase && playerId === this.currentActorId && this.canReactInPhase(card, phase)) {
+                    if (card.reaction_type === 'bounce') return 'bg-[#f1a80a] text-white';
+                    if (card.reaction_type === 'reflect') return 'bg-[#ff3b70] text-white';
+                    if (card.reaction_type === 'block') return 'bg-[#00a82f] text-white';
+                }
+                
+                if (card.type === 'miracle') {
+                    return 'bg-[#e8f0fe]';
+                }
+                return 'bg-[#e6f4ea]';
+            },
+            getPowerLabelStyle(card, phase, playerId) {
+                if (!card || card.hidden) return { color: '#64748b' };
+                
+                if (this.isSellRelatedPhase(phase) && playerId === this.currentActorId) {
+                    return { color: '#1e293b' }; // Neutral slate color for prices
+                }
+                
+                const isDefensePhase = phase === 'PHASE_DEFENSE' || phase === 'PHASE_MIRACLE_DEFENSE';
+                if (isDefensePhase && playerId === this.currentActorId && this.canReactInPhase(card, phase)) {
+                    return { color: '#ffffff' };
+                }
+                
+                const elem = card.element || 'none';
+                const colors = {
+                    'none': '#111111',
+                    '火': '#ff6666',
+                    '水': '#6666ff',
+                    '木': '#ff9900',
+                    '土': '#6688aa',
+                    '光': '#c5c500',
+                    '闇': '#aa55cc'
+                };
+                return { color: colors[elem] || '#111111' };
+            }
+        };
+
+        createApp({
+            data() {
+                return {
+                    data: null,
+                    connected: false,
+                    aiEnabled: true,
+                    ws: null,
+                    currentActorId: 0
+                };
+            },
+            methods: {
+                connect() {
+                    const wsUrl = window.location.host ? 
+                        (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws' : 
+                        'ws://localhost:8000/ws';
+                    this.ws = new WebSocket(wsUrl);
+
+                    this.ws.onopen = () => {
+                        this.connected = true;
+                        console.log("WebSocket connected.");
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const msg = JSON.parse(event.data);
+                            this.data = msg;
+                            this.currentActorId = msg.current_actor_id;
+                            this.aiEnabled = msg.ai_enabled;
+                        } catch (e) {
+                            console.error("Failed to parse websocket message", e);
+                        }
+                    };
+
+                    this.ws.onclose = () => {
+                        this.connected = false;
+                        console.log("WebSocket closed, retrying in 2 seconds...");
+                        setTimeout(() => this.connect(), 2000);
+                    };
+                },
+                sendAction(actionId) {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({ type: 'action', action_id: actionId }));
+                    }
+                },
+                resetGame() {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({ type: 'reset' }));
+                    }
+                },
+                toggleAI() {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({ type: 'toggle_ai', ai_enabled: this.aiEnabled }));
+                    }
+                },
+                countCards(hand) {
+                    if (!hand) return 0;
+                    return hand.filter(c => c !== null).length;
+                },
+                getSortedHand(hand) {
+                    if (!hand) return [];
+                    const mapped = hand.map((card, index) => ({ card, originalIndex: index }));
+                    
+                    const normal = mapped.filter(x => x.card !== null && !x.card.deployed);
+                    const deployed = mapped.filter(x => x.card !== null && x.card.deployed);
+                    const empty = mapped.filter(x => x.card === null);
+                    
+                    // Sort normal hand cards by ID
+                    normal.sort((a, b) => a.card.id - b.card.id);
+                    
+                    // Sort deployed cards by deployed_order DESCENDING (so oldest is last/rightmost)
+                    deployed.sort((a, b) => b.card.deployed_order - a.card.deployed_order);
+                    
+                    return [...normal, ...empty, ...deployed];
+                },
+                ...CardVisuals,
+                getElementLabel(elem) {
+                    const labels = {
+                        'ELEM_NONE': '無',
+                        'ELEM_FIRE': '火',
+                        'ELEM_WATER': '水',
+                        'ELEM_WOOD': '木',
+                        'ELEM_STONE': '土',
+                        'ELEM_LIGHT': '光',
+                        'ELEM_DARKNESS': '闇'
+                    };
+                    return labels[elem] || elem;
+                },
+                 isCardSelected(playerId, index) {
+                    if (!this.data) return false;
+                    const obs = playerId === 0 ? this.data.p0_obs : this.data.p1_obs;
+                    if (!obs || !obs.hand || !obs.hand[index]) return false;
+                    return obs.hand[index].selected;
+                },
+                isCardPlayable(playerId, index) {
+                    if (!this.data) return false;
+                    if (this.currentActorId !== playerId) return false;
+                    if (playerId === 1 && this.aiEnabled) return false;
+                    
+                    const obs = playerId === 0 ? this.data.p0_obs : this.data.p1_obs;
+                    return obs.legal_actions.some(act => act.action_id === index);
+                },
+                getActiveObs() {
+                    if (!this.data) return null;
+                    return this.currentActorId === 0 ? this.data.p0_obs : this.data.p1_obs;
+                },
+                getNonCardActions(obs) {
+                    return obs.legal_actions.filter(act => act.action_id >= 18 && act.action_id < 22);
+                },
+                getNumberActions(obs) {
+                    return obs.legal_actions.filter(act => act.action_id >= 22);
+                },
+                getActionButtonClass(actionId) {
+                    if (actionId === 20) return 'text-green-400 border-green-500/20 bg-green-500/5 hover:bg-green-500/10 hover:border-green-500';
+                    if (actionId === 21) return 'text-red-400 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 hover:border-red-500';
+                    return 'text-amber-400 border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500';
+                },
+                getPhaseLabel(phase) {
+                    const phases = {
+                        'PHASE_MAIN': 'メインフェーズ',
+                        'PHASE_DEFENSE': '防御フェーズ',
+                        'PHASE_MAIN_TARGET_SELECT': '対象選択',
+                        'PHASE_GUARDIAN': '守護神判定',
+                        'PHASE_MIRACLE_DEFENSE': '奇跡防御',
+                        'PHASE_MIRACLE_PLUS': '奇跡強化',
+                        'PHASE_ATTACK_PLUS': '攻撃強化',
+                        'PHASE_BUY': '取引(買い)',
+                        'PHASE_SELL_SELECT': '取引(売り)',
+                        'PHASE_DISCARD': '手札整理',
+                        'PHASE_EXCHANGE_HP': 'HP両替',
+                        'PHASE_EXCHANGE_MP': 'MP両替',
+                        'PHASE_END': 'ターン終了処理'
+                    };
+                    return phases[phase] || phase;
+                }
+            },
+            mounted() {
+                this.connect();
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

@@ -7,7 +7,7 @@ constexpr int HISTORY_LENGTH = 64;    // イベント履歴の長さ（リング
 constexpr int NUM_ENVS = 10000;       // 並列実行するゲーム数（メモリ・コア数に応じて調整）
 
 // ゲームの進行と終末の時（Apocalypse）用パラメータ
-constexpr int APOCALYPSE_TURN = 300;   // 終末の時が発動するターン数
+constexpr int APOCALYPSE_TURN = 150;   // 終末の時が発動するターン数
 constexpr int MAX_EPISODE_TURNS = 600; // 無限ループ防止用の最大ターン数（到達で引き分け）
 
 // n-step学習用パラメータ

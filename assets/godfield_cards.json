@@ -1,5 +1,41 @@
 [
   {
+    "name": "両替",
+    "id_str": "deals/exchange",
+    "description": "自分のHP,MP,¥を自由に振り分ける",
+    "type": "deal",
+    "usage_timing": [
+      "main_deal_phase"
+    ],
+    "price": 5,
+    "drop_rate": 20,
+    "id": 0
+  },
+  {
+    "name": "売る",
+    "id_str": "deals/sell",
+    "description": "神器を一個売る",
+    "type": "deal",
+    "usage_timing": [
+      "main_deal_phase"
+    ],
+    "price": 5,
+    "drop_rate": 20,
+    "id": 1
+  },
+  {
+    "name": "買う",
+    "id_str": "deals/buy",
+    "description": "神器を一個買う",
+    "type": "deal",
+    "usage_timing": [
+      "main_deal_phase"
+    ],
+    "price": 5,
+    "drop_rate": 20,
+    "id": 2
+  },
+  {
     "name": "銅のこん棒",
     "type": "weapon",
     "usage_timing": [
@@ -9,7 +45,7 @@
     "attack_power": 1,
     "drop_rate": 3,
     "id_str": "weapons/bronze-club",
-    "id": 0
+    "id": 3
   },
   {
     "name": "銀のこん棒",
@@ -21,7 +57,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "id_str": "weapons/silver-club",
-    "id": 1
+    "id": 4
   },
   {
     "name": "金のこん棒",
@@ -33,7 +69,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "id_str": "weapons/gold-club",
-    "id": 2
+    "id": 5
   },
   {
     "name": "吹き矢",
@@ -46,7 +82,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "id_str": "weapons/blowgun",
-    "id": 3
+    "id": 6
   },
   {
     "name": "ムチ",
@@ -58,7 +94,7 @@
     "attack_power": 2,
     "drop_rate": 4,
     "id_str": "weapons/whip",
-    "id": 4
+    "id": 7
   },
   {
     "name": "セイバーロッド",
@@ -73,7 +109,7 @@
     "defense_power": 6,
     "drop_rate": 1,
     "id_str": "weapons/saver-rod",
-    "id": 5
+    "id": 8
   },
   {
     "name": "クロスボウ",
@@ -86,7 +122,7 @@
     "attack_power": 2,
     "drop_rate": 1,
     "id_str": "weapons/crossbow",
-    "id": 6
+    "id": 9
   },
   {
     "name": "パンチ",
@@ -98,7 +134,7 @@
     "attack_power": 3,
     "drop_rate": 5,
     "id_str": "weapons/punch",
-    "id": 7
+    "id": 10
   },
   {
     "name": "のこぶんぶん",
@@ -111,7 +147,7 @@
     "attack_power": 3,
     "drop_rate": 1,
     "id_str": "weapons/saw-boom-boom",
-    "id": 8
+    "id": 11
   },
   {
     "name": "ブーメラン",
@@ -124,7 +160,7 @@
     "attack_power": 3,
     "drop_rate": 1,
     "id_str": "weapons/boomerang",
-    "id": 9
+    "id": 12
   },
   {
     "name": "ハチェット",
@@ -135,7 +171,8 @@
     "price": 2,
     "attack_power": 4,
     "drop_rate": 6,
-    "id": 10
+    "id_str": "weapons/hatchet",
+    "id": 13
   },
   {
     "name": "とげベルト",
@@ -149,7 +186,8 @@
     "attack_power": 4,
     "defense_power": 2,
     "drop_rate": 1,
-    "id": 11
+    "id_str": "weapons/spiked-belt",
+    "id": 14
   },
   {
     "name": "バトルボール",
@@ -162,7 +200,7 @@
     "attack_power": 4,
     "drop_rate": 1,
     "id_str": "weapons/battle-ball",
-    "id": 12
+    "id": 15
   },
   {
     "name": "鎖ガマ",
@@ -173,7 +211,8 @@
     "price": 2,
     "attack_power": 5,
     "drop_rate": 7,
-    "id": 13
+    "id_str": "weapons/chain-sickle",
+    "id": 16
   },
   {
     "name": "打撃の鉄板",
@@ -187,7 +226,8 @@
     "attack_power": 5,
     "defense_power": 7,
     "drop_rate": 1,
-    "id": 14
+    "id_str": "weapons/plate-of-strike",
+    "id": 17
   },
   {
     "name": "乱弾武剣",
@@ -202,7 +242,7 @@
     "price": 10,
     "attack_power": 5,
     "drop_rate": 7,
-    "id": 15
+    "id": 18
   },
   {
     "name": "戦士の弓",
@@ -215,7 +255,7 @@
     "attack_power": 5,
     "drop_rate": 1,
     "id_str": "weapons/warrior-s-bow",
-    "id": 16
+    "id": 19
   },
   {
     "name": "硬いつち",
@@ -226,7 +266,8 @@
     "price": 2,
     "attack_power": 6,
     "drop_rate": 8,
-    "id": 17
+    "id_str": "weapons/hard-hammer",
+    "id": 20
   },
   {
     "name": "エルボーサック",
@@ -240,7 +281,8 @@
     "attack_power": 6,
     "defense_power": 3,
     "drop_rate": 1,
-    "id": 18
+    "id_str": "weapons/elbow-sack",
+    "id": 21
   },
   {
     "name": "ジェットヨーヨー",
@@ -253,7 +295,7 @@
     "attack_power": 6,
     "drop_rate": 1,
     "id_str": "weapons/jet-yo-yo",
-    "id": 19
+    "id": 22
   },
   {
     "name": "なぎなたクラシック",
@@ -264,7 +306,8 @@
     "price": 3,
     "attack_power": 7,
     "drop_rate": 8,
-    "id": 20
+    "id_str": "weapons/glaive-classic",
+    "id": 23
   },
   {
     "name": "ゴーストソード",
@@ -277,7 +320,7 @@
     "price": 10,
     "attack_power": 7,
     "drop_rate": 1,
-    "id": 21
+    "id": 24
   },
   {
     "name": "未知の羽根",
@@ -289,7 +332,8 @@
     "price": 7,
     "attack_power": 7,
     "drop_rate": 1,
-    "id": 22
+    "id_str": "weapons/unknown-feather",
+    "id": 25
   },
   {
     "name": "ファイナル牙",
@@ -300,7 +344,8 @@
     "price": 3,
     "attack_power": 8,
     "drop_rate": 8,
-    "id": 23
+    "id_str": "weapons/final-tusk",
+    "id": 26
   },
   {
     "name": "地獄のハサミ",
@@ -314,7 +359,7 @@
     "attack_power": 8,
     "drop_rate": 1,
     "id_str": "weapons/hell-scissors",
-    "id": 24
+    "id": 27
   },
   {
     "name": "サイキックカード",
@@ -326,7 +371,8 @@
     "price": 8,
     "attack_power": 8,
     "drop_rate": 1,
-    "id": 25
+    "id_str": "weapons/psychic-card",
+    "id": 28
   },
   {
     "name": "パワーハルベルト",
@@ -337,7 +383,8 @@
     "price": 3,
     "attack_power": 9,
     "drop_rate": 7,
-    "id": 26
+    "id_str": "weapons/power-halberd",
+    "id": 29
   },
   {
     "name": "疾風剣",
@@ -350,7 +397,8 @@
     "price": 10,
     "attack_power": 9,
     "drop_rate": 1,
-    "id": 27
+    "id_str": "weapons/gale-sword",
+    "id": 30
   },
   {
     "name": "スカイハープーン",
@@ -365,7 +413,8 @@
     "price": 5,
     "attack_power": 9,
     "drop_rate": 1,
-    "id": 28
+    "id_str": "weapons/sky-harpoon",
+    "id": 31
   },
   {
     "name": "ワンダーソード",
@@ -376,7 +425,8 @@
     "price": 4,
     "attack_power": 10,
     "drop_rate": 7,
-    "id": 29
+    "id_str": "weapons/wonder-sword",
+    "id": 32
   },
   {
     "name": "いんちきスピア",
@@ -389,7 +439,8 @@
     "price": 10,
     "attack_power": 10,
     "drop_rate": 1,
-    "id": 30
+    "id_str": "weapons/bogus-spear",
+    "id": 33
   },
   {
     "name": "ソードシールド",
@@ -404,7 +455,7 @@
     "defense_power": 10,
     "drop_rate": 1,
     "id_str": "weapons/sword-shield",
-    "id": 31
+    "id": 34
   },
   {
     "name": "反射剣",
@@ -419,7 +470,7 @@
     "price": 5,
     "attack_power": 10,
     "drop_rate": 3,
-    "id": 32
+    "id": 35
   },
   {
     "name": "月光のオノ",
@@ -433,7 +484,8 @@
     "price": 10,
     "attack_power": 10,
     "drop_rate": 1,
-    "id": 33
+    "id_str": "weapons/moonlight-axe",
+    "id": 36
   },
   {
     "name": "グラビティメイス",
@@ -444,7 +496,8 @@
     "price": 4,
     "attack_power": 11,
     "drop_rate": 4,
-    "id": 34
+    "id_str": "weapons/gravity-mace",
+    "id": 37
   },
   {
     "name": "六角凶",
@@ -457,7 +510,8 @@
     "price": 15,
     "attack_power": 11,
     "drop_rate": 1,
-    "id": 35
+    "id_str": "weapons/hexagon-doom",
+    "id": 38
   },
   {
     "name": "エンゼルナイフ",
@@ -471,7 +525,8 @@
     "price": 15,
     "attack_power": 11,
     "drop_rate": 1,
-    "id": 36
+    "id_str": "weapons/angel-knife",
+    "id": 39
   },
   {
     "name": "恐怖の車輪",
@@ -483,7 +538,8 @@
     "price": 10,
     "attack_power": 11,
     "drop_rate": 1,
-    "id": 37
+    "id_str": "weapons/horror-wheel",
+    "id": 40
   },
   {
     "name": "もろぶっこみアクス",
@@ -494,7 +550,8 @@
     "price": 4,
     "attack_power": 12,
     "drop_rate": 4,
-    "id": 38
+    "id_str": "weapons/direct-smash-axe",
+    "id": 41
   },
   {
     "name": "リアルゴーストソード",
@@ -507,7 +564,7 @@
     "price": 15,
     "attack_power": 12,
     "drop_rate": 1,
-    "id": 39
+    "id": 42
   },
   {
     "name": "精霊の杖",
@@ -521,7 +578,7 @@
     "attack_power": 12,
     "drop_rate": 1,
     "id_str": "weapons/spiritual-staff",
-    "id": 40
+    "id": 43
   },
   {
     "name": "絶景のヤリ",
@@ -532,7 +589,8 @@
     "price": 5,
     "attack_power": 13,
     "drop_rate": 4,
-    "id": 41
+    "id_str": "weapons/spear-in-fine-view",
+    "id": 44
   },
   {
     "name": "激烈疾風剣",
@@ -545,7 +603,8 @@
     "price": 15,
     "attack_power": 13,
     "drop_rate": 1,
-    "id": 42
+    "id_str": "weapons/severe-gale-sword",
+    "id": 45
   },
   {
     "name": "伝説の剣のさや",
@@ -559,7 +618,8 @@
     "attack_power": 13,
     "defense_power": 1,
     "drop_rate": 1,
-    "id": 43
+    "id_str": "weapons/legendary-scabbard",
+    "id": 46
   },
   {
     "name": "エンゼルソード",
@@ -573,7 +633,8 @@
     "price": 15,
     "attack_power": 13,
     "drop_rate": 1,
-    "id": 44
+    "id_str": "weapons/angel-sword",
+    "id": 47
   },
   {
     "name": "独楽コンバット",
@@ -585,7 +646,8 @@
     "price": 10,
     "attack_power": 13,
     "drop_rate": 1,
-    "id": 45
+    "id_str": "weapons/top-of-combat",
+    "id": 48
   },
   {
     "name": "暴れフレイル",
@@ -596,7 +658,8 @@
     "price": 5,
     "attack_power": 14,
     "drop_rate": 3,
-    "id": 46
+    "id_str": "weapons/violent-flail",
+    "id": 49
   },
   {
     "name": "邪神の大剣",
@@ -609,7 +672,7 @@
     "price": 1,
     "attack_power": 14,
     "drop_rate": 1,
-    "id": 47
+    "id": 50
   },
   {
     "name": "ドラゴンクロウ",
@@ -620,7 +683,8 @@
     "price": 5,
     "attack_power": 15,
     "drop_rate": 3,
-    "id": 48
+    "id_str": "weapons/dragon-claws",
+    "id": 51
   },
   {
     "name": "エンゼルアクス",
@@ -634,7 +698,8 @@
     "price": 15,
     "attack_power": 15,
     "drop_rate": 1,
-    "id": 49
+    "id_str": "weapons/angel-axe",
+    "id": 52
   },
   {
     "name": "エンゼルの弓",
@@ -649,7 +714,8 @@
     "price": 15,
     "attack_power": 15,
     "drop_rate": 1,
-    "id": 50
+    "id_str": "weapons/angel-bow",
+    "id": 53
   },
   {
     "name": "神の剣",
@@ -661,7 +727,7 @@
     "attack_power": 30,
     "drop_rate": 1,
     "id_str": "weapons/god-sword",
-    "id": 51
+    "id": 54
   },
   {
     "name": "マジカルステッキ",
@@ -674,7 +740,7 @@
     "price": 10,
     "drop_rate": 1,
     "attack_power": 0,
-    "id": 52
+    "id": 55
   },
   {
     "name": "たいまつ",
@@ -687,7 +753,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "id_str": "weapons/torch",
-    "id": 53
+    "id": 56
   },
   {
     "name": "つらら",
@@ -700,7 +766,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "id_str": "weapons/icicle",
-    "id": 54
+    "id": 57
   },
   {
     "name": "木刀",
@@ -713,7 +779,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "id_str": "weapons/wooden-sword",
-    "id": 55
+    "id": 58
   },
   {
     "name": "風のカギ爪",
@@ -728,7 +794,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "id_str": "weapons/wind-talons",
-    "id": 56
+    "id": 59
   },
   {
     "name": "輝きのカケラ",
@@ -742,7 +808,7 @@
     "attack_power": 1,
     "drop_rate": 1,
     "id_str": "weapons/piece-of-brightness",
-    "id": 57
+    "id": 60
   },
   {
     "name": "ちくりんちょ",
@@ -754,8 +820,8 @@
     "element": "闇",
     "attack_power": 1,
     "drop_rate": 1,
-    "id_str": "weapons/abyss-dart",
-    "id": 58
+    "id_str": "weapons/pri-pri-pricker",
+    "id": 61
   },
   {
     "name": "あちちナイフ",
@@ -768,7 +834,7 @@
     "attack_power": 2,
     "drop_rate": 1,
     "id_str": "weapons/ouch-knife",
-    "id": 59
+    "id": 62
   },
   {
     "name": "発火のワンド",
@@ -783,7 +849,7 @@
     "attack_power": 2,
     "drop_rate": 1,
     "id_str": "weapons/wand-of-ignition",
-    "id": 60
+    "id": 63
   },
   {
     "name": "いばらのムチ",
@@ -796,7 +862,7 @@
     "attack_power": 2,
     "drop_rate": 1,
     "id_str": "weapons/thorn-whip",
-    "id": 61
+    "id": 64
   },
   {
     "name": "葉っぱ手裏剣",
@@ -810,7 +876,7 @@
     "attack_power": 2,
     "drop_rate": 1,
     "id_str": "weapons/leaf-shuriken",
-    "id": 62
+    "id": 65
   },
   {
     "name": "つるぎ焼き",
@@ -823,7 +889,7 @@
     "attack_power": 2,
     "drop_rate": 1,
     "id_str": "weapons/sword-ware",
-    "id": 63
+    "id": 66
   },
   {
     "name": "フラッシュダガー",
@@ -838,7 +904,7 @@
     "attack_power": 2,
     "drop_rate": 1,
     "id_str": "weapons/flash-dagger",
-    "id": 64
+    "id": 67
   },
   {
     "name": "燃えムチ",
@@ -850,7 +916,8 @@
     "element": "火",
     "attack_power": 3,
     "drop_rate": 1,
-    "id": 65
+    "id_str": "weapons/fire-whip",
+    "id": 68
   },
   {
     "name": "霧鉄砲",
@@ -864,7 +931,8 @@
     "element": "水",
     "attack_power": 3,
     "drop_rate": 1,
-    "id": 66
+    "id_str": "weapons/fog-gun",
+    "id": 69
   },
   {
     "name": "いがナッツ",
@@ -876,7 +944,8 @@
     "element": "木",
     "attack_power": 3,
     "drop_rate": 1,
-    "id": 67
+    "id_str": "weapons/bur-nut",
+    "id": 70
   },
   {
     "name": "熟成ゴムの弓",
@@ -889,7 +958,8 @@
     "element": "木",
     "attack_power": 3,
     "drop_rate": 1,
-    "id": 68
+    "id_str": "weapons/mature-rubber-bow",
+    "id": 71
   },
   {
     "name": "スタースタッフ",
@@ -901,7 +971,8 @@
     "element": "光",
     "attack_power": 3,
     "drop_rate": 1,
-    "id": 69
+    "id_str": "weapons/star-staff",
+    "id": 72
   },
   {
     "name": "コブラ",
@@ -914,7 +985,7 @@
     "attack_power": 3,
     "drop_rate": 1,
     "id_str": "weapons/cobra",
-    "id": 70
+    "id": 73
   },
   {
     "name": "ほむら巻き",
@@ -929,8 +1000,8 @@
     "attack_power": 4,
     "defense_power": 4,
     "drop_rate": 1,
-    "id_str": "weapons/homura-maki",
-    "id": 71
+    "id_str": "weapons/flaming-roll",
+    "id": 74
   },
   {
     "name": "ファイヤークロスボウ",
@@ -943,7 +1014,8 @@
     "element": "火",
     "attack_power": 4,
     "drop_rate": 1,
-    "id": 72
+    "id_str": "weapons/fire-crossbow",
+    "id": 75
   },
   {
     "name": "氷結ハンマー",
@@ -956,7 +1028,7 @@
     "attack_power": 4,
     "drop_rate": 1,
     "id_str": "weapons/frozen-hammer",
-    "id": 73
+    "id": 76
   },
   {
     "name": "夢の木づち",
@@ -970,7 +1042,8 @@
     "element": "木",
     "attack_power": 4,
     "drop_rate": 1,
-    "id": 74
+    "id_str": "weapons/dream-mallet",
+    "id": 77
   },
   {
     "name": "さよならの剣",
@@ -983,7 +1056,7 @@
     "attack_power": 4,
     "drop_rate": 1,
     "id_str": "weapons/goodbye-sword",
-    "id": 75
+    "id": 78
   },
   {
     "name": "ブレイズブレイド",
@@ -995,7 +1068,8 @@
     "element": "火",
     "attack_power": 5,
     "drop_rate": 1,
-    "id": 76
+    "id_str": "weapons/blaze-blade",
+    "id": 79
   },
   {
     "name": "魔水のワンド",
@@ -1010,7 +1084,7 @@
     "element": "水",
     "attack_power": 5,
     "drop_rate": 1,
-    "id": 77
+    "id": 80
   },
   {
     "name": "旧石器ジャベリン",
@@ -1023,7 +1097,8 @@
     "element": "土",
     "attack_power": 5,
     "drop_rate": 1,
-    "id": 78
+    "id_str": "weapons/paleolithic-javelin",
+    "id": 81
   },
   {
     "name": "ジャスティスランス",
@@ -1035,7 +1110,8 @@
     "element": "光",
     "attack_power": 5,
     "drop_rate": 1,
-    "id": 79
+    "id_str": "weapons/justice-lance",
+    "id": 82
   },
   {
     "name": "キラーフォーク",
@@ -1047,7 +1123,8 @@
     "element": "闇",
     "attack_power": 5,
     "drop_rate": 1,
-    "id": 80
+    "id_str": "weapons/killer-fork",
+    "id": 83
   },
   {
     "name": "冥矢",
@@ -1060,7 +1137,8 @@
     "element": "闇",
     "attack_power": 5,
     "drop_rate": 1,
-    "id": 81
+    "id_str": "weapons/abyss-dart",
+    "id": 84
   },
   {
     "name": "新石器トマホーク",
@@ -1073,7 +1151,8 @@
     "element": "土",
     "attack_power": 7,
     "drop_rate": 1,
-    "id": 82
+    "id_str": "weapons/neolithic-tomahawk",
+    "id": 85
   },
   {
     "name": "火竜一角",
@@ -1085,7 +1164,8 @@
     "element": "火",
     "attack_power": 8,
     "drop_rate": 1,
-    "id": 83
+    "id_str": "weapons/fire-dragon-s-horn",
+    "id": 86
   },
   {
     "name": "水竜一角",
@@ -1097,7 +1177,8 @@
     "element": "水",
     "attack_power": 8,
     "drop_rate": 1,
-    "id": 84
+    "id_str": "weapons/water-dragon-s-horn",
+    "id": 87
   },
   {
     "name": "聖剣",
@@ -1110,7 +1191,7 @@
     "attack_power": 9,
     "drop_rate": 1,
     "id_str": "weapons/holy-sword",
-    "id": 85
+    "id": 88
   },
   {
     "name": "死神のカマ",
@@ -1123,7 +1204,7 @@
     "attack_power": 10,
     "drop_rate": 1,
     "id_str": "weapons/death-s-scythe",
-    "id": 86
+    "id": 89
   },
   {
     "name": "ダイヤモンドソード",
@@ -1135,7 +1216,8 @@
     "element": "土",
     "attack_power": 13,
     "drop_rate": 1,
-    "id": 87
+    "id_str": "weapons/diamond-sword",
+    "id": 90
   },
   {
     "name": "あぶないキネ",
@@ -1149,7 +1231,7 @@
     "element": "光",
     "attack_power": 30,
     "drop_rate": 1,
-    "id": 88
+    "id": 91
   },
   {
     "name": "火の粉袋",
@@ -1165,7 +1247,7 @@
     "accuracy": 75,
     "id_str": "weapons/spark-bag",
     "is_group_attack": true,
-    "id": 89
+    "id": 92
   },
   {
     "name": "シャドウハンド",
@@ -1181,7 +1263,7 @@
     "accuracy": 50,
     "id_str": "weapons/shadow-hand",
     "is_group_attack": true,
-    "id": 90
+    "id": 93
   },
   {
     "name": "霧の扇",
@@ -1198,7 +1280,7 @@
     "accuracy": 50,
     "id_str": "weapons/fog-fan",
     "is_group_attack": true,
-    "id": 91
+    "id": 94
   },
   {
     "name": "つるシュート",
@@ -1214,7 +1296,7 @@
     "accuracy": 75,
     "id_str": "weapons/vine-shoot",
     "is_group_attack": true,
-    "id": 92
+    "id": 95
   },
   {
     "name": "イナヅマキッズ",
@@ -1230,7 +1312,7 @@
     "accuracy": 25,
     "id_str": "weapons/lightning-kids",
     "is_group_attack": true,
-    "id": 93
+    "id": 96
   },
   {
     "name": "火炎杯",
@@ -1246,7 +1328,7 @@
     "accuracy": 75,
     "id_str": "weapons/flame-cup",
     "is_group_attack": true,
-    "id": 94
+    "id": 97
   },
   {
     "name": "冷気杯",
@@ -1262,7 +1344,7 @@
     "accuracy": 75,
     "id_str": "weapons/chill-cup",
     "is_group_attack": true,
-    "id": 95
+    "id": 98
   },
   {
     "name": "植物杯",
@@ -1278,7 +1360,7 @@
     "accuracy": 75,
     "id_str": "weapons/plant-cup",
     "is_group_attack": true,
-    "id": 96
+    "id": 99
   },
   {
     "name": "岩石杯",
@@ -1294,7 +1376,7 @@
     "accuracy": 75,
     "id_str": "weapons/rock-cup",
     "is_group_attack": true,
-    "id": 97
+    "id": 100
   },
   {
     "name": "特大雪玉",
@@ -1310,7 +1392,7 @@
     "accuracy": 50,
     "id_str": "weapons/oversize-snowball",
     "is_group_attack": true,
-    "id": 98
+    "id": 101
   },
   {
     "name": "ガケッツチ",
@@ -1326,7 +1408,7 @@
     "accuracy": 25,
     "id_str": "weapons/cliff-hammer",
     "is_group_attack": true,
-    "id": 99
+    "id": 102
   },
   {
     "name": "光のオーブ",
@@ -1342,7 +1424,7 @@
     "accuracy": 75,
     "id_str": "weapons/light-orb",
     "is_group_attack": true,
-    "id": 100
+    "id": 103
   },
   {
     "name": "烈火シャワー",
@@ -1358,7 +1440,7 @@
     "accuracy": 75,
     "id_str": "weapons/fire-shower",
     "is_group_attack": true,
-    "id": 101
+    "id": 104
   },
   {
     "name": "魔神の木馬",
@@ -1376,7 +1458,7 @@
     "accuracy": 75,
     "id_str": "weapons/jinn-s-rocking-horse",
     "is_group_attack": true,
-    "id": 102
+    "id": 105
   },
   {
     "name": "雨神刀",
@@ -1392,7 +1474,7 @@
     "accuracy": 50,
     "id_str": "weapons/rain-deity-s-saber",
     "is_group_attack": true,
-    "id": 103
+    "id": 106
   },
   {
     "name": "フレアアクス",
@@ -1408,7 +1490,7 @@
     "accuracy": 50,
     "id_str": "weapons/flare-axe",
     "is_group_attack": true,
-    "id": 104
+    "id": 107
   },
   {
     "name": "プチサターン",
@@ -1424,7 +1506,7 @@
     "accuracy": 25,
     "id_str": "weapons/petit-saturn",
     "is_group_attack": true,
-    "id": 105
+    "id": 108
   },
   {
     "name": "昇天弓",
@@ -1440,7 +1522,7 @@
     "drop_rate": 1,
     "accuracy": 25,
     "is_group_attack": true,
-    "id": 106
+    "id": 109
   },
   {
     "name": "革の帽子",
@@ -1451,7 +1533,8 @@
     "price": 1,
     "defense_power": 1,
     "drop_rate": 10,
-    "id": 107
+    "id_str": "armor/leather-cap",
+    "id": 110
   },
   {
     "name": "スカイブーツ",
@@ -1466,7 +1549,7 @@
     "defense_power": 1,
     "drop_rate": 1,
     "id_str": "armor/sky-boots",
-    "id": 108
+    "id": 111
   },
   {
     "name": "アクアシューズ",
@@ -1478,7 +1561,8 @@
     "element": "水",
     "defense_power": 1,
     "drop_rate": 1,
-    "id": 109
+    "id_str": "armor/aqua-shoes",
+    "id": 112
   },
   {
     "name": "草かんむり",
@@ -1490,7 +1574,8 @@
     "element": "木",
     "defense_power": 1,
     "drop_rate": 1,
-    "id": 110
+    "id_str": "armor/laurel-wreath",
+    "id": 113
   },
   {
     "name": "石版",
@@ -1502,7 +1587,8 @@
     "element": "土",
     "defense_power": 1,
     "drop_rate": 1,
-    "id": 111
+    "id_str": "armor/slate",
+    "id": 114
   },
   {
     "name": "革の服",
@@ -1514,7 +1600,7 @@
     "defense_power": 2,
     "drop_rate": 10,
     "id_str": "armor/leather-clothes",
-    "id": 112
+    "id": 115
   },
   {
     "name": "火花の手袋",
@@ -1527,7 +1613,7 @@
     "defense_power": 2,
     "drop_rate": 1,
     "id_str": "armor/sparkle-glove",
-    "id": 113
+    "id": 116
   },
   {
     "name": "アクアグローブ",
@@ -1539,7 +1625,8 @@
     "element": "水",
     "defense_power": 2,
     "drop_rate": 1,
-    "id": 114
+    "id_str": "armor/aqua-glove",
+    "id": 117
   },
   {
     "name": "木の盾",
@@ -1552,7 +1639,7 @@
     "defense_power": 2,
     "drop_rate": 1,
     "id_str": "armor/wood-shield",
-    "id": 115
+    "id": 118
   },
   {
     "name": "岩盤",
@@ -1565,7 +1652,7 @@
     "defense_power": 2,
     "drop_rate": 1,
     "id_str": "armor/bedrock",
-    "id": 116
+    "id": 119
   },
   {
     "name": "アイアンガントレット",
@@ -1576,7 +1663,8 @@
     "price": 3,
     "defense_power": 3,
     "drop_rate": 8,
-    "id": 117
+    "id_str": "armor/iron-gauntlet",
+    "id": 120
   },
   {
     "name": "鬼のくつ",
@@ -1590,7 +1678,8 @@
     "defense_power": 3,
     "attack_power": 5,
     "drop_rate": 1,
-    "id": 118
+    "id_str": "armor/ogre-s-shoes",
+    "id": 121
   },
   {
     "name": "スカイガントレット",
@@ -1604,7 +1693,8 @@
     "price": 5,
     "defense_power": 3,
     "drop_rate": 1,
-    "id": 119
+    "id_str": "armor/sky-gauntlet",
+    "id": 122
   },
   {
     "name": "フレイムブーツ",
@@ -1616,7 +1706,8 @@
     "element": "火",
     "defense_power": 3,
     "drop_rate": 1,
-    "id": 120
+    "id_str": "armor/flame-boots",
+    "id": 123
   },
   {
     "name": "アイスブーツ",
@@ -1628,7 +1719,8 @@
     "element": "水",
     "defense_power": 3,
     "drop_rate": 1,
-    "id": 121
+    "id_str": "armor/ice-boots",
+    "id": 124
   },
   {
     "name": "御神木の小手",
@@ -1640,7 +1732,8 @@
     "element": "木",
     "defense_power": 3,
     "drop_rate": 1,
-    "id": 122
+    "id_str": "armor/sacred-tree-gauntlet",
+    "id": 125
   },
   {
     "name": "結晶板",
@@ -1652,7 +1745,8 @@
     "element": "土",
     "defense_power": 3,
     "drop_rate": 1,
-    "id": 123
+    "id_str": "armor/crystal-board",
+    "id": 126
   },
   {
     "name": "アイアンシールド",
@@ -1663,7 +1757,8 @@
     "price": 4,
     "defense_power": 4,
     "drop_rate": 8,
-    "id": 124
+    "id_str": "armor/iron-shield",
+    "id": 127
   },
   {
     "name": "フレイムヘルム",
@@ -1675,7 +1770,8 @@
     "element": "火",
     "defense_power": 4,
     "drop_rate": 1,
-    "id": 125
+    "id_str": "armor/flame-helm",
+    "id": 128
   },
   {
     "name": "アイスヘルム",
@@ -1687,7 +1783,8 @@
     "element": "水",
     "defense_power": 4,
     "drop_rate": 1,
-    "id": 126
+    "id_str": "armor/ice-helm",
+    "id": 129
   },
   {
     "name": "林の盾",
@@ -1699,7 +1796,8 @@
     "element": "木",
     "defense_power": 4,
     "drop_rate": 1,
-    "id": 127
+    "id_str": "armor/grove-shield",
+    "id": 130
   },
   {
     "name": "大地のくつ",
@@ -1712,7 +1810,7 @@
     "defense_power": 4,
     "drop_rate": 1,
     "id_str": "armor/terra-shoes",
-    "id": 128
+    "id": 131
   },
   {
     "name": "アイアンアーマー",
@@ -1723,7 +1821,8 @@
     "price": 5,
     "defense_power": 5,
     "drop_rate": 8,
-    "id": 129
+    "id_str": "armor/iron-armor",
+    "id": 132
   },
   {
     "name": "鬼の小手",
@@ -1737,7 +1836,8 @@
     "defense_power": 5,
     "attack_power": 10,
     "drop_rate": 1,
-    "id": 130
+    "id_str": "armor/ogre-s-gauntlet",
+    "id": 133
   },
   {
     "name": "スカイヘルム",
@@ -1751,7 +1851,8 @@
     "price": 5,
     "defense_power": 5,
     "drop_rate": 1,
-    "id": 131
+    "id_str": "armor/sky-helm",
+    "id": 134
   },
   {
     "name": "フレイムシールド",
@@ -1763,7 +1864,8 @@
     "element": "火",
     "defense_power": 5,
     "drop_rate": 1,
-    "id": 132
+    "id_str": "armor/flame-shield",
+    "id": 135
   },
   {
     "name": "アイスシールド",
@@ -1775,7 +1877,8 @@
     "element": "水",
     "defense_power": 5,
     "drop_rate": 1,
-    "id": 133
+    "id_str": "armor/ice-shield",
+    "id": 136
   },
   {
     "name": "樹脂で編んだ法衣",
@@ -1787,7 +1890,8 @@
     "element": "木",
     "defense_power": 5,
     "drop_rate": 1,
-    "id": 134
+    "id_str": "armor/resin-knit-robe",
+    "id": 137
   },
   {
     "name": "大地の小手",
@@ -1800,7 +1904,7 @@
     "defense_power": 5,
     "drop_rate": 1,
     "id_str": "armor/terra-gauntlet",
-    "id": 135
+    "id": 138
   },
   {
     "name": "はがねの小手",
@@ -1811,7 +1915,8 @@
     "price": 6,
     "defense_power": 6,
     "drop_rate": 6,
-    "id": 136
+    "id_str": "armor/steel-gauntlet",
+    "id": 139
   },
   {
     "name": "精霊の足袋",
@@ -1825,7 +1930,7 @@
     "defense_power": 6,
     "drop_rate": 1,
     "id_str": "armor/spiritual-socks",
-    "id": 137
+    "id": 140
   },
   {
     "name": "フレイムメイル",
@@ -1838,7 +1943,7 @@
     "defense_power": 6,
     "drop_rate": 1,
     "id_str": "armor/flame-mail",
-    "id": 138
+    "id": 141
   },
   {
     "name": "アイスアーマー",
@@ -1850,7 +1955,8 @@
     "element": "水",
     "defense_power": 6,
     "drop_rate": 1,
-    "id": 139
+    "id_str": "armor/ice-armor",
+    "id": 142
   },
   {
     "name": "森の盾",
@@ -1862,7 +1968,8 @@
     "element": "木",
     "defense_power": 6,
     "drop_rate": 1,
-    "id": 140
+    "id_str": "armor/forest-shield",
+    "id": 143
   },
   {
     "name": "大地のかぶと",
@@ -1874,7 +1981,8 @@
     "element": "土",
     "defense_power": 6,
     "drop_rate": 1,
-    "id": 141
+    "id_str": "armor/terra-helm",
+    "id": 144
   },
   {
     "name": "ぴかぴかハイヒール",
@@ -1886,7 +1994,8 @@
     "element": "光",
     "defense_power": 6,
     "drop_rate": 1,
-    "id": 142
+    "id_str": "armor/shining-high-heels",
+    "id": 145
   },
   {
     "name": "はがねのかぶと",
@@ -1897,7 +2006,8 @@
     "price": 7,
     "defense_power": 7,
     "drop_rate": 6,
-    "id": 143
+    "id_str": "armor/steel-helm",
+    "id": 146
   },
   {
     "name": "鬼のかぶと",
@@ -1911,7 +2021,8 @@
     "defense_power": 7,
     "attack_power": 10,
     "drop_rate": 1,
-    "id": 144
+    "id_str": "armor/ogre-s-helm",
+    "id": 147
   },
   {
     "name": "スカイシールド",
@@ -1926,7 +2037,7 @@
     "defense_power": 7,
     "drop_rate": 1,
     "id_str": "armor/sky-shield",
-    "id": 145
+    "id": 148
   },
   {
     "name": "バーニングシールド",
@@ -1938,7 +2049,8 @@
     "element": "火",
     "defense_power": 7,
     "drop_rate": 1,
-    "id": 146
+    "id_str": "armor/burning-shield",
+    "id": 149
   },
   {
     "name": "スノーミトン",
@@ -1950,7 +2062,8 @@
     "element": "水",
     "defense_power": 7,
     "drop_rate": 1,
-    "id": 147
+    "id_str": "armor/snow-mitten",
+    "id": 150
   },
   {
     "name": "はがねの盾",
@@ -1962,7 +2075,8 @@
     "element": "木",
     "defense_power": 8,
     "drop_rate": 6,
-    "id": 148
+    "id_str": "armor/steel-shield",
+    "id": 151
   },
   {
     "name": "美しいガラス細工",
@@ -1974,7 +2088,8 @@
     "element": "土",
     "defense_power": 8,
     "drop_rate": 1,
-    "id": 149
+    "id_str": "armor/beautiful-glasswork",
+    "id": 152
   },
   {
     "name": "月光のかぶと",
@@ -1988,7 +2103,8 @@
     "price": 10,
     "defense_power": 8,
     "drop_rate": 1,
-    "id": 150
+    "id_str": "armor/moonlight-helm",
+    "id": 153
   },
   {
     "name": "バーニングジャケット",
@@ -2000,7 +2116,8 @@
     "element": "火",
     "defense_power": 8,
     "drop_rate": 1,
-    "id": 151
+    "id_str": "armor/burning-jacket",
+    "id": 154
   },
   {
     "name": "スノーマスク",
@@ -2012,7 +2129,8 @@
     "element": "水",
     "defense_power": 8,
     "drop_rate": 1,
-    "id": 152
+    "id_str": "armor/snow-mask",
+    "id": 155
   },
   {
     "name": "コハクの胸当て",
@@ -2024,7 +2142,8 @@
     "element": "木",
     "defense_power": 8,
     "drop_rate": 1,
-    "id": 153
+    "id_str": "armor/amber-breastplate",
+    "id": 156
   },
   {
     "name": "大地のよろい",
@@ -2037,7 +2156,7 @@
     "defense_power": 8,
     "drop_rate": 1,
     "id_str": "armor/terra-armor",
-    "id": 154
+    "id": 157
   },
   {
     "name": "はがねのよろい",
@@ -2048,7 +2167,8 @@
     "price": 9,
     "defense_power": 9,
     "drop_rate": 6,
-    "id": 155
+    "id_str": "armor/steel-armor",
+    "id": 158
   },
   {
     "name": "鬼のよろい",
@@ -2062,7 +2182,8 @@
     "defense_power": 9,
     "attack_power": 15,
     "drop_rate": 1,
-    "id": 156
+    "id_str": "armor/ogre-s-armor",
+    "id": 159
   },
   {
     "name": "精霊の頭巾",
@@ -2076,7 +2197,7 @@
     "defense_power": 9,
     "drop_rate": 1,
     "id_str": "armor/spiritual-hood",
-    "id": 157
+    "id": 160
   },
   {
     "name": "スカイアーマー",
@@ -2088,7 +2209,7 @@
     "defense_power": 9,
     "drop_rate": 1,
     "id_str": "armor/sky-armor",
-    "id": 158
+    "id": 161
   },
   {
     "name": "エンゼルの小手",
@@ -2102,7 +2223,8 @@
     "price": 15,
     "defense_power": 9,
     "drop_rate": 1,
-    "id": 159
+    "id_str": "armor/angel-gauntlet",
+    "id": 162
   },
   {
     "name": "エナジーヘルム",
@@ -2113,7 +2235,8 @@
     "price": 10,
     "defense_power": 10,
     "drop_rate": 4,
-    "id": 160
+    "id_str": "armor/energy-helm",
+    "id": 163
   },
   {
     "name": "月光の盾",
@@ -2128,7 +2251,7 @@
     "defense_power": 10,
     "drop_rate": 1,
     "id_str": "armor/moonlight-shield",
-    "id": 161
+    "id": 164
   },
   {
     "name": "熱狂仮面",
@@ -2142,7 +2265,7 @@
     "defense_power": 10,
     "drop_rate": 1,
     "id_str": "armor/fever-mask",
-    "id": 162
+    "id": 165
   },
   {
     "name": "きらきらドレス",
@@ -2154,7 +2277,8 @@
     "element": "光",
     "defense_power": 10,
     "drop_rate": 1,
-    "id": 163
+    "id_str": "armor/glittering-dress",
+    "id": 166
   },
   {
     "name": "エナジーアーマー",
@@ -2165,7 +2289,8 @@
     "price": 10,
     "defense_power": 11,
     "drop_rate": 4,
-    "id": 164
+    "id_str": "armor/energy-armor",
+    "id": 167
   },
   {
     "name": "エンゼルの帽子",
@@ -2179,7 +2304,8 @@
     "price": 15,
     "defense_power": 11,
     "drop_rate": 1,
-    "id": 165
+    "id_str": "armor/angel-cap",
+    "id": 168
   },
   {
     "name": "コアバリヤー",
@@ -2190,7 +2316,8 @@
     "price": 10,
     "defense_power": 12,
     "drop_rate": 2,
-    "id": 166
+    "id_str": "armor/core-barrier",
+    "id": 169
   },
   {
     "name": "精霊の帯",
@@ -2204,7 +2331,7 @@
     "defense_power": 12,
     "drop_rate": 1,
     "id_str": "armor/spiritual-sash",
-    "id": 167
+    "id": 170
   },
   {
     "name": "月光のよろい",
@@ -2216,7 +2343,7 @@
     "defense_power": 12,
     "drop_rate": 1,
     "id_str": "armor/moonlight-armor",
-    "id": 168
+    "id": 171
   },
   {
     "name": "陽炎のよろい",
@@ -2229,7 +2356,7 @@
     "defense_power": 12,
     "drop_rate": 1,
     "id_str": "armor/heat-haze-armor",
-    "id": 169
+    "id": 172
   },
   {
     "name": "コアプロテクター",
@@ -2240,7 +2367,8 @@
     "price": 10,
     "defense_power": 13,
     "drop_rate": 2,
-    "id": 170
+    "id_str": "armor/core-protector",
+    "id": 173
   },
   {
     "name": "エンゼルシールド",
@@ -2254,7 +2382,8 @@
     "price": 15,
     "defense_power": 13,
     "drop_rate": 1,
-    "id": 171
+    "id_str": "armor/angel-shield",
+    "id": 174
   },
   {
     "name": "夢見る帽子",
@@ -2268,7 +2397,7 @@
     "defense_power": 14,
     "drop_rate": 1,
     "id_str": "armor/dreaming-hat",
-    "id": 172
+    "id": 175
   },
   {
     "name": "エンゼルアーマー",
@@ -2282,7 +2411,8 @@
     "price": 15,
     "defense_power": 15,
     "drop_rate": 1,
-    "id": 173
+    "id_str": "armor/angel-armor",
+    "id": 176
   },
   {
     "name": "神の盾",
@@ -2294,7 +2424,7 @@
     "defense_power": 30,
     "drop_rate": 1,
     "id_str": "armor/god-shield",
-    "id": 174
+    "id": 177
   },
   {
     "name": "火星の指輪",
@@ -2308,7 +2438,7 @@
     "drop_rate": 1,
     "accuracy": 75,
     "id_str": "armor/mars-ring",
-    "id": 175
+    "id": 178
   },
   {
     "name": "水星の指輪",
@@ -2321,7 +2451,7 @@
     "element": "水",
     "drop_rate": 1,
     "id_str": "armor/mercury-ring",
-    "id": 176
+    "id": 179
   },
   {
     "name": "木星の指輪",
@@ -2334,7 +2464,7 @@
     "element": "木",
     "drop_rate": 1,
     "id_str": "armor/jupiter-ring",
-    "id": 177
+    "id": 180
   },
   {
     "name": "土星の指輪",
@@ -2347,7 +2477,7 @@
     "element": "土",
     "drop_rate": 1,
     "id_str": "armor/saturn-ring",
-    "id": 178
+    "id": 181
   },
   {
     "name": "天王の指輪",
@@ -2360,7 +2490,7 @@
     "element": "光",
     "drop_rate": 1,
     "id_str": "armor/uranus-ring",
-    "id": 179
+    "id": 182
   },
   {
     "name": "冥王の指輪",
@@ -2373,7 +2503,7 @@
     "element": "闇",
     "drop_rate": 1,
     "id_str": "armor/pluto-ring",
-    "id": 180
+    "id": 183
   },
   {
     "name": "海王の指輪",
@@ -2385,7 +2515,7 @@
     "price": 10,
     "drop_rate": 1,
     "id_str": "armor/neptune-ring",
-    "id": 181
+    "id": 184
   },
   {
     "name": "金星の指輪",
@@ -2397,7 +2527,7 @@
     "price": 10,
     "drop_rate": 1,
     "id_str": "armor/venus-ring",
-    "id": 182
+    "id": 185
   },
   {
     "name": "虹のカーテン",
@@ -2411,7 +2541,7 @@
     "price": 15,
     "drop_rate": 3,
     "defense_power": 0,
-    "id": 183
+    "id": 186
   },
   {
     "name": "スーパーミラー",
@@ -2425,42 +2555,6 @@
     ],
     "price": 10,
     "drop_rate": 1,
-    "id": 184
-  },
-  {
-    "name": "両替",
-    "id_str": "deals/exchange",
-    "description": "自分のHP,MP,¥を自由に振り分ける",
-    "type": "deal",
-    "usage_timing": [
-      "main_deal_phase"
-    ],
-    "price": 5,
-    "drop_rate": 20,
-    "id": 185
-  },
-  {
-    "name": "売る",
-    "id_str": "deals/sell",
-    "description": "神器を一個売る",
-    "type": "deal",
-    "usage_timing": [
-      "main_deal_phase"
-    ],
-    "price": 5,
-    "drop_rate": 20,
-    "id": 186
-  },
-  {
-    "name": "買う",
-    "id_str": "deals/buy",
-    "description": "神器を一個買う",
-    "type": "deal",
-    "usage_timing": [
-      "main_deal_phase"
-    ],
-    "price": 5,
-    "drop_rate": 20,
     "id": 187
   },
   {

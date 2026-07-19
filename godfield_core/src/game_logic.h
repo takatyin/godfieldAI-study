@@ -51,3 +51,14 @@ void get_legal_actions(const InternalState& state, bool legal_actions[ACTION_SPA
  *        それ以外（0個、または2個以上）の場合は -1 を返す
  */
 int get_single_legal_action(const InternalState& state);
+
+/**
+ * @brief 指定プレイヤーの視点での部分観測（Observation）を構築して書き込む
+ */
+void make_observation(const InternalState& state, int player_id, Observation& obs);
+
+/**
+ * @brief 指定プレイヤーの視点での部分観測（Observation）を新しく構築して返却する
+ */
+Observation get_observation(const InternalState& state, int player_id);
+

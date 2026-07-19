@@ -25,6 +25,7 @@ static StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_
 
     int total_atk = 0;
     Element current_element = ELEM_NONE;
+    bool has_processed = false;
 
     // マジカルステッキ以外のMP消費を計算
     int other_mp_cost = 0;
@@ -58,31 +59,26 @@ static StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_
             total_atk += f.attack_power;
         }
 
-        // 精霊系カードは属性計算に関与しない（元の属性を維持）
+        // 属性判定
         if (is_spiritual_zero_mp_card(card_id)) {
-            // 属性計算をスキップ
+            // 精霊系カードは属性計算に関与しない
         } else if (card_id == ID_WAND_OF_IGNITION || card_id == ID_WAND_OF_MYSTIC_WATER) {
-            // ワンドによる属性上書き
-            current_element = f.element; // 火 または 水 に強制上書き
+            // ワンドによる属性上書き（無条件で攻撃をその属性にする）
+            current_element = f.element;
+            has_processed = true;
         } else {
             Element e = f.element;
-            if (e == ELEM_NONE) {
-                // 無属性が重ねられた場合、全体の属性も無属性になる
-                current_element = ELEM_NONE;
-            } else if (e == ELEM_LIGHT) {
-                // 光属性が重ねられた場合、現在が無属性なら光属性になり、すでに特定属性があれば維持
-                // ただし、特定属性が闇属性（ELEM_DARKNESS）の場合は無属性（ELEM_NONE）になる
-                if (current_element == ELEM_NONE) {
-                    current_element = ELEM_LIGHT;
-                } else if (current_element == ELEM_DARKNESS) {
-                    current_element = ELEM_NONE;
-                }
+            if (!has_processed) {
+                current_element = e;
+                has_processed = true;
             } else {
-                // 特定属性（火、水、木、土、闇）が重ねられた場合
-                if (current_element == ELEM_NONE) {
-                    current_element = e;
+                if (e == ELEM_NONE || current_element == ELEM_NONE) {
+                    current_element = ELEM_NONE;
+                } else if (e == ELEM_LIGHT) {
+                    if (current_element == ELEM_DARKNESS) {
+                        current_element = ELEM_NONE;
+                    }
                 } else if (current_element == ELEM_LIGHT) {
-                    // すでに光属性があり、追加されたのが闇属性の場合は無属性（ELEM_NONE）になる
                     if (e == ELEM_DARKNESS) {
                         current_element = ELEM_NONE;
                     } else {
@@ -103,7 +99,7 @@ static StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_
     }
 
     info.attack_power = total_atk;
-    info.element = current_element;
+    info.element = has_processed ? current_element : ELEM_NONE;
 
     info.hit = true;
     for (int i = 0; i < state.num_staged_cards[player_id]; ++i) {
@@ -653,8 +649,12 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
             }
         }
 
+        if (rainbow) {
+            state.pending_attack_element = ELEM_NONE;
+        }
+
         ReactionType react_type = REACTION_NONE;
-        Element effective_atk_element = rainbow ? ELEM_NONE : state.pending_attack_element;
+        Element effective_atk_element = state.pending_attack_element;
         for (int i = 0; i < state.num_staged_cards[me]; ++i) {
             int h_idx = state.staged_cards[me][i];
             int card_id = state.true_hand[me][h_idx];
@@ -1141,7 +1141,7 @@ void step_phase_discard(InternalState &state, ActionType action, int me, int opp
         if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
             int idx = action - ACTION_SELECT_HAND_0;
             int card_id = state.true_hand[me][idx];
-            if (card_id != CARD_EMPTY && !state.is_deployed[me][idx] && !state.is_used[me][idx]) {
+            if (card_id != CARD_EMPTY && !state.is_used[me][idx]) {
                 if (is_discardable_card(card_id)) {
                     state.staged_cards[me][state.num_staged_cards[me]++] = idx;
                     state.is_used[me][idx] = true;

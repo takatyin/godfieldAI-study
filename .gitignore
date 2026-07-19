@@ -47,3 +47,9 @@ visualizer_web/*.local
 # OS
 .DS_Store
 Thumbs.db
+
+# Compiler configurations (local environment specific)
+compile_flags.txt
+compile_commands.json
+.clangd/
+

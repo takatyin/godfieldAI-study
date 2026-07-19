@@ -229,9 +229,9 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
 
             if (!can_afford_staged_plus_card(state, me, i)) continue;
 
-            // 1. 虹のカーテンは1枚目のみ
+            // 1. 虹のカーテンは1枚目のみ (かつ攻撃力 > 0 のときのみ)
             if (card_id == ID_RAINBOW_CURTAIN) {
-                if (state.num_staged_cards[me] == 0) {
+                if (state.num_staged_cards[me] == 0 && state.pending_attack_power > 0) {
                     legal_actions[ACTION_SELECT_HAND_0 + i] = true;
                 }
                 continue;
@@ -263,44 +263,50 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
                 continue;
             }
 
-            // 4. 一般防具の判定
-            if (f.usage_timing & TIMING_ATK_DEFENCE) {
-                Element cand_e = f.element;
-                Element next_def_element = current_def_element;
-                if (cand_e == ELEM_NONE) next_def_element = ELEM_NONE;
-                else if (cand_e == ELEM_LIGHT) {
-                    if (current_def_element == ELEM_NONE && !has_non_element && !has_multiple_different_elements && !has_light && base_def_element == ELEM_NONE)
-                        next_def_element = ELEM_LIGHT;
-                } else {
-                    if (current_def_element == ELEM_NONE) {
-                        if (!has_non_element && !has_multiple_different_elements && !has_light && base_def_element == ELEM_NONE)
-                            next_def_element = cand_e;
-                        else if (has_light && !has_non_element && !has_multiple_different_elements && base_def_element == ELEM_NONE)
-                            next_def_element = cand_e;
-                        else next_def_element = ELEM_NONE;
-                    } else if (current_def_element != cand_e) {
-                        next_def_element = ELEM_NONE;
+            // 4. 一般防具の判定 (攻撃力 > 0 のときのみ判定)
+            if (state.pending_attack_power > 0) {
+                uint32_t allowed_timings = (defense_phase == GamePhase::PHASE_DEFENSE) ? TIMING_ATK_DEFENCE : TIMING_MIRACLE_DEFENCE;
+                if (defense_phase == GamePhase::PHASE_MIRACLE_DEFENSE && rainbow) {
+                    allowed_timings |= TIMING_ATK_DEFENCE;
+                }
+                if (f.usage_timing & allowed_timings) {
+                    Element cand_e = f.element;
+                    Element next_def_element = current_def_element;
+                    if (cand_e == ELEM_NONE) next_def_element = ELEM_NONE;
+                    else if (cand_e == ELEM_LIGHT) {
+                        if (current_def_element == ELEM_NONE && !has_non_element && !has_multiple_different_elements && !has_light && base_def_element == ELEM_NONE)
+                            next_def_element = ELEM_LIGHT;
+                    } else {
+                        if (current_def_element == ELEM_NONE) {
+                            if (!has_non_element && !has_multiple_different_elements && !has_light && base_def_element == ELEM_NONE)
+                                next_def_element = cand_e;
+                            else if (has_light && !has_non_element && !has_multiple_different_elements && base_def_element == ELEM_NONE)
+                                next_def_element = cand_e;
+                            else next_def_element = ELEM_NONE;
+                        } else if (current_def_element != cand_e) {
+                            next_def_element = ELEM_NONE;
+                        }
                     }
-                }
 
-                bool can_defend = false;
-                if (effective_atk_element == ELEM_LIGHT) {
-                    if (rainbow) can_defend = true;
-                } else if (effective_atk_element == ELEM_NONE || effective_atk_element == ELEM_DARKNESS) {
-                    can_defend = true;
-                } else {
-                    Element required_def = ELEM_NONE;
-                    if (effective_atk_element == ELEM_FIRE) required_def = ELEM_WATER;
-                    else if (effective_atk_element == ELEM_WATER) required_def = ELEM_FIRE;
-                    else if (effective_atk_element == ELEM_WOOD) required_def = ELEM_STONE;
-                    else if (effective_atk_element == ELEM_STONE) required_def = ELEM_WOOD;
+                    bool can_defend = false;
+                    if (effective_atk_element == ELEM_LIGHT) {
+                        if (rainbow) can_defend = true;
+                    } else if (effective_atk_element == ELEM_NONE || effective_atk_element == ELEM_DARKNESS) {
+                        can_defend = true;
+                    } else {
+                        Element required_def = ELEM_NONE;
+                        if (effective_atk_element == ELEM_FIRE) required_def = ELEM_WATER;
+                        else if (effective_atk_element == ELEM_WATER) required_def = ELEM_FIRE;
+                        else if (effective_atk_element == ELEM_WOOD) required_def = ELEM_STONE;
+                        else if (effective_atk_element == ELEM_STONE) required_def = ELEM_WOOD;
 
-                    if (rainbow) can_defend = true;
-                    else if (next_def_element == required_def || next_def_element == ELEM_LIGHT) can_defend = true;
-                }
+                        if (rainbow) can_defend = true;
+                        else if (next_def_element == required_def || next_def_element == ELEM_LIGHT) can_defend = true;
+                    }
 
-                if (can_defend) {
-                    legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+                    if (can_defend) {
+                        legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+                    }
                 }
             }
         }

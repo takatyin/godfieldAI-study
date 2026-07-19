@@ -92,6 +92,7 @@
   price: 2
   attack_power: 4
   drop_rate: 6
+  id_str: weapons/hatchet
 - name: とげベルト
   description: 守2
   type: weapon
@@ -102,6 +103,7 @@
   attack_power: 4
   defense_power: 2
   drop_rate: 1
+  id_str: weapons/spiked-belt
 - name: バトルボール
   type: weapon
   usage_timing:
@@ -118,6 +120,7 @@
   price: 2
   attack_power: 5
   drop_rate: 7
+  id_str: weapons/chain-sickle
 - name: 打撃の鉄板
   description: 守7
   type: weapon
@@ -128,6 +131,7 @@
   attack_power: 5
   defense_power: 7
   drop_rate: 1
+  id_str: weapons/plate-of-strike
 - name: 乱弾武剣
   id_str: weapons/bouncing-sword
   description: 無属性武器を弾く
@@ -155,6 +159,7 @@
   price: 2
   attack_power: 6
   drop_rate: 8
+  id_str: weapons/hard-hammer
 - name: エルボーサック
   description: 守3
   type: weapon
@@ -165,6 +170,7 @@
   attack_power: 6
   defense_power: 3
   drop_rate: 1
+  id_str: weapons/elbow-sack
 - name: ジェットヨーヨー
   type: weapon
   usage_timing:
@@ -181,6 +187,7 @@
   price: 3
   attack_power: 7
   drop_rate: 8
+  id_str: weapons/glaive-classic
 - name: ゴーストソード
   id_str: weapons/ghost-sword
   description: 与えたダメージ分HPを吸収する
@@ -198,6 +205,7 @@
   price: 7
   attack_power: 7
   drop_rate: 1
+  id_str: weapons/unknown-feather
 - name: ファイナル牙
   type: weapon
   usage_timing:
@@ -205,6 +213,7 @@
   price: 3
   attack_power: 8
   drop_rate: 8
+  id_str: weapons/final-tusk
 - name: 地獄のハサミ
   description: ダメージを与えた対象を地獄病状態にする
   hit_curse: hell
@@ -223,6 +232,7 @@
   price: 8
   attack_power: 8
   drop_rate: 1
+  id_str: weapons/psychic-card
 - name: パワーハルベルト
   type: weapon
   usage_timing:
@@ -230,6 +240,7 @@
   price: 3
   attack_power: 9
   drop_rate: 7
+  id_str: weapons/power-halberd
 - name: 疾風剣
   description: ダメージを与えた対象を風邪状態にする
   hit_curse: cold
@@ -239,6 +250,7 @@
   price: 10
   attack_power: 9
   drop_rate: 1
+  id_str: weapons/gale-sword
 - name: スカイハープーン
   description: 奇跡をはね返す
   type: weapon
@@ -250,6 +262,7 @@
   price: 5
   attack_power: 9
   drop_rate: 1
+  id_str: weapons/sky-harpoon
 - name: ワンダーソード
   type: weapon
   usage_timing:
@@ -257,6 +270,7 @@
   price: 4
   attack_power: 10
   drop_rate: 7
+  id_str: weapons/wonder-sword
 - name: いんちきスピア
   description: ダメージを与えた対象を夢状態にする
   hit_curse: dream
@@ -266,6 +280,7 @@
   price: 10
   attack_power: 10
   drop_rate: 1
+  id_str: weapons/bogus-spear
 - name: ソードシールド
   description: 守10
   type: weapon
@@ -298,6 +313,7 @@
   price: 10
   attack_power: 10
   drop_rate: 1
+  id_str: weapons/moonlight-axe
 - name: グラビティメイス
   type: weapon
   usage_timing:
@@ -305,6 +321,7 @@
   price: 4
   attack_power: 11
   drop_rate: 4
+  id_str: weapons/gravity-mace
 - name: 六角凶
   description: ダメージを与えた対象を暗雲状態にする
   hit_curse: dark cloud
@@ -314,6 +331,7 @@
   price: 15
   attack_power: 11
   drop_rate: 1
+  id_str: weapons/hexagon-doom
 - name: エンゼルナイフ
   description: 奇跡を止める
   type: weapon
@@ -324,6 +342,7 @@
   price: 15
   attack_power: 11
   drop_rate: 1
+  id_str: weapons/angel-knife
 - name: 恐怖の車輪
   type: weapon
   usage_timing:
@@ -332,6 +351,7 @@
   price: 10
   attack_power: 11
   drop_rate: 1
+  id_str: weapons/horror-wheel
 - name: もろぶっこみアクス
   type: weapon
   usage_timing:
@@ -339,6 +359,7 @@
   price: 4
   attack_power: 12
   drop_rate: 4
+  id_str: weapons/direct-smash-axe
 - name: リアルゴーストソード
   id_str: weapons/real-ghost-sword
   description: 与えたダメージ分HPを吸収する
@@ -365,6 +386,7 @@
   price: 5
   attack_power: 13
   drop_rate: 4
+  id_str: weapons/spear-in-fine-view
 - name: 激烈疾風剣
   description: ダメージを与えた対象を風邪状態にする
   hit_curse: cold
@@ -374,6 +396,7 @@
   price: 15
   attack_power: 13
   drop_rate: 1
+  id_str: weapons/severe-gale-sword
 - name: 伝説の剣のさや
   description: 守1
   type: weapon
@@ -384,6 +407,7 @@
   attack_power: 13
   defense_power: 1
   drop_rate: 1
+  id_str: weapons/legendary-scabbard
 - name: エンゼルソード
   description: 奇跡を止める
   type: weapon
@@ -394,6 +418,7 @@
   price: 15
   attack_power: 13
   drop_rate: 1
+  id_str: weapons/angel-sword
 - name: 独楽コンバット
   type: weapon
   usage_timing:
@@ -402,6 +427,7 @@
   price: 10
   attack_power: 13
   drop_rate: 1
+  id_str: weapons/top-of-combat
 - name: 暴れフレイル
   type: weapon
   usage_timing:
@@ -409,6 +435,7 @@
   price: 5
   attack_power: 14
   drop_rate: 3
+  id_str: weapons/violent-flail
 - name: 邪神の大剣
   id_str: weapons/evil-broadsword
   description: 与えたダメージ分自分にダメージ
@@ -425,6 +452,7 @@
   price: 5
   attack_power: 15
   drop_rate: 3
+  id_str: weapons/dragon-claws
 - name: エンゼルアクス
   description: 奇跡を止める
   type: weapon
@@ -435,6 +463,7 @@
   price: 15
   attack_power: 15
   drop_rate: 1
+  id_str: weapons/angel-axe
 - name: エンゼルの弓
   description: 奇跡を止める
   type: weapon
@@ -446,6 +475,7 @@
   price: 15
   attack_power: 15
   drop_rate: 1
+  id_str: weapons/angel-bow
 - name: 神の剣
   type: weapon
   usage_timing:
