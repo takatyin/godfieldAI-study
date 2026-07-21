@@ -5,7 +5,7 @@ from setuptools import Extension, setup
 
 # Platform-specific flags
 if sys.platform == "win32":
-    extra_compile_args = ["/std:c++17", "/O2", "/utf-8"]
+    extra_compile_args = ["/std:c++17", "/O2", "/utf-8", "/MP"]
 else:
     extra_compile_args = ["-std=c++17", "-O3"]
 

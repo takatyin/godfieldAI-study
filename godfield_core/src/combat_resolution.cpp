@@ -220,11 +220,9 @@ void add_card_to_hand_slot(InternalState &state, int player_id, int slot_idx, in
  * @brief 対象プレイヤーの仮置き場の最後に置かれたカードが「奇跡」であるかを判定します。
  */
 bool is_last_staged_card_miracle(const InternalState &state, int player_id) {
-    if (state.num_staged_cards[player_id] <= 0) {
-        return false;
-    }
-    int last_staged_idx = state.staged_cards[player_id][state.num_staged_cards[player_id] - 1];
-    int card_id = state.true_hand[player_id][last_staged_idx];
+    auto card_ids = get_staged_card_ids(state, player_id);
+    if (card_ids.empty()) return false;
+    int card_id = card_ids.back();
     if (card_id == CARD_EMPTY) return false;
     return g_card_registry[card_id].is_miracle();
 }
@@ -234,17 +232,14 @@ bool is_last_staged_card_miracle(const InternalState &state, int player_id) {
  *        （武器が含まれている場合に武器攻撃扱いとなります）
  */
 bool is_weapon_attack(const InternalState &state, int player_id) {
-    int attack_weapons_count = 0;
-    for (int i = 0; i < state.num_staged_cards[player_id]; ++i) {
-        int staged_idx = state.staged_cards[player_id][i];
-        int card_id = state.true_hand[player_id][staged_idx];
+    auto card_ids = get_staged_card_ids(state, player_id);
+    for (int card_id : card_ids) {
         if (card_id == CARD_EMPTY) continue;
         CardFeatures &f = g_card_registry[card_id];
         if (f.is_weapon() && !is_spiritual_zero_mp_card(card_id)) {
-            attack_weapons_count++;
+            return true;
         }
     }
-    if (attack_weapons_count > 0) return true;
     return false;
 }
 
@@ -253,11 +248,11 @@ bool is_weapon_attack(const InternalState &state, int player_id) {
  */
 int calculate_staged_mp_cost(const InternalState &state, int player_id) {
     int total_cost = 0;
-    int num_cards = state.num_staged_cards[player_id];
+    auto card_ids = get_staged_card_ids(state, player_id);
     bool has_magical_stick = false;
 
-    for (int i = 0; i < num_cards; ++i) {
-        int card_id = state.true_hand[player_id][state.staged_cards[player_id][i]];
+    for (size_t i = 0; i < card_ids.size(); ++i) {
+        int card_id = card_ids[i];
         if (card_id == CARD_EMPTY) continue;
         if (card_id == ID_MAGICAL_STICK) {
             has_magical_stick = true;
@@ -265,11 +260,10 @@ int calculate_staged_mp_cost(const InternalState &state, int player_id) {
         }
         const CardFeatures &f = g_card_registry[card_id];
 
-        // 奇跡カードであり、かつ直後（i + 1）に精霊系カードが置かれている場合はMP消費を0にする
-        if (f.is_miracle() && (i + 1 < num_cards)) {
-            int next_card_id = state.true_hand[player_id][state.staged_cards[player_id][i + 1]];
+        if (f.is_miracle() && (i + 1 < card_ids.size())) {
+            int next_card_id = card_ids[i + 1];
             if (is_spiritual_zero_mp_card(next_card_id)) {
-                continue; // コストが0になるため加算をスキップ
+                continue;
             }
         }
         total_cost += f.mp_cost;
@@ -387,12 +381,17 @@ bool can_discard(const InternalState &state, int player_id) {
 /**
  * @brief 「売る」カード自体を除いて、売却可能なカードが手札にあるかを判定します。
  */
+bool is_sellable_card(const InternalState &state, int player_id, int slot_idx) {
+    if (slot_idx < 0 || slot_idx >= MAX_HAND_SIZE) return false;
+    return state.true_hand[player_id][slot_idx] != CARD_EMPTY &&
+           !state.is_deployed[player_id][slot_idx] &&
+           !state.is_used[player_id][slot_idx];
+}
+
 bool can_sell_card(const InternalState &state, int player_id, int sell_card_index) {
     for (int j = 0; j < MAX_HAND_SIZE; ++j) {
         if (j != sell_card_index) {
-            if (state.true_hand[player_id][j] != CARD_EMPTY &&
-                !state.is_deployed[player_id][j] &&
-                !state.is_used[player_id][j]) {
+            if (is_sellable_card(state, player_id, j)) {
                 return true;
             }
         }
@@ -610,8 +609,15 @@ void cleanup_phase_end(InternalState &state) {
  */
 std::vector<int> get_staged_card_ids(const InternalState &state, int player) {
     std::vector<int> ids;
+    if (state.num_staged_cards[player] >= 2 && state.staged_cards[player][0] == -1) {
+        ids.push_back(state.staged_cards[player][1]);
+        return ids;
+    }
     for (int i = 0; i < state.num_staged_cards[player]; ++i) {
-        ids.push_back(state.true_hand[player][state.staged_cards[player][i]]);
+        int idx = state.staged_cards[player][i];
+        if (idx >= 0 && idx < MAX_HAND_SIZE) {
+            ids.push_back(state.true_hand[player][idx]);
+        }
     }
     return ids;
 }
@@ -680,7 +686,7 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
         else if (card_id == ID_ROMANCE_FRAGRANCE) mp_diff += 15;
         else if (card_id == ID_HEAVEN_HERB) mp_diff += 20;
 
-        if (f.hit_curse != CURSE_NONE) {
+        if (f.hit_curse != CURSE_NONE && !f.is_weapon() && !f.is_miracle()) {
             apply_curse_to_player(state, target_id, f.hit_curse);
         }
 
@@ -901,9 +907,13 @@ void execute_sell_resolution(InternalState &state, int seller, int buyer) {
     // 1. 最初に対象アイテムを売り出したオリジナル売り手を特定する
     // スーパーミラーによる反射が発生している可能性があるため、staged_cards を見て "売る" カードを所持している側を探す
     int original_seller = -1;
-    if (state.num_staged_cards[0] > 0 && state.true_hand[0][state.staged_cards[0][0]] == ID_SELL) {
+    if (state.num_staged_cards[0] > 0 && state.staged_cards[0][0] >= 0 && state.staged_cards[0][0] < MAX_HAND_SIZE && state.true_hand[0][state.staged_cards[0][0]] == ID_SELL) {
         original_seller = 0;
-    } else if (state.num_staged_cards[1] > 0 && state.true_hand[1][state.staged_cards[1][0]] == ID_SELL) {
+    } else if (state.num_staged_cards[1] > 0 && state.staged_cards[1][0] >= 0 && state.staged_cards[1][0] < MAX_HAND_SIZE && state.true_hand[1][state.staged_cards[1][0]] == ID_SELL) {
+        original_seller = 1;
+    } else if (state.num_staged_cards[0] >= 2 && state.staged_cards[0][0] == -1 && state.staged_cards[0][1] == ID_SELL) {
+        original_seller = 0;
+    } else if (state.num_staged_cards[1] >= 2 && state.staged_cards[1][0] == -1 && state.staged_cards[1][1] == ID_SELL) {
         original_seller = 1;
     }
     
@@ -997,9 +1007,6 @@ void execute_sell_resolution(InternalState &state, int seller, int buyer) {
  * @brief 相手のアクションに対して「スーパーミラー」での反射を実行し、アクターIDとスロットをスワップします。
  */
 bool try_execute_super_mirror_reflection(InternalState &state, ActionType action, int me, int opp) {
-    if (state.num_staged_cards[opp] > 0 && state.staged_cards[opp][0] == -1) {
-        return false;
-    }
     if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
         int idx = action - ACTION_SELECT_HAND_0;
         if (state.true_hand[me][idx] == ID_SUPER_MIRROR) {
@@ -1040,6 +1047,53 @@ bool is_active_reaction_card(const InternalState &state, int card_id, GamePhase 
         }
     }
     return false;
+}
+
+std::pair<int, int> get_exchange_hp_range(int sum) {
+    int hp_min = std::max(0, sum - 198);
+    int hp_max = std::min(99, sum);
+    return {hp_min, hp_max};
+}
+
+std::pair<int, int> get_exchange_mp_range(int sum, int hp) {
+    int mp_min = std::max(0, sum - hp - 99);
+    int mp_max = std::min(99, sum - hp);
+    return {mp_min, mp_max};
+}
+
+void apply_defense_gear_effects(InternalState &state, int player_id) {
+    int num_fever_masks = 0;
+    bool has_dreaming_hat = false;
+
+    for (int i = 0; i < state.num_staged_cards[player_id]; ++i) {
+        int h_idx = state.staged_cards[player_id][i];
+        int card_id = state.true_hand[player_id][h_idx];
+        if (card_id == ID_FEVER_MASK) {
+            num_fever_masks++;
+        } else if (card_id == ID_DREAMING_HAT) {
+            has_dreaming_hat = true;
+        }
+    }
+
+    for (int f = 0; f < num_fever_masks; ++f) {
+        apply_sickness(state, player_id, SICKNESS_FEVER);
+    }
+
+    if (has_dreaming_hat) {
+        state.curses[player_id][CURSE_TYPE_DREAM] = true;
+        bool is_staged[MAX_HAND_SIZE] = {false};
+        for (int k = 0; k < state.num_staged_cards[player_id]; ++k) {
+            is_staged[state.staged_cards[player_id][k]] = true;
+        }
+        for (int j = 0; j < MAX_HAND_SIZE; ++j) {
+            if (!is_staged[j]) {
+                if (state.true_hand[player_id][j] != CARD_EMPTY || state.is_deployed[player_id][j]) {
+                    clear_hand_slot(state, player_id, j);
+                    state.is_used[player_id][j] = true;
+                }
+            }
+        }
+    }
 }
 
 bool run_immediate_revive(InternalState &state) {
@@ -1194,10 +1248,20 @@ bool run_death_check(InternalState &state) {
 
 static bool setup_guardian_attack_defense(InternalState &state, int attacker, int defender, int source_id, GamePhase phase, bool absorption = false, int override_power = -1) {
     const CardFeatures &feat = g_card_registry[source_id];
+
+    // 命中率（accuracy）チェック。暗雲がかかっていない場合で確率計算
+    if (feat.accuracy < 100 && !state.curses[defender][CURSE_TYPE_DARK_CLOUD]) {
+        std::uniform_int_distribution<int> dist(0, 99);
+        if (dist(state.rng) >= feat.accuracy) {
+            state.turn_end_state = 5;
+            return false; // ミス：防御フェイズを起動せず終了
+        }
+    }
+
     state.pending_attack_source_id = source_id;
     state.pending_attack_curse = feat.hit_curse;
     
-    if (feat.type == CardType::GUARDIAN && feat.attack_power == 0 && feat.hit_curse != CURSE_NONE) {
+    if (feat.type == CardType::GUARDIAN && (source_id == ID_FINE || source_id == ID_BRIBE || (feat.attack_power == 0 && feat.hit_curse != CURSE_NONE))) {
         state.current_phase = GamePhase::PHASE_SUNDRY_SELECT_MIRROR;
     } else {
         state.current_phase = phase;
@@ -1211,6 +1275,166 @@ static bool setup_guardian_attack_defense(InternalState &state, int attacker, in
     state.pending_deal_same_damage = false;
     state.pending_is_group_attack = feat.is_group_attack;
     state.turn_end_state = 5;
+    return true;
+}
+
+bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, bool is_guardian) {
+    int count_attacker = 0;
+    int count_defender = 0;
+    if (state.hp[attacker] > 0) {
+        for (int j = 0; j < MAX_HAND_SIZE; ++j) {
+            if (state.true_hand[attacker][j] == ID_DANGEROUS_MORTAR && !state.is_used[attacker][j]) {
+                count_attacker++;
+            }
+        }
+    }
+    if (state.hp[defender] > 0) {
+        for (int j = 0; j < MAX_HAND_SIZE; ++j) {
+            if (state.true_hand[defender][j] == ID_DANGEROUS_MORTAR && !state.is_used[defender][j]) {
+                count_defender++;
+            }
+        }
+    }
+    int total_mortars = count_attacker + count_defender;
+
+    if (total_mortars > 0) {
+        // パターンB: ウスが存在する場合 (99被弾、1枚消費)
+        int r = std::uniform_int_distribution<int>(0, total_mortars - 1)(state.rng);
+        int victim = (r < count_attacker) ? attacker : defender;
+
+        state.hp[victim] = std::clamp(state.hp[victim] - 99, 0, 99);
+        for (int j = 0; j < MAX_HAND_SIZE; ++j) {
+            if (state.true_hand[victim][j] == ID_DANGEROUS_MORTAR && !state.is_used[victim][j]) {
+                state.is_used[victim][j] = true;
+                break;
+            }
+        }
+        run_death_check(state);
+        state.current_phase = GamePhase::PHASE_END;
+        if (is_guardian) state.turn_end_state = 5;
+        return true;
+    } else {
+        // パターンA: ウスが存在しない場合 (生存プレイヤーからランダム選定)
+        std::vector<int> alive_players;
+        if (state.hp[attacker] > 0) alive_players.push_back(attacker);
+        if (state.hp[defender] > 0) alive_players.push_back(defender);
+
+        int actual_target = attacker;
+        if (!alive_players.empty()) {
+            int r = std::uniform_int_distribution<int>(0, alive_players.size() - 1)(state.rng);
+            actual_target = alive_players[r];
+        }
+
+        if (actual_target == attacker) {
+            // 自傷：直撃ダメージ
+            state.hp[attacker] = std::clamp(state.hp[attacker] - 30, 0, 99);
+            run_death_check(state);
+            state.current_phase = GamePhase::PHASE_END;
+            if (is_guardian) state.turn_end_state = 5;
+            return true;
+        } else {
+            // 相手ターゲット：物理防御フェイズ起動
+            bool ok = setup_guardian_attack_defense(state, attacker, defender, ID_DANGEROUS_PESTLE, GamePhase::PHASE_DEFENSE);
+            if (!ok) {
+                state.current_phase = GamePhase::PHASE_END;
+                if (is_guardian) state.turn_end_state = 5;
+            }
+            return true;
+        }
+    }
+}
+
+bool execute_attack_from_staged_cards(InternalState &state, int attacker, int target, bool is_guardian) {
+    auto used_cards = get_staged_card_ids(state, attacker);
+
+    // あぶないキネの特別判定
+    bool has_pestle = false;
+    for (int cid : used_cards) {
+        if (cid == ID_DANGEROUS_PESTLE) {
+            has_pestle = true;
+            break;
+        }
+    }
+    if (has_pestle) {
+        return execute_dangerous_pestle(state, attacker, target, is_guardian);
+    }
+
+    // 攻撃の評価 (MP消費、攻撃力、属性、命中率)
+    StagedAttackInfo info = evaluate_staged_attack(state, attacker);
+    if (!is_guardian) {
+        state.mp[attacker] = std::clamp(state.mp[attacker] - info.mp_cost, 0, 99);
+    }
+
+    if (!info.hit) {
+        // ミス：防御フェイズを起動せず終了
+        state.current_phase = GamePhase::PHASE_END;
+        if (is_guardian) state.turn_end_state = 5;
+        return true;
+    }
+
+    if (!is_guardian) {
+        setup_multiple_attacks(state, attacker, target, info);
+    }
+
+    state.pending_attack_power = info.attack_power;
+    state.pending_attack_element = info.element;
+    state.pending_absorption = info.absorption;
+    state.pending_deal_same_damage = info.deal_same_damage;
+    state.defender_id = target;
+
+    int first_card_id = !used_cards.empty() ? used_cards[0] : CARD_EMPTY;
+    state.pending_attack_source_id = first_card_id;
+    state.pending_attack_curse = (first_card_id != CARD_EMPTY) ? g_card_registry[first_card_id].hit_curse : CURSE_NONE;
+
+    if (target == attacker) {
+        // 自傷解決
+        int times = state.remaining_attacks;
+        if (times <= 0) times = 1;
+        for (int t = 0; t < times; ++t) {
+            if (info.attack_power > 0) {
+                int intended_damage = info.attack_power;
+                state.hp[attacker] = std::clamp(state.hp[attacker] - info.attack_power, 0, 99);
+                if (state.pending_absorption) {
+                    state.hp[attacker] = std::clamp(state.hp[attacker] + intended_damage, 0, 99);
+                }
+                run_immediate_revive(state);
+                if (state.pending_deal_same_damage) {
+                    state.hp[attacker] = std::clamp(state.hp[attacker] - intended_damage, 0, 99);
+                    run_immediate_revive(state);
+                }
+            }
+            apply_card_effects_to_target(state, attacker, used_cards);
+            if (state.pending_attack_curse != CURSE_NONE) {
+                apply_curse_to_player(state, attacker, state.pending_attack_curse);
+            }
+        }
+        state.remaining_attacks = 0;
+        run_death_check(state);
+        state.current_phase = GamePhase::PHASE_END;
+        if (is_guardian) state.turn_end_state = 5;
+    } else {
+        // 相手ターゲット：防御フェイズへ移行
+        state.attacker_id = attacker;
+        state.current_actor_id = target;
+        
+        bool is_group_weapon = (!used_cards.empty() && g_card_registry[used_cards[0]].is_group_attack);
+        bool is_mirage = false;
+        for (int cid : used_cards) {
+            if (cid == ID_MIRAGE) {
+                is_mirage = true;
+                break;
+            }
+        }
+        if (is_group_weapon || is_mirage) {
+            state.pending_is_group_attack = true;
+        }
+        if (is_mirage || (info.element == ELEM_NONE && is_group_weapon)) {
+            state.current_phase = is_guardian ? GamePhase::PHASE_DEFENSE : GamePhase::PHASE_GROUP_WEAPON;
+        } else {
+            state.current_phase = GamePhase::PHASE_DEFENSE;
+        }
+        if (is_guardian) state.turn_end_state = 5;
+    }
     return true;
 }
 
@@ -1382,9 +1606,8 @@ bool resolve_turn_end_steps(InternalState &state) {
                                 source_id = ID_LUXURY_ACCESSORY; 
                             }
                             else if (act_idx == 3) { 
-                                // 相手(me)にお金+5
-                                state.money[me] = std::min(99, state.money[me] + 5);
-                                source_id = ID_BRIBE; 
+                                // わいろ (相手にお金+5、反射可能)
+                                return setup_guardian_attack_defense(state, opp, me, ID_BRIBE, GamePhase::PHASE_DEFENSE, false, 5);
                             }
                             else if (act_idx == 4) { 
                                 // 自分(opp)にお金+8
@@ -1438,12 +1661,17 @@ bool resolve_turn_end_steps(InternalState &state) {
                                 // 2. 両替 (ID_EXCHANGE) ➡ 自分に使う
                                 else if (drawn_card_id == ID_EXCHANGE) {
                                     int sum = state.hp[opp] + state.mp[opp] + state.money[opp];
-                                    int x = std::uniform_int_distribution<int>(0, sum)(state.rng);
-                                    int y = std::uniform_int_distribution<int>(0, sum)(state.rng);
-                                    if (x > y) std::swap(x, y);
-                                    state.hp[opp] = x;
-                                    state.mp[opp] = y - x;
-                                    state.money[opp] = sum - y;
+                                    auto hp_range = get_exchange_hp_range(sum);
+                                    if (hp_range.first <= hp_range.second) {
+                                        int chosen_hp = std::uniform_int_distribution<int>(hp_range.first, hp_range.second)(state.rng);
+                                        auto mp_range = get_exchange_mp_range(sum, chosen_hp);
+                                        if (mp_range.first <= mp_range.second) {
+                                            int chosen_mp = std::uniform_int_distribution<int>(mp_range.first, mp_range.second)(state.rng);
+                                            state.hp[opp] = chosen_hp;
+                                            state.mp[opp] = chosen_mp;
+                                            state.money[opp] = sum - chosen_hp - chosen_mp;
+                                        }
+                                    }
                                     if (state.hp[opp] == 0) {
                                         run_death_check(state);
                                     }
@@ -1451,13 +1679,13 @@ bool resolve_turn_end_steps(InternalState &state) {
                                 }
                                 // 3. 売る (ID_SELL) ➡ 対戦相手に使う
                                 else if (drawn_card_id == ID_SELL) {
-                                    std::vector<int> sell_candidates;
-                                    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-                                        if (state.true_hand[opp][i] != CARD_EMPTY && !state.is_used[opp][i]) {
-                                            sell_candidates.push_back(i);
+                                    if (can_sell_card(state, opp, -1)) {
+                                        std::vector<int> sell_candidates;
+                                        for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+                                            if (is_sellable_card(state, opp, i)) {
+                                                sell_candidates.push_back(i);
+                                            }
                                         }
-                                    }
-                                    if (!sell_candidates.empty()) {
                                         int rand_idx = std::uniform_int_distribution<int>(0, sell_candidates.size() - 1)(state.rng);
                                         int sell_slot = sell_candidates[rand_idx];
                                         
@@ -1486,18 +1714,10 @@ bool resolve_turn_end_steps(InternalState &state) {
                                 }
                                 // 5. 武器 ➡ 対戦相手に使う
                                 else if (feat.is_weapon()) {
-                                    state.current_phase = GamePhase::PHASE_DEFENSE;
-                                    state.attacker_id = opp;
-                                    state.defender_id = me;
-                                    state.current_actor_id = me;
-                                    state.pending_attack_source_id = drawn_card_id;
-                                    state.pending_attack_power = feat.attack_power;
-                                    state.pending_attack_element = feat.element;
-                                    state.pending_absorption = false;
-                                    state.pending_deal_same_damage = false;
-                                    state.pending_is_group_attack = feat.is_group_attack;
-                                    state.turn_end_state = 5;
-                                    return true;
+                                    state.staged_cards[opp][0] = -1; // 地球神仮想仮想フラグ
+                                    state.staged_cards[opp][1] = drawn_card_id;
+                                    state.num_staged_cards[opp] = 2;
+                                    return execute_attack_from_staged_cards(state, opp, me, true);
                                 }
                                 // 6. 夜空のホウキ (ID_NOCTURNAL_BROOM) ➡ 対戦相手に使う
                                 else if (drawn_card_id == ID_NOCTURNAL_BROOM) {
@@ -1537,18 +1757,8 @@ bool resolve_turn_end_steps(InternalState &state) {
                                 return setup_guardian_attack_defense(state, opp, me, ID_FULL_MOON_BLADE, GamePhase::PHASE_DEFENSE, false, 20);
                             }
                             else if (chosen_miracle == ID_MIRAGE) { // 蜃気楼 + 満月刀 (物理ATK10 全体)
-                                int source_id = ID_FULL_MOON_BLADE;
-                                state.current_phase = GamePhase::PHASE_DEFENSE;
-                                state.attacker_id = opp;
-                                state.defender_id = me;
-                                state.current_actor_id = me;
-                                state.pending_attack_power = 10;
-                                state.pending_attack_element = ELEM_NONE;
-                                state.pending_absorption = false;
-                                state.pending_deal_same_damage = false;
+                                setup_guardian_attack_defense(state, opp, me, ID_FULL_MOON_BLADE, GamePhase::PHASE_DEFENSE, false, 10);
                                 state.pending_is_group_attack = true; // 全体攻撃
-                                state.pending_attack_source_id = source_id;
-                                state.turn_end_state = 5;
                                 return true;
                             }
                             else if (chosen_miracle == ID_TONE || chosen_miracle == ID_SONG ||

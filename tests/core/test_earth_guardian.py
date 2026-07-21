@@ -176,11 +176,53 @@ def test_earth_buy():
 
     sim.step(godfield_core.ActionType.ACTION_CONFIRM)
 
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_BUY
+    assert sim.state.current_actor_id == 1  # 買い手 P1 (地球神の所持者)
+
+    sim.step(godfield_core.ActionType.ACTION_DEAL_YES)
+
     # 売却代金決済の一致性をチェック (P0ドロー補充が入るため決済価格は可変)
     diff_0 = sim.state.get_money(0) - 10
     diff_1 = 100 - sim.state.get_money(1)
     assert diff_0 == diff_1
     assert diff_0 > 0
+
+
+def test_earth_buy_super_mirror_reflection():
+    """地球神: 買う に対するスーパーミラー反射"""
+    seed = find_seed_for_earth_action("buy")
+    sim = SimulationRunner()
+    sim.state.seed_rng(seed)
+    sim.state.set_guardian(1, 9)
+    sim.set_status(player=0, hp=99, money=100)  # 反射者 P0
+    sim.set_status(player=1, hp=99, money=100)  # 地球神所有者 P1
+
+    super_mirror_id = find_card_by_name("スーパーミラー")
+    shield_id = find_card_by_name("armor/wood-shield")
+    sim.state.set_true_hand(0, 0, super_mirror_id)
+    sim.state.set_true_hand(1, 0, shield_id)
+    for i in range(1, 18):
+        sim.state.set_true_hand(0, i, -1)
+        sim.state.set_true_hand(1, i, -1)
+
+    sim.step(godfield_core.ActionType.ACTION_PRAY)
+
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_BUY_SELECT_MIRROR
+    assert sim.state.current_actor_id == 0
+
+    # P0 がスーパーミラー(手札0)で反射
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+
+    # P1 (地球神の持ち主) が標的となり PHASE_BUY_SELECT_MIRROR に遷移
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_BUY_SELECT_MIRROR
+    assert sim.state.current_actor_id == 1
+
+    # P1 が受諾 (Confirm)
+    sim.step(godfield_core.ActionType.ACTION_CONFIRM)
+
+    # P0 (買い手) が PHASE_BUY で買主として判断選択可能になる
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_BUY
+    assert sim.state.current_actor_id == 0
 
 
 def test_earth_weapon():
@@ -292,3 +334,49 @@ def test_earth_sundry():
     sim.step(godfield_core.ActionType.ACTION_PRAY)
 
     assert sim.state.get_hp(1) == 50
+
+
+def test_earth_exchange_high_sum():
+    """地球神: 合計ステータスが99を超える状態での両替が正しく各値99以下に収まることを検証"""
+    seed = find_seed_for_earth_action("exchange")
+    sim = SimulationRunner()
+    sim.state.seed_rng(seed)
+    sim.state.set_guardian(1, 9)
+    sim.set_status(player=0, hp=99)
+    # 合計 90 + 90 + 90 = 270 (各ステータスは99以下でなければならない)
+    sim.set_status(player=1, hp=90, mp=90, money=90)
+
+    sim.step(godfield_core.ActionType.ACTION_PRAY)
+
+    tot = sim.state.get_hp(1) + sim.state.get_mp(1) + sim.state.get_money(1)
+    assert tot == 270
+    assert sim.state.get_hp(1) <= 99
+    assert sim.state.get_mp(1) <= 99
+    assert sim.state.get_money(1) <= 99
+
+
+def test_earth_dangerous_pestle_mortar():
+    """地球神があぶないキネを引いた際、あぶないウスがあれば99ダメージ＆1枚消費されることを検証"""
+    pestle_id = find_card_by_name("weapons/dangerous-pestle")
+    mortar_id = find_card_by_name("sundries/dangerous-mortar")
+
+    # 地球神(P1)があぶないキネをドローするシードを探す
+    act_seed = None
+    for seed in range(10000):
+        sim = SimulationRunner()
+        sim.state.seed_rng(seed)
+        sim.state.set_guardian(1, 9)
+        sim.set_status(player=0, hp=99)
+        sim.set_status(player=1, hp=99)
+        sim.state.set_true_hand(0, 0, mortar_id)
+        for i in range(1, 18):
+            sim.state.set_true_hand(0, i, -1)
+            sim.state.set_true_hand(1, i, -1)
+
+        sim.step(godfield_core.ActionType.ACTION_PRAY)
+        # ウスが存在し、P0が99被弾してHPが0になったシード
+        if sim.state.get_hp(0) == 0:
+            act_seed = seed
+            break
+
+    assert act_seed is not None, "地球神のあぶないキネ・ウス連動シードが見つかりませんでした"

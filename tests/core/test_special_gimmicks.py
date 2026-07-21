@@ -199,3 +199,307 @@ def test_observation_dream_masking():
     assert obs["hand_cards"][1] == find_card_by_name("weapons/saw-boom-boom")
     # 真のカードはまだ見えない
     assert state.get_true_hand(0, 1) == card_id
+
+
+def test_evil_broadsword_self_harm_hp14():
+    """
+    検証内容: HP 14 の状態で自分に「邪神の大剣」を使用した場合。
+    - 最初の14ダメージでHPが0になり、「太陽のお守り」を即座に消費してHP 10で復活する。
+    - その後、自傷（反射）ダメージの14を受けて再度HPが0になり、死亡（HP 0）することを確認します。
+    """
+    runner = SimulationRunner()
+    broadsword_id = find_card_by_name("邪神の大剣")
+    amulet_id = find_card_by_name("太陽のお守り")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_hp(0, 14)
+
+    # 手札設定: [邪神の大剣, 太陽のお守り, ...]
+    runner.state.set_true_hand(0, 0, broadsword_id)
+    runner.state.set_true_hand(0, 1, amulet_id)
+    for j in range(2, 18):
+        runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
+
+    # 1. 邪神の大剣を選択
+    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    # 2. 自分を対象
+    runner.step(godfield_core.ActionType.ACTION_TARGET_SELF)
+
+    # 死亡していること
+    assert runner.state.get_hp(0) == 0
+    assert runner.state.is_done is True
+    # 太陽のお守りが消費されていること
+    assert runner.state.get_true_hand(0, 1) == godfield_core.CARD_EMPTY
+
+
+def test_evil_broadsword_self_harm_hp20():
+    """
+    検証内容: HP 20 の状態で自分に「邪神の大剣」を使用した場合。
+    - 最初の14ダメージではHP 6となる（死亡しないため復活はおきない）。
+    - その後、自傷の14ダメージを受けてHP 0となり、ここで「太陽のお守り」を消費してHP 10で復活（生存）することを確認します。
+    """
+    runner = SimulationRunner()
+    broadsword_id = find_card_by_name("邪神の大剣")
+    amulet_id = find_card_by_name("太陽のお守り")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_hp(0, 20)
+
+    # 手札設定
+    runner.state.set_true_hand(0, 0, broadsword_id)
+    runner.state.set_true_hand(0, 1, amulet_id)
+    for j in range(2, 18):
+        runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
+
+    # 1. 邪神の大剣を選択
+    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    # 2. 自分を対象
+    runner.step(godfield_core.ActionType.ACTION_TARGET_SELF)
+
+    # HP 10 で復活し生存していること
+    assert runner.state.get_hp(0) == 10
+    assert runner.state.is_done is False
+    # ターンが終了して P1 のターンになっていること
+    assert runner.state.current_actor_id == 1
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
+
+
+def test_venus_bribe_resolution_and_mirror():
+    """
+    検証内容: 金星神の「わいろ」の効果解決と、スーパーミラーでの反射。
+    - 通常解決: Bribe（5お金）を受けた側がそのまま受諾（Confirm）すると、受諾側がお金 +5 を得る。
+    - 反射解決: Bribeを受けた側がスーパーミラーで反射すると、元の発動者側が受諾側になり、そちらがお金 +5 を得る。
+    """
+    bribe_id = find_card_by_name("わいろ")
+    mirror_id = find_card_by_name("スーパーミラー")
+
+    # Case A: 通常解決
+    runner_a = SimulationRunner()
+    runner_a.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    runner_a.state.current_actor_id = 1
+    runner_a.state.attacker_id = 0
+    runner_a.state.defender_id = 1
+    runner_a.state.pending_attack_source_id = bribe_id
+    runner_a.state.pending_attack_power = 5
+
+    runner_a.state.set_money(0, 10)
+    runner_a.state.set_money(1, 10)
+
+    # P1が確認 (受諾)
+    runner_a.step(godfield_core.ActionType.ACTION_CONFIRM)
+
+    # 解決後、P1（defender）がお金を5貰い、P0は変化なし
+    assert runner_a.state.get_money(1) == 15
+    assert runner_a.state.get_money(0) == 10
+
+    # Case B: スーパーミラーでの反射解決
+    runner_b = SimulationRunner()
+    runner_b.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    runner_b.state.current_actor_id = 1
+    runner_b.state.attacker_id = 0
+    runner_b.state.defender_id = 1
+    runner_b.state.pending_attack_source_id = bribe_id
+    runner_b.state.pending_attack_power = 5
+
+    runner_b.state.set_money(0, 10)
+    runner_b.state.set_money(1, 10)
+    # P1の手札にスーパーミラーを設定
+    runner_b.state.set_true_hand(1, 0, mirror_id)
+    for j in range(1, 18):
+        runner_b.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
+
+    # P1がスーパーミラーを選択して反射 (即座にアクターがP0に入れ替わる)
+    runner_b.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+
+    # ロールが入れ替わり、P0が防衛アクターになること
+    assert runner_b.state.current_phase == godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    assert runner_b.state.current_actor_id == 0
+    assert runner_b.state.attacker_id == 1
+    assert runner_b.state.defender_id == 0
+
+    # P0が受諾 (確認)
+    runner_b.step(godfield_core.ActionType.ACTION_CONFIRM)
+
+    # 反射されたため、P0（元の発動者）がお金を5貰い、P1は変化なし
+    assert runner_b.state.get_money(0) == 15
+    assert runner_b.state.get_money(1) == 10
+
+
+def test_venus_fine_resolution_and_mirror():
+    """
+    検証内容: 金星神の「罰金」の効果解決と、スーパーミラーでの反射。
+    - 通常解決: Fine（3お金没収）を受けた側が受諾すると、受諾側がお金 -3（足りない分はMP/HP）となり、発動者側がお金 +3 を得る。
+    - 反射解決: Fineを受けた側がスーパーミラーで反射すると、元の発動者側が没収の対象になり、反射側がお金 +3 を得る。
+    """
+    fine_id = find_card_by_name("罰金")
+    mirror_id = find_card_by_name("スーパーミラー")
+
+    # Case A: 通常解決
+    runner_a = SimulationRunner()
+    runner_a.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    runner_a.state.current_actor_id = 1
+    runner_a.state.attacker_id = 0
+    runner_a.state.defender_id = 1
+    runner_a.state.pending_attack_source_id = fine_id
+    runner_a.state.pending_attack_power = 3
+
+    runner_a.state.set_money(0, 10)
+    runner_a.state.set_money(1, 10)
+
+    runner_a.step(godfield_core.ActionType.ACTION_CONFIRM)
+
+    # P1が没収されてP0が回収すること
+    assert runner_a.state.get_money(1) == 7
+    assert runner_a.state.get_money(0) == 13
+
+    # Case B: 反射解決
+    runner_b = SimulationRunner()
+    runner_b.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    runner_b.state.current_actor_id = 1
+    runner_b.state.attacker_id = 0
+    runner_b.state.defender_id = 1
+    runner_b.state.pending_attack_source_id = fine_id
+    runner_b.state.pending_attack_power = 3
+
+    runner_b.state.set_money(0, 10)
+    runner_b.state.set_money(1, 10)
+    # P1の手札にスーパーミラーを設定
+    runner_b.state.set_true_hand(1, 0, mirror_id)
+    for j in range(1, 18):
+        runner_b.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
+
+    # P1がスーパーミラーを選択して反射 (即座にアクターがP0に入れ替わる)
+    runner_b.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+
+    # P0が受諾
+    runner_b.step(godfield_core.ActionType.ACTION_CONFIRM)
+
+    # 反射によりP0が罰金を支払われ、P1がそれを受け取ること
+    assert runner_b.state.get_money(0) == 7
+    assert runner_b.state.get_money(1) == 13
+
+
+def test_verify_fever_mask_transition():
+    # 激烈疾風剣 のカードIDを取得
+    gale_id = find_card_by_name("激烈疾風剣")
+    aura_id = find_card_by_name("＜オーラ＞")
+    mask_id = find_card_by_name("熱狂仮面")
+    amulet_id = find_card_by_name("太陽のお守り")
+
+    sickness_names = {
+        godfield_core.SicknessType.SICKNESS_NONE: "なし",
+        godfield_core.SicknessType.SICKNESS_COLD: "風邪",
+        godfield_core.SicknessType.SICKNESS_FEVER: "熱病",
+        godfield_core.SicknessType.SICKNESS_HELL: "地獄病",
+        godfield_core.SicknessType.SICKNESS_HEAVEN: "天国病",
+    }
+
+    # 各枚数での結果を格納
+    results = {}
+
+    for num_masks in range(1, 5):
+        runner = SimulationRunner()
+        runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+        runner.state.current_actor_id = 1
+        
+        # P0のHPを99にしてダメージで死なないようにする（ただし発作では死ぬ）
+        runner.state.set_hp(0, 99)
+        runner.state.set_hp(1, 40)
+        runner.state.set_mp(0, 50)
+        runner.state.set_mp(1, 50)
+        runner.state.set_money(0, 10)
+        runner.state.set_money(1, 10)
+        
+        # P1の手札を設定 (激烈疾風剣, ＜オーラ＞, ＜オーラ＞)
+        runner.state.set_true_hand(1, 0, gale_id)
+        runner.state.set_true_hand(1, 1, aura_id)
+        runner.state.set_true_hand(1, 2, aura_id)
+        for j in range(3, 18):
+            runner.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
+            
+        # P0の手札を設定 (熱狂仮面 x num_masks)
+        for i in range(num_masks):
+            runner.state.set_true_hand(0, i, mask_id)
+        for j in range(num_masks, 18):
+            runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
+            
+        # P1が激烈疾風剣 + ＜オーラ＞ + ＜オーラ＞ を選択して攻撃
+        runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)  # 激烈疾風剣
+        runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_1)  # ＜オーラ＞
+        runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_2)  # ＜オーラ＞
+        runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)     # 相手をターゲット
+        
+        # P0が熱狂仮面をすべて選択してConfirm
+        for i in range(num_masks):
+            runner.step(godfield_core.ActionType(int(godfield_core.ActionType.ACTION_SELECT_HAND_0) + i))
+        runner.step(godfield_core.ActionType.ACTION_CONFIRM)
+        
+        results[num_masks] = (runner.state.get_hp(0), runner.state.get_sickness(0))
+
+    # 4つ + お守り
+    runner_amulet = SimulationRunner()
+    runner_amulet.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner_amulet.state.current_actor_id = 1
+    runner_amulet.state.set_hp(0, 99)
+    runner_amulet.state.set_hp(1, 40)
+    runner_amulet.state.set_mp(0, 50)
+    runner_amulet.state.set_mp(1, 50)
+    runner_amulet.state.set_money(0, 10)
+    runner_amulet.state.set_money(1, 10)
+    
+    runner_amulet.state.set_true_hand(1, 0, gale_id)
+    runner_amulet.state.set_true_hand(1, 1, aura_id)
+    runner_amulet.state.set_true_hand(1, 2, aura_id)
+    for j in range(3, 18):
+        runner_amulet.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
+        
+    for i in range(4):
+        runner_amulet.state.set_true_hand(0, i, mask_id)
+    runner_amulet.state.set_true_hand(0, 4, amulet_id)
+    for j in range(5, 18):
+        runner_amulet.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
+        
+    runner_amulet.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    runner_amulet.step(godfield_core.ActionType.ACTION_SELECT_HAND_1)
+    runner_amulet.step(godfield_core.ActionType.ACTION_SELECT_HAND_2)
+    runner_amulet.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+    
+    for i in range(4):
+        runner_amulet.step(godfield_core.ActionType(int(godfield_core.ActionType.ACTION_SELECT_HAND_0) + i))
+    runner_amulet.step(godfield_core.ActionType.ACTION_CONFIRM)
+
+    # 結果をコンソールに出力
+    print("\n=== Sickness Transition Verification Results ===")
+    for k, (hp, sick) in results.items():
+        print(f"Masks: {k} | HP: {hp} | Sickness: {sickness_names[sick]}")
+    print(f"Masks: 4 + Amulet | HP: {runner_amulet.state.get_hp(0)} | Sickness: {sickness_names[runner_amulet.state.get_sickness(0)]}")
+    print("================================================\n")
+
+    # アサーションチェック (ユーザーの指定通りになるか)
+    # 1つ: 風邪 -> 熱病 -> 熱病 (Cold then Fever resolves to Fever)
+    # ダメージ 52 - 10 = 42。ターン終了時の熱病ダメージ 2。HP 99 - 42 - 2 = 55
+    assert results[1][1] == godfield_core.SicknessType.SICKNESS_FEVER
+    assert results[1][0] == 55
+
+    # 2つ: 風邪 -> 熱病 -> 地獄病 (Cold then Fever then Fever resolves to Hell)
+    # ダメージ 52 - 20 = 32。ターン終了時の地獄病ダメージ 5。HP 99 - 32 - 5 = 62
+    assert results[2][1] == godfield_core.SicknessType.SICKNESS_HELL
+    assert results[2][0] == 62
+
+    # 3つ: 風邪 -> 熱病 -> 地獄病 -> 天国病
+    # ダメージ 52 - 30 = 22。ターン終了時の天国病回復 5。HP 99 - 22 + 5 = 82
+    assert results[3][1] == godfield_core.SicknessType.SICKNESS_HEAVEN
+    assert results[3][0] == 82
+
+    # 4つ: 発作で死亡 (HP 0)
+    assert results[4][0] == 0
+
+    # 4つ + お守り: HP 10 で復活、さらに天国病回復 5 で HP 15。天国病状態
+    assert runner_amulet.state.get_hp(0) == 15
+    assert runner_amulet.state.get_sickness(0) == godfield_core.SicknessType.SICKNESS_HEAVEN
+
+
+
+

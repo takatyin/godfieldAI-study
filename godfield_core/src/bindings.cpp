@@ -93,7 +93,7 @@ PYBIND11_MODULE(godfield_core, m) {
         .value("PHASE_ATTACK_PLUS", GamePhase::PHASE_ATTACK_PLUS)
         .value("PHASE_GROUP_WEAPON", GamePhase::PHASE_GROUP_WEAPON)
         .value("PHASE_MIRACLE_PLUS", GamePhase::PHASE_MIRACLE_PLUS)
-        .value("PHASE_GROUP_MIRACLE", GamePhase::PHASE_GROUP_MIRACLE)
+        .value("PHASE_GROUP_MIRACLE_PLUS", GamePhase::PHASE_GROUP_MIRACLE_PLUS)
         .value("PHASE_DEFENSE", GamePhase::PHASE_DEFENSE)
         .value("PHASE_MIRACLE_DEFENSE", GamePhase::PHASE_MIRACLE_DEFENSE)
         .value("PHASE_SELL_SELECT", GamePhase::PHASE_SELL_SELECT)

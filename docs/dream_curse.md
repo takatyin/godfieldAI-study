@@ -7,14 +7,19 @@
 ## 1. 夢状態の基本仕様
 プレイヤーが「夢」の状態異常にかかっているとき、手札の真の姿が隠され、同じ「夢グループ（DreamGroup）」に属する別のカード（偽の姿）に見えるようになります。
 
-- **ドロー・再分配時の挙動:**
-  - プレイヤーがカードを山札から引く（または乱気流等でカードが配り直される）際、そのプレイヤーが夢状態であれば、カードは未確定状態（`is_confirmed = false`）になり、同じ夢グループの中から等確率で選ばれた別のカードIDが `apparent_hand`（見た目の手札）にセットされます。
+- **ドロー時の挙動:**
+  - プレイヤーがカードを山札から引く際、そのプレイヤーが夢状態であれば、引いたカードは未確定状態（`is_confirmed = false`）になり、同じ夢グループの中から等確率で選ばれた別のカードIDが `apparent_hand`（見た目の手札）にセットされます。
   - 奇跡カード、取引カード、および一部の特殊な神器（スーパーミラー等）は夢の影響を受けず、ドローした瞬間に即座に確定します。
 - **使用確定時の挙動:**
   - 見た目のカードを使用して仮置き場（`staged_cards`）にカードを置いている時点では、カードの真の姿は明かされません（`is_confirmed = false` のまま）。
   - プレイヤーがターゲット（自分または相手）を選択するか、「確定（`CONFIRM`）」を実行した時点で、仮置きされているカードの真の姿が明かされます（`confirm_card` が走り、`is_confirmed = true` となり、見た目のカード情報が真のカード情報と同期します）。
 - **取引時の挙動:**
-  - 相手が「買う」を使用して対象に選んだカードは、その取引が成立（YES）したか拒絶（NO）されたかにかかわらず、選択された時点で即座に真の姿が確定します。
+  - 相手が「買う（Buy）」を使用して対象に選んだカードは、その取引が成立（YES）したか拒絶（NO）されたかにかかわらず、選択された時点で即座に真の姿が確定（`is_confirmed = true`）します。
+- **磁気嵐（Magnetic Storm）発生時の挙動:**
+  - 磁気嵐の効果によってお互いの手札が回収・シャッフルされ再分配される際、**どちらか一方のプレイヤーでも夢状態（CURSE_DREAM）である場合**、再分配されるすべての非確定カード（夢グループが `NONE` 以外）は未確定状態（`is_confirmed = false`）としてマスクされ、それぞれのプレイヤーの画面上に偽の姿（`apparent_hand`）として配り直されます。
+- **治療・解除時の挙動:**
+  - プレイヤーの夢状態が治療または解除される際（「ハートの貝がら」、「＜歌声＞」、または水星神の「さざ波の音」などの効果で `clear_all_status_effects` が呼び出された場合）、`CURSE_TYPE_DREAM` フラグが `false` にリセットされると同時に、手札内のすべての非空スロットについて `is_confirmed = true` に設定されます。
+  - これと同期して、見た目の手札 `apparent_hand` が真の手札 `true_hand` に戻り、手札の視認性が即座かつ完全に復元されます。
 
 ---
 
@@ -41,14 +46,14 @@
 - **全体攻撃武器（17種）:** `is_group_attack = true` の武器。
 - **プラス武器（19種）:** タイミングが `atk_plus_phase` の武器。
 - **奇跡対策武器（4種）:** タイミングが `miracle_defence_phase`、かつプラス攻撃の属性を持たない武器（月光のオノなど）。
-- **奇跡対策プラス武器（2種）:** タイミングが `miracle_defence_phase` かつ `atk_plus_phase` の武器（スカイハープーン、エンゼルの弓）。
+- **奇跡対策プラス武器（2種）:** タイミングが `miracle_defence_phase` かつ `atk_plus_phase` の武器（スカイハープーン, エンゼルの弓）。
 - **攻守兼用武器（6種）:** タイミングが `atk_defence_phase` かつ `main_atk_phase` のうち、反射能力を持たない武器（セイバーロッドなど）。
 - **無属性反射武器（2種）:** 反射能力を持つ攻守兼用武器（反射剣、乱弾武剣）。
 
-### ④ 常に確定（夢の影響を受けず即確定）
+### ④ 常に確定（夢の影響を受けず即確定、`DreamGroup::NONE`）
 - 奇跡カード（全種）
 - 取引カード（両替、売る、買う）
-- 守護神の行動（Mars, Mercury などの全守護神行動）
+- 守護神の行動（火星神、水星神などの全守護神行動・仮想カード）
 - 悪魔系雑貨5種（小悪魔、中悪魔、大悪魔、イタズラマン、めぐみの妖精）
 - 精霊の杖（精霊系武器1種）
 - 魔神の木馬（全体攻撃防具兼用1種）
@@ -130,7 +135,7 @@ if ((current_action == ACTION_TARGET_SELF ||
         if (state.current_phase == GamePhase::PHASE_MAIN_TARGET_SELECT ||
             state.current_phase == GamePhase::PHASE_ATTACK_PLUS ||
             state.current_phase == GamePhase::PHASE_GROUP_WEAPON ||
-            state.current_phase == GamePhase::PHASE_GROUP_MIRACLE ||
+            state.current_phase == GamePhase::PHASE_GROUP_MIRACLE_PLUS ||
             state.current_phase == GamePhase::PHASE_MIRACLE_PLUS) {
             state.current_phase = GamePhase::PHASE_MAIN;
         }

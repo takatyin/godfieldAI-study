@@ -42,6 +42,28 @@ bool is_discardable_card(int card_id);
  */
 bool is_spiritual_zero_mp_card(int card_id);
 
+struct StagedAttackInfo {
+    int mp_cost;
+    int attack_power;
+    Element element;
+    bool absorption;
+    bool deal_same_damage;
+    bool hit;
+};
+
+StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id);
+void setup_multiple_attacks(InternalState &state, int me, int opp, const StagedAttackInfo &info);
+
+/**
+ * @brief 「あぶないキネ」の使用処理を実行します（ウス所持チェック、99ダメージ解決、ランダムターゲット選定）。
+ */
+bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, bool is_guardian = false);
+
+/**
+ * @brief 仮置きされた武器カード群の評価・攻撃実行パイプラインを一元処理します。
+ */
+bool execute_attack_from_staged_cards(InternalState &state, int attacker, int target, bool is_guardian = false);
+
 /**
  * @brief 仮置き場（staged_cards）に最後に置かれたカードが「奇跡」であるかを判定します。
  * @param state ゲーム状態。
@@ -69,8 +91,11 @@ void deploy_miracle(InternalState &state, int player_id, int slot_idx);
 void undeploy_miracle(InternalState &state, int player_id, int slot_idx);
 
 void clear_hand_slot(InternalState &state, int player_id, int slot_idx);
+void apply_defense_gear_effects(InternalState &state, int player_id);
 void confirm_card(InternalState &state, int player_id, int slot_idx);
 void add_card_to_hand_slot(InternalState &state, int player_id, int slot_idx, int card_id, bool is_drawn);
+std::pair<int, int> get_exchange_hp_range(int sum);
+std::pair<int, int> get_exchange_mp_range(int sum, int hp);
 DreamGroup get_dream_group(int card_id);
 DreamGroup calculate_dream_group(int card_id);
 
@@ -114,6 +139,7 @@ bool can_discard(const InternalState &state, int player_id);
  * @param sell_card_index 使用する「売る」カード自体の手札インデックス。
  * @return 売却可能なカードがあれば true、そうでなければ false。
  */
+bool is_sellable_card(const InternalState &state, int player_id, int slot_idx);
 bool can_sell_card(const InternalState &state, int player_id, int sell_card_index);
 
 /**

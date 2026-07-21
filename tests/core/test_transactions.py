@@ -559,3 +559,153 @@ def test_attack_observability():
     # 防御解決後はターンが終了（PHASE_END -> 次のメイン）し、両者の staged_cards がクリアされる
     assert runner.state.get_num_staged_cards(0) == 0
     assert runner.state.get_num_staged_cards(1) == 0
+
+
+def test_buy_from_self():
+    """
+    検証内容: 自分に対する「買う」の正常解決テスト。
+    - 自分に対して「買う」を使用した場合、取引相手（対戦相手）からの受諾やミラー確認をスキップし、即時に解決されること。
+    - 使用者の手札からランダムに1枚（「買う」カード以外）が相手に対して公開状態（is_known_to_opp = True）になること。
+    - お金やMPの支払いや、カードの移動処理などは一切発生しないこと。
+    """
+    runner = SimulationRunner()
+    buy_id = find_card_by_name("買う")
+    club_id = find_card_by_name("銅のこん棒")
+
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_money(0, 20)
+    runner.state.set_true_hand(0, 0, buy_id)
+    runner.state.set_true_hand(0, 1, club_id)
+
+    # 1. スロット0の「買う」を選択
+    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
+    # 2. 自分自身をターゲットに選択
+    runner.step(action=ActionType.ACTION_TARGET_SELF)
+
+    # 自分への「買う」なので、即座に解決されターンが終了し、相手（P1）のメインフェイズ（PHASE_MAIN）に移行すること
+    assert runner.state.current_phase == GamePhase.PHASE_MAIN
+    assert runner.state.current_actor_id == 1
+    # お金は減っていないこと
+    assert runner.state.get_money(0) == 20
+    # スロット1の「銅のこん棒」が相手に公開（is_known_to_opp = True）されていること
+    assert runner.state.get_is_known_to_opp(0, 1) is True
+
+
+def test_sell_hand_reduction():
+    """
+    検証内容: 「売る」を使用した際の手札総数減少とドロー挙動テスト。
+    - 手札 [売る, カードA, 空き, 空き, ...] の状態でカードAを売り、相手が受諾した際：
+      - 「売る」カードが使われたスロットは、新しいカードが山札から補充（ドロー）されること。
+      - 売却された「カードA」のスロットは空（CARD_EMPTY）になり、ドロー補充されないこと。
+      - その結果、売却後の手札総数（空き枠を除く）が 1 減少すること。
+    """
+    runner = SimulationRunner()
+    sell_id = find_card_by_name("売る")
+    pot_id = find_card_by_name("守護封印のつぼ")
+
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_money(0, 0)
+    runner.state.set_money(1, 20)  # P1はお金持ち
+
+    # P0の手札: [売る, つぼ, CARD_EMPTY, ...]
+    runner.state.set_true_hand(0, 0, sell_id)
+    runner.state.set_true_hand(0, 1, pot_id)
+    for j in range(2, 18):
+        runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
+
+    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # 売る
+    runner.step(action=ActionType.ACTION_SELECT_HAND_1)  # つぼ
+    runner.step(action=ActionType.ACTION_TARGET_OPP)
+    runner.step(action=ActionType.ACTION_CONFIRM)  # P1が受諾
+
+    # 取引解決により、ターンが終了して次のプレイヤー（P1）のターンに移行すること
+    assert runner.state.current_phase == GamePhase.PHASE_MAIN
+    assert runner.state.current_actor_id == 1
+
+    # P0のスロット0（「売る」だった場所）には、新しいカードがドロー補充されていること（空ではない）
+    assert runner.state.get_true_hand(0, 0) != godfield_core.CARD_EMPTY
+    # P0のスロット1（売却された「つぼ」の場所）は空（CARD_EMPTY）になっていること（補充されない）
+    assert runner.state.get_true_hand(0, 1) == godfield_core.CARD_EMPTY
+
+    # P0の有効な手札数（空ではないカード）が 1 に減少していることを確認（元は「売る」と「つぼ」の2枚）
+    active_cards_count = sum(1 for j in range(18) if runner.state.get_true_hand(0, j) != godfield_core.CARD_EMPTY)
+    assert active_cards_count == 1
+
+
+def test_sell_mirror_resolution():
+    """
+    検証内容: 「売る」に対するスーパーミラー反射解決時のアセット・手札遷移テスト。
+    - P0が「売る」でカードAをP1に売ろうとした際、P1が「スーパーミラー」で反射し、P0がそれを受諾（Confirm）した時：
+      - お金の受け渡し: 買い手となったP0が代金を支払い（お金 -10）、売り手となったP1が代金を受け取る（お金 +10）こと。
+      - 手札のカード移動: 売却対象のカードAは、買い手となったP0の手札（スロット1）に戻ること（P1には渡らない）。
+      - ドロー補充: 
+        - P0の「売る」カードスロット（スロット0）は新しいカードがドロー補充され、手札は [新カード, カードA, 空き...] となること。
+        - P1の「スーパーミラー」スロット（スロット0）も消費され、新しいカードがドロー補充されること。
+    """
+    runner = SimulationRunner()
+    runner.state.seed_rng(0)
+    sell_id = find_card_by_name("売る")
+    pot_id = find_card_by_name("守護封印のつぼ")  # 価格 10
+    mirror_id = find_card_by_name("スーパーミラー")
+
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_money(0, 20)  # P0のお金: 20
+    runner.state.set_money(1, 5)   # P1のお金: 5
+
+    # P0の手札: [売る, つぼ, CARD_EMPTY, ...]
+    runner.state.set_true_hand(0, 0, sell_id)
+    runner.state.set_true_hand(0, 1, pot_id)
+    for j in range(2, 18):
+        runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
+
+    # P1の手札: [スーパーミラー, CARD_EMPTY, ...]
+    runner.state.set_true_hand(1, 0, mirror_id)
+    for j in range(1, 18):
+        runner.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
+
+    # 1. P0が「売る」と「つぼ」を選択してP1をターゲット
+    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # 売る
+    runner.step(action=ActionType.ACTION_SELECT_HAND_1)  # つぼ
+    runner.step(action=ActionType.ACTION_TARGET_OPP)
+
+    assert runner.state.current_phase == GamePhase.PHASE_SELL_SELECT_MIRROR
+    assert runner.state.current_actor_id == 1  # P1の意思決定
+
+    # 2. P1が「スーパーミラー」を選択して反射
+    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # スーパーミラー
+
+    # 反射により元の売るカードの提示フェイズ（PHASE_SELL_SELECT_MIRROR）のまま、アクターがP0（元の売り手）に戻ること
+    assert runner.state.current_phase == GamePhase.PHASE_SELL_SELECT_MIRROR
+    assert runner.state.current_actor_id == 0
+
+    # 3. P0が受諾
+    runner.step(action=ActionType.ACTION_CONFIRM)
+
+    # ターンが終了し、次のプレイヤー（P1）のメインフェイズ（PHASE_MAIN）に移行すること
+    assert runner.state.current_phase == GamePhase.PHASE_MAIN
+    assert runner.state.current_actor_id == 1
+
+    # 4. お金の受け渡しアサーション
+    assert runner.state.get_money(0) == 10  # 20 - 10 = 10 (P0が買い取った)
+    assert runner.state.get_money(1) == 15  # 5 + 10 = 15 (P1が売りつけた)
+
+    # 5. P0の手札状態アサーション
+    # スロット0（「売る」だった場所）には、新しいカードがドロー補充されていること
+    assert runner.state.get_true_hand(0, 0) != godfield_core.CARD_EMPTY
+    assert runner.state.get_true_hand(0, 0) != sell_id
+    # スロット1（「つぼ」だった場所）は、買い取ったつぼが戻って格納されていること
+    assert runner.state.get_true_hand(0, 1) == pot_id
+
+    # 6. P1の手札状態アサーション
+    # P1の手札に「つぼ」は移動していないこと
+    assert pot_id not in [runner.state.get_true_hand(1, j) for j in range(18)]
+    # スロット0（「スーパーミラー」だった場所）は、消費されて新しいカードがドロー補充されていること
+    assert runner.state.get_true_hand(1, 0) != godfield_core.CARD_EMPTY
+    assert runner.state.get_true_hand(1, 0) != mirror_id
+
+
+
+

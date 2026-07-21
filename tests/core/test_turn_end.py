@@ -288,7 +288,7 @@ def test_guardian_action_venus_golden_drain():
         test_run.step(ActionType.ACTION_SELECT_HAND_0)
         test_run.step(ActionType.ACTION_CONFIRM)
 
-        if test_run.state.current_phase == GamePhase.PHASE_DEFENSE:
+        if test_run.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR and test_run.state.pending_attack_source_id == find_card_by_name("罰金"):
             act_seed = seed
             break
 
@@ -309,8 +309,8 @@ def test_guardian_action_venus_golden_drain():
     runner.step(ActionType.ACTION_SELECT_HAND_0)
     runner.step(ActionType.ACTION_CONFIRM)
 
-    # 防御フェイズになっていることを確認
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    # 雑貨反射選択フェイズになっていることを確認
+    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
 
     # 防御側(P0)が無防備CONFIRMで被弾
     runner.step(ActionType.ACTION_CONFIRM)
@@ -929,8 +929,8 @@ def test_venus_drain_kills_active_bow_counter_resumes_state5():
         test_run.step(ActionType.ACTION_SELECT_HAND_0)
         test_run.step(ActionType.ACTION_CONFIRM)
 
-        # 罰金は防御フェイズ（PHASE_DEFENSE, アクターP0）へ遷移する
-        if test_run.state.current_phase == GamePhase.PHASE_DEFENSE and test_run.state.current_actor_id == 0:
+        # 罰金は雑貨反射選択フェイズ（PHASE_SUNDRY_SELECT_MIRROR, アクターP0）へ遷移する
+        if test_run.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR and test_run.state.current_actor_id == 0 and test_run.state.pending_attack_source_id == find_card_by_name("罰金"):
             act_seed = seed
             break
 
@@ -952,8 +952,8 @@ def test_venus_drain_kills_active_bow_counter_resumes_state5():
     runner.step(ActionType.ACTION_SELECT_HAND_0)
     runner.step(ActionType.ACTION_CONFIRM)
 
-    # 金星神の罰金による防御フェイズ(P0)になっていること
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    # 金星神の罰金による雑貨反射選択フェイズ(P0)になっていること
+    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
     assert runner.state.current_actor_id == 0
 
     # 2. P0が被弾する(CONFIRM) -> 没収3が直接HPにきて死亡 -> 昇天弓が起動

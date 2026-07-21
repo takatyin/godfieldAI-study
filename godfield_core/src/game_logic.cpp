@@ -99,7 +99,7 @@ void step_game(InternalState& state, ActionType action) {
                 if (state.current_phase == GamePhase::PHASE_MAIN_TARGET_SELECT ||
                     state.current_phase == GamePhase::PHASE_ATTACK_PLUS ||
                     state.current_phase == GamePhase::PHASE_GROUP_WEAPON ||
-                    state.current_phase == GamePhase::PHASE_GROUP_MIRACLE ||
+                    state.current_phase == GamePhase::PHASE_GROUP_MIRACLE_PLUS ||
                     state.current_phase == GamePhase::PHASE_MIRACLE_PLUS) {
                     state.current_phase = GamePhase::PHASE_MAIN;
                 }
@@ -129,7 +129,7 @@ void step_game(InternalState& state, ActionType action) {
             case GamePhase::PHASE_MIRACLE_PLUS:
                 step_phase_miracle_plus(state, current_action, me, opp);
                 break;
-            case GamePhase::PHASE_GROUP_MIRACLE:
+            case GamePhase::PHASE_GROUP_MIRACLE_PLUS:
                 step_phase_group_miracle(state, current_action, me, opp);
                 break;
             case GamePhase::PHASE_MIRACLE_DEFENSE:
@@ -224,7 +224,7 @@ void get_legal_actions(const InternalState &state, bool legal_actions[ACTION_SPA
         case GamePhase::PHASE_MIRACLE_PLUS:
             legal_phase_miracle_plus(state, legal_actions, me, opp);
             break;
-        case GamePhase::PHASE_GROUP_MIRACLE:
+        case GamePhase::PHASE_GROUP_MIRACLE_PLUS:
             legal_phase_group_miracle(state, legal_actions, me, opp);
             break;
         case GamePhase::PHASE_MIRACLE_DEFENSE:

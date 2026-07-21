@@ -420,7 +420,7 @@ void legal_phase_sundry_select_mirror(const InternalState &state, bool legal_act
  */
 void legal_phase_sell_select(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (state.apparent_hand[me][i] != CARD_EMPTY && !state.is_deployed[me][i] && !state.is_used[me][i]) {
+        if (is_sellable_card(state, me, i)) {
             legal_actions[ACTION_SELECT_HAND_0 + i] = true;
         }
     }
@@ -452,18 +452,16 @@ void legal_phase_buy(const InternalState &state, bool legal_actions[ACTION_SPACE
 void legal_phase_exchange(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     if (state.current_phase == GamePhase::PHASE_EXCHANGE_HP) {
         int sum = state.exchange_sum;
-        for (int x = 0; x <= 99; ++x) {
-            if (x <= sum && (sum - x) <= 198) {
-                legal_actions[ACTION_NUM_0 + x] = true;
-            }
+        auto range = get_exchange_hp_range(sum);
+        for (int x = range.first; x <= range.second; ++x) {
+            legal_actions[ACTION_NUM_0 + x] = true;
         }
     } else if (state.current_phase == GamePhase::PHASE_EXCHANGE_MP) {
         int sum = state.exchange_sum;
-        int x = state.exchange_hp;
-        for (int y = 0; y <= 99; ++y) {
-            if (x + y <= sum && (sum - x - y) <= 99) {
-                legal_actions[ACTION_NUM_0 + y] = true;
-            }
+        int hp = state.exchange_hp;
+        auto range = get_exchange_mp_range(sum, hp);
+        for (int y = range.first; y <= range.second; ++y) {
+            legal_actions[ACTION_NUM_0 + y] = true;
         }
     }
 }

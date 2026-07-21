@@ -279,7 +279,7 @@
   element: 闇
   hit_curse: dark cloud
   id_str: gurdians/ominous-premonition
-- name: 咳払い
+- name: せき払い
   type: guardian
   usage_timing:
   - guardian_phase
