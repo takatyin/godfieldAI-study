@@ -380,7 +380,6 @@
   usage_timing:
   - atk_defence_phase
   price: 10
-  element: 木
   defense_power: 8
   drop_rate: 6
   id_str: armor/steel-shield
@@ -389,7 +388,6 @@
   usage_timing:
   - atk_defence_phase
   price: 10
-  element: 土
   defense_power: 8
   drop_rate: 1
   id_str: armor/beautiful-glasswork
@@ -470,9 +468,12 @@
   drop_rate: 1
   id_str: armor/spiritual-hood
 - name: スカイアーマー
+  description: 奇跡を弾く
   type: defense
+  reaction_type: bounce
   usage_timing:
   - atk_defence_phase
+  - miracle_defence_phase
   price: 5
   defense_power: 9
   drop_rate: 1
@@ -564,9 +565,12 @@
   drop_rate: 1
   id_str: armor/spiritual-sash
 - name: 月光のよろい
+  description: 奇跡をはね返す
   type: defense
+  reaction_type: reflect
   usage_timing:
   - atk_defence_phase
+  - miracle_defence_phase
   price: 10
   defense_power: 12
   drop_rate: 1

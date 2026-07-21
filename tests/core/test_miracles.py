@@ -275,51 +275,25 @@ def test_unstable_accuracy_cannot_target_self():
     assert legal_actions[ActionType.ACTION_TARGET_OPP.value] == True
 
 
-def test_miracle_deployment_limit_six():
+def test_miracle_deployment_unlimited():
     """
-    検証内容: 奇跡の最大展開数制限。
-    - 6つのスロットに既に奇跡が展開されている状態で、現在展開されている奇跡の総数が 6 個であることを確認します。
+    検証内容: 奇跡の展開数に制限がなく、いくらでも展開できること。
+    - 10個のスロットに奇跡を展開し、10個すべてが展開されたままであることを確認します（押し出しは発生しない）。
     """
     runner = SimulationRunner()
     fireball_id = find_card_by_name("＜火の玉＞")
 
-    # 6つのスロットに奇跡を展開
-    for i in range(6):
+    # 10個のスロットに奇跡を展開
+    for i in range(10):
         runner.state.set_true_hand(0, i, fireball_id)
         runner.state.set_is_deployed(0, i, True)
 
     deployed_count = sum(1 for i in range(18) if runner.state.get_is_deployed(0, i))
-    assert deployed_count == 6
+    assert deployed_count == 10
 
-
-def test_miracle_deployment_limit_fifo_eviction():
-    """
-    検証内容: 奇跡展開オーバー時のFIFO（押し出し）ルールテスト。
-    - 既に 6 つ展開されている状態で、7 つ目の奇跡をスロット6に新しく展開した際、最も古いスロット0の奇跡の展開フラグが False になり、かつ手札から完全に消滅（CARD_EMPTY）することを確認します。
-    - 総展開数が 6 個のままで維持されることを確認します。
-    """
-    runner = SimulationRunner()
-    fireball_id = find_card_by_name("＜火の玉＞")
-
-    # 6つ展開
-    for i in range(6):
-        runner.state.set_true_hand(0, i, fireball_id)
-        runner.state.set_is_deployed(0, i, True)
-
-    # 7つ目の奇跡を展開
-    runner.state.set_true_hand(0, 6, fireball_id)
-    runner.state.set_is_deployed(0, 6, True)
-
-    # 1. 総数は6のまま維持
-    deployed_count_after = sum(1 for i in range(18) if runner.state.get_is_deployed(0, i))
-    assert deployed_count_after == 6
-
-    # 2. スロット0（最も古い奇跡）が消滅
-    assert runner.state.get_is_deployed(0, 0) == False
-    assert runner.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY
-
-    # 3. スロット6（新しい奇跡）が展開済み
-    assert runner.state.get_is_deployed(0, 6) == True
+    # 最古のスロット（0）も展開されたままであり、消滅していないこと
+    assert runner.state.get_is_deployed(0, 0) == True
+    assert runner.state.get_true_hand(0, 0) == fireball_id
 
 
 def test_weapon_and_miracle_stacking():

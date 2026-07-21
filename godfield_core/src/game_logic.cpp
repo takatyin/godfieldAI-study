@@ -194,6 +194,17 @@ void get_legal_actions(const InternalState &state, bool legal_actions[ACTION_SPA
     int me = state.current_actor_id;
     int opp = 1 - me;
 
+    if (state.hp[me] <= 0) {
+        if (state.current_phase == GamePhase::PHASE_DEFENSE || 
+            state.current_phase == GamePhase::PHASE_MIRACLE_DEFENSE ||
+            state.current_phase == GamePhase::PHASE_SUNDRY_SELECT_MIRROR ||
+            state.current_phase == GamePhase::PHASE_SELL_SELECT_MIRROR ||
+            state.current_phase == GamePhase::PHASE_BUY_SELECT_MIRROR) {
+            legal_actions[ACTION_CONFIRM] = true;
+            return;
+        }
+    }
+
     switch (state.current_phase) {
         case GamePhase::PHASE_MAIN:
             legal_phase_main(state, legal_actions, me, opp);

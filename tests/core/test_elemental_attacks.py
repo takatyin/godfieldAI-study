@@ -243,9 +243,7 @@ def test_element_light_defense_rules():
     runner.step(ActionType.ACTION_SELECT_HAND_0)
     runner.step(ActionType.ACTION_TARGET_OPP)
 
-    runner.set_hand(
-        1, [normal_shield, fire_shield, water_shield, wood_shield, stone_shield, rainbow]
-    )
+    runner.set_hand(1, [normal_shield, fire_shield, water_shield, wood_shield, stone_shield, rainbow])
 
     legal_actions = godfield_core.get_legal_actions(runner.state)
 
@@ -379,5 +377,3 @@ def test_element_mixing_light_darkness():
     # 無属性（ELEM_NONE）になっていることをアサート
     assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
     assert runner.state.pending_attack_power == 14  # 9 + 5 = 14
-
-

@@ -53,3 +53,5 @@ compile_flags.txt
 compile_commands.json
 .clangd/
 
+# Cloned godfield-flash repository for specification analysis
+godfield-flash/

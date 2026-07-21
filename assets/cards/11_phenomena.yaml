@@ -28,7 +28,7 @@
   id_str: phenomena/tornado
 
 - name: 巨大なタライ
-  type: weapon
+  type: phenomena
   usage_timing: [guardian_phase]
   price: 0
   drop_rate: 0
@@ -37,7 +37,7 @@
   id_str: phenomena/gigantic-tub
 
 - name: ブラックホール
-  type: weapon
+  type: phenomena
   usage_timing: [guardian_phase]
   price: 0
   drop_rate: 0

@@ -1,35 +1,35 @@
 - name: 小悪魔
   id_str: devils/small-devil
   description: 10dmgを受ける
-  type: sundry
+  type: devil
   usage_timing: []
   price: 0
   drop_rate: 0
 - name: 中悪魔
   id_str: devils/medium-devil
   description: 20dmgを受ける
-  type: sundry
+  type: devil
   usage_timing: []
   price: 0
   drop_rate: 0
 - name: 大悪魔
   id_str: devils/large-devil
   description: 30dmgを受ける
-  type: sundry
+  type: devil
   usage_timing: []
   price: 0
   drop_rate: 0
 - name: イタズラマン
   id_str: devils/trickster
   description: 自分の神器か起こした奇跡を2つ捨てる
-  type: sundry
+  type: devil
   usage_timing: []
   price: 0
   drop_rate: 0
 - name: めぐみの妖精
   id_str: devils/charity-fairy
   description: HP/MP/お金のどれか1つを+10
-  type: sundry
+  type: devil
   usage_timing: []
   price: 0
   drop_rate: 0

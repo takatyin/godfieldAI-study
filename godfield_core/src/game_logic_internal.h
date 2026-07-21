@@ -150,7 +150,7 @@ bool resolve_turn_end_steps(InternalState &state);
 /**
  * @brief カードが現在のフェイズおよび攻撃属性に対してアクティブなリアクション（反射/弾く/阻止）カードであるかを判定します。
  */
-bool is_active_reaction_card(int card_id, GamePhase phase, Element attack_element);
+bool is_active_reaction_card(const InternalState &state, int card_id, GamePhase phase, Element attack_element);
 
 /**
  * @brief 対象プレイヤーの仮置き場（staged_cards）に積まれているカードのID一覧を取得します。
@@ -186,6 +186,7 @@ void apply_sickness(InternalState &state, int player_id, SicknessType new_sick);
  * @return 昇天弓の発射などにより防御フェイズが起動され、ゲームループを一時停止する場合は true。
  */
 bool run_death_check(InternalState &state);
+bool run_immediate_revive(InternalState &state);
 
 /**
  * @brief 「売る」アクションにおける商品の引き渡しおよび決済の解決を行います。

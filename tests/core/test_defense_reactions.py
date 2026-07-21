@@ -115,7 +115,7 @@ def test_rainbow_curtain_wall_and_reflection_sword_synergy():
     assert runner.state.defender_id == 0
     assert runner.state.current_actor_id == 0
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-    
+
     # カーテンによって攻撃が無属性（ELEM_NONE）になっていることを検証
     assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
 
@@ -430,9 +430,11 @@ def test_miracle_defense_physical_armor_strictly_illegal():
     """
     検証内容:
     1. 奇跡攻撃（例：ダメージのある火奇跡＜炎＞）に対し、虹のカーテンがない場合、
-       対抗属性であるはずの物理防具（例：アクアシューズ）を出すことは非合法であること。
-    2. 虹のカーテンを1枚目に出した後は、無属性の一般物理防具（例：革の帽子）を出すことが合法になること。
+       対抗属性の物理防具（例：アクアシューズ）を出すことは合法であること。非対抗（例：革の帽子）は非合法。
+    2. 対抗防具のみで防御した場合、ダメージが完全に相殺（0ダメージ）されること。
+    3. 虹のカーテンを1枚目に出した後は、無属性の一般物理防具（例：革の帽子）を出すことが合法になること。
     """
+    # パターンA: 対抗属性防具を直接出して相殺
     runner = SimulationRunner()
     flame_id = find_card_by_name("miracles/flame")  # ＜炎＞ (火属性奇跡, 攻4)
     curtain_id = find_card_by_name("armor/rainbow-curtain")
@@ -451,24 +453,141 @@ def test_miracle_defense_physical_armor_strictly_illegal():
     runner.step(ActionType.ACTION_TARGET_OPP)
     assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
 
-    # 虹のカーテンなしでは、アクアシューズ（水属性だが物理防具）も革の帽子も「非合法」
+    # 虹のカーテンなしの状態での判定
     actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True  # カーテンは1枚目かつ攻撃力>0なので合法
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is False # アクアシューズは物理用なので非合法！
-    assert actions[ActionType.ACTION_SELECT_HAND_2] is False # 革の帽子も物理用なので非合法！
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is True  # カーテンは合法
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True  # アクアシューズ（対抗属性）は合法！
+    assert actions[ActionType.ACTION_SELECT_HAND_2] is False  # 革の帽子（無属性非対抗）は非合法
 
-    # カーテンを選択
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # カーテンを置いた後は、無属性化したため物理防具であるアクアシューズも革の帽子も「合法」になる
-    actions2 = godfield_core.get_legal_actions(runner.state)
-    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True  # アクアシューズも合法化！
-    assert actions2[ActionType.ACTION_SELECT_HAND_2] is True  # 革の帽子も無属性物理防具なので合法！
-
-    # 決定
-    runner.step(ActionType.ACTION_SELECT_HAND_2)
+    # アクアシューズを直接選択して決定
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
     runner.step(ActionType.ACTION_CONFIRM)
 
-    # ターン終了
+    # 対抗属性により防御が成立し、通常の防御減算のみ (10 - 1 = 9被弾) -> 40 - 9 = 31
+    assert runner.state.get_hp(1) == 31
     assert runner.state.current_phase == GamePhase.PHASE_MAIN
+
+    # パターンB: カーテン + 一般防具
+    runner2 = SimulationRunner()
+    runner2.set_status(0, hp=40, mp=10)
+    runner2.set_status(1, hp=40, mp=10)
+    runner2.state.set_true_hand(0, 0, flame_id)
+    runner2.state.set_true_hand(1, 0, curtain_id)
+    runner2.state.set_true_hand(1, 1, aqua_shoes_id)
+    runner2.state.set_true_hand(1, 2, leather_cap_id)
+
+    runner2.step(ActionType.ACTION_SELECT_HAND_0)
+    runner2.step(ActionType.ACTION_TARGET_OPP)
+
+    # 1枚目にカーテンを選択
+    runner2.step(ActionType.ACTION_SELECT_HAND_0)
+
+    # カーテン選択後は、無属性化したため物理防具である革の帽子も合法になる
+    actions2 = godfield_core.get_legal_actions(runner2.state)
+    assert actions2[ActionType.ACTION_SELECT_HAND_2] is True
+
+    # 革の帽子を選択して決定
+    runner2.step(ActionType.ACTION_SELECT_HAND_2)
+    runner2.step(ActionType.ACTION_CONFIRM)
+
+    # カーテンで中和されたため、通常の防御力減算のみ (10 - 1 = 9被弾) -> 40 - 9 = 31
+    assert runner2.state.get_hp(1) == 31
+    assert runner2.state.current_phase == GamePhase.PHASE_MAIN
+
+
+def test_special_weapons_reflection():
+    """
+    検証内容: 巨大なタライ、ブラックホール、ダイヤモンドアクス、満月刀が
+    物理武器攻撃として反射剣などで反射可能であることの検証。
+    - 属性持ち（タライ＝光、ブラックホール＝闇、ダイヤモンドアクス＝土）は虹のカーテンが必要。
+    - 無属性（満月刀）は直接反射剣で反射可能。
+    """
+    curtain_id = find_card_by_name("armor/rainbow-curtain")
+    ref_sword_id = find_card_by_name("weapons/reflection-sword")
+    wood_shield_id = find_card_by_name("armor/wood-shield")
+
+    # 1. 巨大なタライ (光50) -> カーテン+反射剣
+    runner = SimulationRunner()
+    runner.set_status(0, hp=40, mp=10)
+    runner.set_status(1, hp=40, mp=10)
+    runner.state.set_true_hand(1, 0, curtain_id)
+    runner.state.set_true_hand(1, 1, ref_sword_id)
+    runner.state.set_true_hand(0, 0, wood_shield_id) # 反射後の受防用
+
+    runner.state.pending_attack_source_id = find_card_by_name("phenomena/gigantic-tub")
+    runner.state.pending_attack_power = 50
+    runner.state.pending_attack_element = godfield_core.Element.ELEM_LIGHT
+    runner.state.attacker_id = 0
+    runner.state.defender_id = 1
+    runner.state.current_actor_id = 1
+    runner.state.current_phase = GamePhase.PHASE_DEFENSE
+
+    # 虹のカーテンなしでは反射剣は置けない
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is False
+
+    # カーテンを置く
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True
+
+    # 反射剣を置いて決定 -> 反射成立で攻守交代
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 0
+
+    # 2. ダイヤモンドアクス (土15) -> カーテン+反射剣
+    runner2 = SimulationRunner()
+    runner2.set_status(0, hp=40, mp=10)
+    runner2.set_status(1, hp=40, mp=10)
+    runner2.state.set_true_hand(1, 0, curtain_id)
+    runner2.state.set_true_hand(1, 1, ref_sword_id)
+    runner2.state.set_true_hand(0, 0, wood_shield_id)
+
+    runner2.state.pending_attack_source_id = find_card_by_name("gurdians/diamond-axe")
+    runner2.state.pending_attack_power = 15
+    runner2.state.pending_attack_element = godfield_core.Element.ELEM_STONE
+    runner2.state.attacker_id = 0
+    runner2.state.defender_id = 1
+    runner2.state.current_actor_id = 1
+    runner2.state.current_phase = GamePhase.PHASE_DEFENSE
+
+    # カーテンなしでは不可
+    actions = godfield_core.get_legal_actions(runner2.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is False
+
+    runner2.step(ActionType.ACTION_SELECT_HAND_0)
+    actions = godfield_core.get_legal_actions(runner2.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True
+
+    # 反射決定
+    runner2.step(ActionType.ACTION_SELECT_HAND_1)
+    runner2.step(ActionType.ACTION_CONFIRM)
+    assert runner2.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner2.state.current_actor_id == 0
+
+    # 3. 満月刀 (無10) -> 直接反射剣可能
+    runner3 = SimulationRunner()
+    runner3.set_status(0, hp=40, mp=10)
+    runner3.set_status(1, hp=40, mp=10)
+    runner3.state.set_true_hand(1, 0, ref_sword_id)
+    runner3.state.set_true_hand(0, 0, wood_shield_id)
+
+    runner3.state.pending_attack_source_id = find_card_by_name("gurdians/full-moon-blade")
+    runner3.state.pending_attack_power = 10
+    runner3.state.pending_attack_element = godfield_core.Element.ELEM_NONE
+    runner3.state.attacker_id = 0
+    runner3.state.defender_id = 1
+    runner3.state.current_actor_id = 1
+    runner3.state.current_phase = GamePhase.PHASE_DEFENSE
+
+    # 無属性なので直接反射剣が置ける
+    actions = godfield_core.get_legal_actions(runner3.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is True
+
+    runner3.step(ActionType.ACTION_SELECT_HAND_0)
+    runner3.step(ActionType.ACTION_CONFIRM)
+    assert runner3.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner3.state.current_actor_id == 0
 

@@ -6,7 +6,7 @@ def validate_cards(file_path):
     with open(file_path, encoding="utf-8") as f:
         cards = json.load(f)
 
-    valid_types = {"weapon", "defense", "miracle", "sundry", "deal"}
+    valid_types = {"weapon", "defense", "miracle", "sundry", "deal", "devil", "phenomena", "guardian"}
     valid_elements = {"火", "水", "木", "土", "光", "闇", ""}
     valid_phases = {
         "main_atk_phase",

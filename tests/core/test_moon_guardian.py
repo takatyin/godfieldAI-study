@@ -11,20 +11,27 @@ def find_seed_for_moon_miracle(target_miracle_id: int) -> int:
         sim = SimulationRunner()
         sim.state.seed_rng(seed)
         sim.set_status(player=0, hp=99, mp=10, money=10)
-        sim.set_status(player=1, hp=40, mp=10, money=10) # HP 40 (泉回復検知用)
-        sim.state.set_guardian(1, 10) # P1 に月神が憑依
-        
+        sim.set_status(player=1, hp=40, mp=10, money=10)  # HP 40 (泉回復検知用)
+        sim.state.set_guardian(1, 10)  # P1 に月神が憑依
+
         # P0 のターンを「祈る」で終了させる
         sim.step(godfield_core.ActionType.ACTION_PRAY)
-        
+
         # 状態を確認
         if target_miracle_id == find_card_by_name("miracles/aura"):
             # オーラ + 満月刀 (物理ATK20)
-            if sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE and sim.state.pending_attack_power == 20:
+            if (
+                sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+                and sim.state.pending_attack_power == 20
+            ):
                 return seed
         elif target_miracle_id == find_card_by_name("miracles/mirage"):
             # 蜃気楼 + 満月刀 (物理ATK10 全体)
-            if sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE and sim.state.pending_attack_power == 10 and sim.state.pending_is_group_attack:
+            if (
+                sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+                and sim.state.pending_attack_power == 10
+                and sim.state.pending_is_group_attack
+            ):
                 return seed
         elif target_miracle_id == find_card_by_name("miracles/spring"):
             # 泉 (P1 HP+10 ➡ 50)
@@ -36,13 +43,17 @@ def find_seed_for_moon_miracle(target_miracle_id: int) -> int:
                 return seed
         elif target_miracle_id == find_card_by_name("miracles/release"):
             # 解放 (両者の守護神が 0 になる)
-            if sim.state.get_guardian(0) == 0 and sim.state.get_guardian(1) == 0 and sim.state.current_phase == godfield_core.GamePhase.PHASE_MAIN:
+            if (
+                sim.state.get_guardian(0) == 0
+                and sim.state.get_guardian(1) == 0
+                and sim.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
+            ):
                 return seed
-        elif target_miracle_id == 999: # 攻撃奇跡
+        elif target_miracle_id == 999:  # 攻撃奇跡
             if sim.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE:
                 if sim.state.pending_attack_power > 0:
                     return seed
-                    
+
     # 歌声用の別探索 (P1 に風邪 sickness=1 を付与しておく)
     for seed in range(10000):
         sim = SimulationRunner()
@@ -52,7 +63,10 @@ def find_seed_for_moon_miracle(target_miracle_id: int) -> int:
         sim.state.set_sickness(1, godfield_core.SicknessType.SICKNESS_COLD)
         sim.state.set_guardian(1, 10)
         sim.step(godfield_core.ActionType.ACTION_PRAY)
-        if sim.state.get_sickness(1) == godfield_core.SicknessType.SICKNESS_NONE and sim.state.current_phase == godfield_core.GamePhase.PHASE_MAIN:
+        if (
+            sim.state.get_sickness(1) == godfield_core.SicknessType.SICKNESS_NONE
+            and sim.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
+        ):
             return seed
 
     raise ValueError(f"Could not find seed for Moon miracle {target_miracle_id}")
@@ -68,7 +82,7 @@ def test_moon_aura():
     sim.set_status(player=1, hp=40)
     sim.state.set_guardian(1, 10)
     sim.step(godfield_core.ActionType.ACTION_PRAY)
-    
+
     assert sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
     assert sim.state.defender_id == 0
     assert sim.state.attacker_id == 1
@@ -88,7 +102,7 @@ def test_moon_mirage():
     sim.set_status(player=1, hp=40)
     sim.state.set_guardian(1, 10)
     sim.step(godfield_core.ActionType.ACTION_PRAY)
-    
+
     assert sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
     assert sim.state.defender_id == 0
     assert sim.state.attacker_id == 1
@@ -108,7 +122,7 @@ def test_moon_spring():
     sim.set_status(player=1, hp=40)
     sim.state.set_guardian(1, 10)
     sim.step(godfield_core.ActionType.ACTION_PRAY)
-    
+
     assert sim.state.get_hp(1) == 50
     assert sim.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
 
@@ -123,7 +137,7 @@ def test_moon_treasure():
     sim.set_status(player=1, hp=40, money=10)
     sim.state.set_guardian(1, 10)
     sim.step(godfield_core.ActionType.ACTION_PRAY)
-    
+
     assert sim.state.get_money(1) == 20
 
 
@@ -138,7 +152,7 @@ def test_moon_release():
     sim.state.set_guardian(1, 10)
     sim.state.set_guardian(0, 3)
     sim.step(godfield_core.ActionType.ACTION_PRAY)
-    
+
     assert sim.state.get_guardian(0) == 0
     assert sim.state.get_guardian(1) == 0
 
@@ -154,7 +168,7 @@ def test_moon_song():
     sim.state.set_sickness(1, godfield_core.SicknessType.SICKNESS_COLD)
     sim.state.set_guardian(1, 10)
     sim.step(godfield_core.ActionType.ACTION_PRAY)
-    
+
     assert sim.state.get_sickness(1) == godfield_core.SicknessType.SICKNESS_NONE
 
 
@@ -167,7 +181,7 @@ def test_moon_attack_miracles():
     sim.set_status(player=1, hp=40)
     sim.state.set_guardian(1, 10)
     sim.step(godfield_core.ActionType.ACTION_PRAY)
-    
+
     assert sim.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
     assert sim.state.defender_id == 0
     assert sim.state.attacker_id == 1

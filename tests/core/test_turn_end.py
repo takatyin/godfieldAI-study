@@ -311,7 +311,7 @@ def test_guardian_action_venus_golden_drain():
 
     # 防御フェイズになっていることを確認
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-    
+
     # 防御側(P0)が無防備CONFIRMで被弾
     runner.step(ActionType.ACTION_CONFIRM)
 
@@ -770,11 +770,7 @@ def test_heaven_wind_mutual_seizure_draw():
         test_run.step(ActionType.ACTION_CONFIRM)
 
         # 双方が死亡して引き分け終了となったシードを採用
-        if (
-            test_run.state.is_done
-            and test_run.state.get_hp(0) == 0
-            and test_run.state.get_hp(1) == 0
-        ):
+        if test_run.state.is_done and test_run.state.get_hp(0) == 0 and test_run.state.get_hp(1) == 0:
             draw_seed = seed
             break
 
@@ -923,7 +919,8 @@ def test_venus_drain_kills_active_bow_counter_resumes_state5():
         test_run.state.current_actor_id = 0
         test_run.state.set_hp(0, 2)
         test_run.state.set_hp(1, 40)
-        test_run.state.set_money(0, 0) # お金 0 にすることで、没収3が直接 HP にいき死亡するようにする
+        # お金 0 にすることで、没収3が直接 HP にいき死亡するようにする
+        test_run.state.set_money(0, 0)
         test_run.state.set_guardian(1, 8)  # 相手(P1)に金星神を設定
         test_run.state.set_true_hand(0, 0, shield_id)
         test_run.state.set_true_hand(0, 1, bow_id)
@@ -933,10 +930,7 @@ def test_venus_drain_kills_active_bow_counter_resumes_state5():
         test_run.step(ActionType.ACTION_CONFIRM)
 
         # 罰金は防御フェイズ（PHASE_DEFENSE, アクターP0）へ遷移する
-        if (
-            test_run.state.current_phase == GamePhase.PHASE_DEFENSE
-            and test_run.state.current_actor_id == 0
-        ):
+        if test_run.state.current_phase == GamePhase.PHASE_DEFENSE and test_run.state.current_actor_id == 0:
             act_seed = seed
             break
 
@@ -1044,7 +1038,7 @@ def test_colored_leaves_reflection():
     """
     super_mirror_id = find_card_by_name("スーパーミラー")
     shield_id = find_card_by_name("革の服")
-    
+
     act_seed = None
     for seed in range(500):
         test_run = SimulationRunner()
@@ -1064,9 +1058,9 @@ def test_colored_leaves_reflection():
         test_run.step(ActionType.ACTION_SELECT_HAND_1)
         test_run.step(ActionType.ACTION_CONFIRM)
 
-        # 紅葉(COLORED_LEAVES)の防御フェイズに移行したシードを探す
+        # 紅葉(COLORED_LEAVES)の雑貨反射フェイズに移行したシードを探す
         if (
-            test_run.state.current_phase == GamePhase.PHASE_DEFENSE
+            test_run.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
             and test_run.state.pending_attack_source_id == find_card_by_name("gurdians/colored-leaves")
         ):
             act_seed = seed
@@ -1091,16 +1085,15 @@ def test_colored_leaves_reflection():
     runner.step(ActionType.ACTION_SELECT_HAND_1)
     runner.step(ActionType.ACTION_CONFIRM)
 
-    # 防御フェイズ(P0)へ
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    # 雑貨反射フェイズ(P0)へ
+    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
     assert runner.state.current_actor_id == 0
 
-    # 2. スーパーミラーを選択して反射(CONFIRM)
+    # 2. スーパーミラーを選択して反射（即座に相手番へ移行）
     runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
 
-    # 反射されて相手(P1)の防御フェイズになること
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    # 反射されて相手(P1)の雑貨反射フェイズになること
+    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
     assert runner.state.current_actor_id == 1
 
     # 3. 相手(P1)が防御せずCONFIRM (被弾)
@@ -1109,6 +1102,152 @@ def test_colored_leaves_reflection():
     # 元の攻撃者(P1)が夢状態になり、P0は正常であること
     assert runner.state.get_curses(1, godfield_core.CurseType.CURSE_DREAM) is True
     assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_DREAM) is False
+
+
+def test_halo_reflection():
+    """
+    検証内容: 天王神の「後光」(閃光付与、攻撃力0)が反射可能であり、雑貨扱いになることの検証。
+    - 相手(P1)の天王神が「後光」を使い、P0がスーパーミラーで反射。
+    - 反射された結果、P1自身が閃光状態になり、P0は無事であることを確認。
+    """
+    super_mirror_id = find_card_by_name("スーパーミラー")
+    shield_id = find_card_by_name("革の服")
+
+    act_seed = None
+    for seed in range(500):
+        test_run = SimulationRunner()
+        test_run.state.seed_rng(seed)
+        test_run.state.current_phase = GamePhase.PHASE_MAIN
+        test_run.state.current_actor_id = 0
+        test_run.state.set_hp(0, 40)
+        test_run.state.set_hp(1, 40)
+        test_run.state.set_mp(0, 40)
+        test_run.state.set_mp(1, 40)
+        test_run.state.set_guardian(1, 5)  # 天王神(5)
+        test_run.state.set_true_hand(0, 0, super_mirror_id)
+        test_run.state.set_true_hand(0, 1, shield_id)
+
+        # メインフェイズで手札1を捨てる
+        test_run.step(ActionType.ACTION_DISCARD)
+        test_run.step(ActionType.ACTION_SELECT_HAND_1)
+        test_run.step(ActionType.ACTION_CONFIRM)
+
+        # 後光(HALO)の雑貨反射フェイズに移行したシードを探す
+        if (
+            test_run.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+            and test_run.state.pending_attack_source_id == find_card_by_name("gurdians/halo")
+        ):
+            act_seed = seed
+            break
+
+    assert act_seed is not None, "天王神の後光シードが見つかりませんでした"
+
+    runner = SimulationRunner()
+    runner.state.seed_rng(act_seed)
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_hp(0, 40)
+    runner.state.set_hp(1, 40)
+    runner.state.set_mp(0, 40)
+    runner.state.set_mp(1, 40)
+    runner.state.set_guardian(1, 5)
+    runner.state.set_true_hand(0, 0, super_mirror_id)
+    runner.state.set_true_hand(0, 1, shield_id)
+
+    # 1. ターン終了 Confirm
+    runner.step(ActionType.ACTION_DISCARD)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 雑貨反射フェイズ(P0)へ
+    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    assert runner.state.current_actor_id == 0
+
+    # 2. スーパーミラーを選択して反射
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+
+    # 反射されて相手(P1)の雑貨反射フェイズになること
+    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    assert runner.state.current_actor_id == 1
+
+    # 3. 相手(P1)が防御せずCONFIRM (被弾)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 元の攻撃者(P1)が閃光状態になり、P0は正常であること
+    assert runner.state.get_curses(1, godfield_core.CurseType.CURSE_FLASH) is True
+    assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_FLASH) is False
+
+
+def test_ominous_premonition_reflection():
+    """
+    検証内容: 冥王神の「不吉な予感」(暗雲付与、攻撃力0)が反射可能であり、雑貨扱いになることの検証。
+    """
+    super_mirror_id = find_card_by_name("スーパーミラー")
+    shield_id = find_card_by_name("革の服")
+
+    act_seed = None
+    for seed in range(500):
+        test_run = SimulationRunner()
+        test_run.state.seed_rng(seed)
+        test_run.state.current_phase = GamePhase.PHASE_MAIN
+        test_run.state.current_actor_id = 0
+        test_run.state.set_hp(0, 40)
+        test_run.state.set_hp(1, 40)
+        test_run.state.set_mp(0, 40)
+        test_run.state.set_mp(1, 40)
+        test_run.state.set_guardian(1, 6)  # 冥王神(6)
+        test_run.state.set_true_hand(0, 0, super_mirror_id)
+        test_run.state.set_true_hand(0, 1, shield_id)
+
+        # メインフェイズで手札1を捨てる
+        test_run.step(ActionType.ACTION_DISCARD)
+        test_run.step(ActionType.ACTION_SELECT_HAND_1)
+        test_run.step(ActionType.ACTION_CONFIRM)
+
+        # 不吉な予感(OMINOUS_PREMONITION)の雑貨反射フェイズに移行したシードを探す
+        if (
+            test_run.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+            and test_run.state.pending_attack_source_id == find_card_by_name("gurdians/ominous-premonition")
+        ):
+            act_seed = seed
+            break
+
+    assert act_seed is not None, "冥王神の不吉な予感シードが見つかりませんでした"
+
+    runner = SimulationRunner()
+    runner.state.seed_rng(act_seed)
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_hp(0, 40)
+    runner.state.set_hp(1, 40)
+    runner.state.set_mp(0, 40)
+    runner.state.set_mp(1, 40)
+    runner.state.set_guardian(1, 6)
+    runner.state.set_true_hand(0, 0, super_mirror_id)
+    runner.state.set_true_hand(0, 1, shield_id)
+
+    # 1. ターン終了 Confirm
+    runner.step(ActionType.ACTION_DISCARD)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 雑貨反射フェイズ(P0)へ
+    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    assert runner.state.current_actor_id == 0
+
+    # 2. スーパーミラーを選択して反射
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+
+    # 反射されて相手(P1)の雑貨反射フェイズになること
+    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    assert runner.state.current_actor_id == 1
+
+    # 3. 相手(P1)が防御せずCONFIRM (被弾)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 元の攻撃者(P1)が暗雲状態になり、P0は正常であること
+    assert runner.state.get_curses(1, godfield_core.CurseType.CURSE_DARK_CLOUD) is True
+    assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_DARK_CLOUD) is False
 
 
 def test_little_something_targets_self():
@@ -1161,4 +1300,3 @@ def test_little_something_targets_self():
     # P1のお金が増えており(18 または 30)、P0は変化なし(10)であることを確認
     assert runner.state.get_money(1) in (18, 30)
     assert runner.state.get_money(0) == 10
-

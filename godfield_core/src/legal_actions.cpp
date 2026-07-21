@@ -179,9 +179,9 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
         if (card_id == CARD_EMPTY) continue;
         const CardFeatures &f = g_card_registry[card_id];
         if (card_id == ID_RAINBOW_CURTAIN) continue;
-        if (is_active_reaction_card(card_id, defense_phase, effective_atk_element)) {
+        if (is_active_reaction_card(state, card_id, defense_phase, effective_atk_element)) {
             has_staged_reaction = true;
-            if (f.is_miracle) reaction_is_miracle = true;
+            if (f.is_miracle()) reaction_is_miracle = true;
         } else if (is_spiritual_zero_mp_card(card_id)) {
             has_staged_spirit = true;
         }
@@ -203,7 +203,7 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
         if (card_id == CARD_EMPTY) continue;
         if (card_id == ID_RAINBOW_CURTAIN) continue;
         const CardFeatures &f = g_card_registry[card_id];
-        if (is_active_reaction_card(card_id, defense_phase, effective_atk_element)) continue;
+        if (is_active_reaction_card(state, card_id, defense_phase, effective_atk_element)) continue;
         if (is_spiritual_zero_mp_card(card_id)) continue;
 
         Element e = f.element;
@@ -246,7 +246,7 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
             }
 
             // 3. リアクションカードの重ねがけ排他チェック
-            bool is_react = is_active_reaction_card(card_id, defense_phase, effective_atk_element);
+            bool is_react = is_active_reaction_card(state, card_id, defense_phase, effective_atk_element);
             if (is_react) {
                 bool allowed_as_first = false;
                 if (defense_phase == GamePhase::PHASE_DEFENSE) {
@@ -263,10 +263,25 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
                 continue;
             }
 
-            // 4. 一般防具の判定 (攻撃力 > 0 のときのみ判定)
-            if (state.pending_attack_power > 0) {
+            // 4. 一般防具の判定
+            if (f.reaction_type != REACTION_NONE) {
+                continue;
+            }
+            bool is_weapon_atk = false;
+            if (state.pending_attack_source_id != CARD_EMPTY) {
+                is_weapon_atk = g_card_registry[state.pending_attack_source_id].is_weapon();
+            }
+            if (state.pending_attack_power > 0 || is_weapon_atk) {
                 uint32_t allowed_timings = (defense_phase == GamePhase::PHASE_DEFENSE) ? TIMING_ATK_DEFENCE : TIMING_MIRACLE_DEFENCE;
-                if (defense_phase == GamePhase::PHASE_MIRACLE_DEFENSE && rainbow) {
+                bool counters_element = false;
+                if (defense_phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
+                    if (f.element == ELEM_LIGHT) counters_element = true;
+                    else if (effective_atk_element == ELEM_FIRE && f.element == ELEM_WATER) counters_element = true;
+                    else if (effective_atk_element == ELEM_WATER && f.element == ELEM_FIRE) counters_element = true;
+                    else if (effective_atk_element == ELEM_WOOD && f.element == ELEM_STONE) counters_element = true;
+                    else if (effective_atk_element == ELEM_STONE && f.element == ELEM_WOOD) counters_element = true;
+                }
+                if (defense_phase == GamePhase::PHASE_MIRACLE_DEFENSE && (rainbow || counters_element)) {
                     allowed_timings |= TIMING_ATK_DEFENCE;
                 }
                 if (f.usage_timing & allowed_timings) {

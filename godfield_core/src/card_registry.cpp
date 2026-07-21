@@ -29,11 +29,15 @@ void init_game_logic(pybind11::list cards) {
         std::memset(&f, 0, sizeof(f));
 
         std::string type = card["type"].cast<std::string>();
-        f.is_weapon = (type == "weapon");
-        f.is_defense = (type == "defense");
-        f.is_miracle = (type == "miracle");
-        f.is_sundry = (type == "sundry");
-        f.is_deal = (type == "deal");
+        if (type == "weapon") f.type = CardType::WEAPON;
+        else if (type == "defense") f.type = CardType::DEFENSE;
+        else if (type == "miracle") f.type = CardType::MIRACLE;
+        else if (type == "sundry") f.type = CardType::SUNDRY;
+        else if (type == "deal") f.type = CardType::DEAL;
+        else if (type == "devil") f.type = CardType::DEVIL;
+        else if (type == "phenomena") f.type = CardType::PHENOMENA;
+        else if (type == "guardian") f.type = CardType::GUARDIAN;
+        else f.type = CardType::SUNDRY;
 
         pybind11::list timings = card["usage_timing"].cast<pybind11::list>();
         for (auto timing : timings) {

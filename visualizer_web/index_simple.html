@@ -500,7 +500,16 @@
                 if (!card.usage_timing) return false;
                 
                 if (phase === 'PHASE_DEFENSE') {
-                    return card.usage_timing.includes('atk_defence_phase');
+                    const name = card.name;
+                    const isSuperMirror = name === 'スーパーミラー';
+                    const isPhysicalReaction = ['壁', '反射剣', '乱弾武剣'].includes(name);
+                    
+                    if (isSuperMirror) return true;
+                    if (isPhysicalReaction) {
+                        const attackElem = this.data?.pending_attack_element || 'none';
+                        return attackElem.toLowerCase() === 'none';
+                    }
+                    return false;
                 }
                 if (phase === 'PHASE_MIRACLE_DEFENSE') {
                     return card.usage_timing.includes('miracle_defence_phase');

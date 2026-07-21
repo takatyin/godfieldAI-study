@@ -628,14 +628,12 @@ def test_dangerous_pestle_and_mortar():
             count_0 = sum(
                 1
                 for j in range(18)
-                if runner.state.get_true_hand(0, j) == mortar_id
-                and not runner.state.get_is_used(0, j)
+                if runner.state.get_true_hand(0, j) == mortar_id and not runner.state.get_is_used(0, j)
             )
             count_1 = sum(
                 1
                 for j in range(18)
-                if runner.state.get_true_hand(1, j) == mortar_id
-                and not runner.state.get_is_used(1, j)
+                if runner.state.get_true_hand(1, j) == mortar_id and not runner.state.get_is_used(1, j)
             )
             assert count_0 == 2
             assert count_1 == 2
@@ -645,14 +643,12 @@ def test_dangerous_pestle_and_mortar():
             count_0 = sum(
                 1
                 for j in range(18)
-                if runner.state.get_true_hand(0, j) == mortar_id
-                and not runner.state.get_is_used(0, j)
+                if runner.state.get_true_hand(0, j) == mortar_id and not runner.state.get_is_used(0, j)
             )
             count_1 = sum(
                 1
                 for j in range(18)
-                if runner.state.get_true_hand(1, j) == mortar_id
-                and not runner.state.get_is_used(1, j)
+                if runner.state.get_true_hand(1, j) == mortar_id and not runner.state.get_is_used(1, j)
             )
             assert count_0 == 3
             assert count_1 == 1
@@ -688,8 +684,7 @@ def test_dangerous_pestle_and_mortar():
     count_1_after_1st = sum(
         1
         for j in range(18)
-        if runner_scenario.state.get_true_hand(1, j) == mortar_id
-        and not runner_scenario.state.get_is_used(1, j)
+        if runner_scenario.state.get_true_hand(1, j) == mortar_id and not runner_scenario.state.get_is_used(1, j)
     )
     assert count_1_after_1st == 1
 
@@ -708,8 +703,7 @@ def test_dangerous_pestle_and_mortar():
     count_1_after_2nd = sum(
         1
         for j in range(18)
-        if runner_scenario.state.get_true_hand(1, j) == mortar_id
-        and not runner_scenario.state.get_is_used(1, j)
+        if runner_scenario.state.get_true_hand(1, j) == mortar_id and not runner_scenario.state.get_is_used(1, j)
     )
     assert count_1_after_2nd == 0
 
@@ -1463,3 +1457,192 @@ def test_pending_attack_source_id_and_observation():
     # 防御側 (自分=0) の AI 観測で opponent_staged_cards[0] に火星神の仮想カードIDが統合されていることを検証
     obs_opponent_staged_me = godfield_core.get_opponent_staged_cards_for_obs(runner.state, 0)
     assert obs_opponent_staged_me[0] == fire_roar_id
+
+
+def test_attack_on_dead_player():
+    """
+    検証内容: HPが0の相手への複数回攻撃。
+    - Aがノコギリブンブン（2回攻撃）で、すでにHPが0のBを攻撃。
+    - Bの防御フェイズが2回発生し、いずれも confirm しか選択できない（非合法な防具選択はできない）。
+    - 2回の攻撃とも confirm を押して消化され、最後まで攻撃が継続し、その後にターン終了（Aの勝利）となること。
+    """
+    saw_id = find_card_by_name("weapons/saw-boom-boom")
+    shield_id = find_card_by_name("木の盾")
+
+    runner = SimulationRunner()
+    runner.state.seed_rng(42)
+    runner.set_status(0, hp=40, mp=10)
+    runner.set_status(1, hp=0, mp=10) # すでに死亡
+
+    runner.state.set_true_hand(0, 0, saw_id)
+    runner.state.set_true_hand(1, 0, shield_id)
+
+    # A 攻撃
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # 1回目の攻撃の防御フェイズ
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    # B（HP0）の合法手を検証
+    actions = godfield_core.get_legal_actions(runner.state)
+    # 木の盾（スロット0）は選択不可（非合法手）であること
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is False
+    # confirm（受諾）のみが合法手であること
+    assert actions[ActionType.ACTION_CONFIRM] is True
+
+    # 1回目被弾
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 2回目の攻撃の防御フェイズが起動すること
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is False
+    assert actions[ActionType.ACTION_CONFIRM] is True
+
+    # 2回目被弾
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 攻撃がすべて終了し、勝敗決定（Aの勝利、B死亡による）になること
+    assert runner.state.is_done is True
+    # A(0)が勝利、B(1)が敗北
+    assert runner.state.get_hp(1) == 0
+
+
+def test_amulet_revive_mid_attack():
+    """
+    検証内容: 複数回攻撃の途中で死亡した際のお守り即時復活。
+    - Aがノコギリブンブン（2回攻撃、ATK5）でB（HP5）を攻撃。
+    - Bは「太陽のお守り」を所持。
+    - 1回目の攻撃でBが被弾 ➡ HP0になるが、お守りで即時にHP10で復活する。
+    - そのため、2回目の攻撃の防御フェイズ移行時にはBのHPは10に回復している。
+    """
+    saw_id = find_card_by_name("weapons/saw-boom-boom")
+    amulet_id = find_card_by_name("sundries/sun-amulet")
+
+    runner = SimulationRunner()
+    runner.state.seed_rng(42)
+    runner.set_status(0, hp=40, mp=10)
+    runner.set_status(1, hp=3, mp=10)
+
+    runner.state.set_true_hand(0, 0, saw_id)
+    runner.state.set_true_hand(1, 0, amulet_id)
+
+    # A 攻撃
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # 1回目の防御フェイズ
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    runner.step(ActionType.ACTION_CONFIRM) # B被弾
+
+    # 被弾したその瞬間に復活してHPが10になり、かつ2回目の攻撃の防御フェイズが起動していること
+    assert runner.state.get_hp(1) == 10
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    # 2回目被弾
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 2回目の被弾でHPが 10 - 3 = 7 になること。攻撃終了で PHASE_MAIN に戻る（お守りがないのでもう復活はないが死亡もしていない）
+    assert runner.state.get_hp(1) == 7
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
+    assert runner.state.is_done is False
+
+
+def test_ascension_bow_deferred_to_turn_end():
+    """
+    検証内容: 複数回攻撃中にHP0になっても、昇天弓は即座に発射されず、すべての攻撃が終了してターンエンドになった後に発射されること。
+    - Aがノコギリブンブン（2回攻撃、ATK5）でB（HP5）を攻撃。
+    - Bは「昇天弓」を所持。
+    - 1回目の攻撃でBが被弾 ➡ HP0になる。お守りがないのでHP0のまま。
+    - しかし即時に昇天弓は発射されず、2回目の攻撃が起動する。
+    - BはHP0なので confirm しか押せず、2回目被弾。
+    - 攻撃完了後、ターン終了処理（PHASE_END以降）に移行したタイミングで初めて昇天弓が発射され、Aに対する光属性30の防御フェイズが起動すること。
+    """
+    saw_id = find_card_by_name("weapons/saw-boom-boom")
+    bow_id = find_card_by_name("weapons/ascension-bow")
+
+    runner = SimulationRunner()
+    # 昇天弓の確率ロール（75%）が成功するシード値を選択
+    # 昇天弓の発射確率は75%
+    runner.state.seed_rng(42)
+    runner.set_status(0, hp=40, mp=10)
+    runner.set_status(1, hp=3, mp=10)
+
+    runner.state.set_true_hand(0, 0, saw_id)
+    runner.state.set_true_hand(1, 0, bow_id)
+
+    # A 攻撃
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # 1回目の防御フェイズ
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    runner.step(ActionType.ACTION_CONFIRM) # B被弾、HP0になる
+
+    # HPは0。昇天弓は即座に発射されず、2回目の防御フェイズが起動していること
+    assert runner.state.get_hp(1) == 0
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    # B（HP0）は confirm しか選択できない
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_CONFIRM] is True
+
+    # 2回目被弾
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 攻撃がすべて終了し、ターン終了処理（resolve_turn_end_steps）に進み、
+    # そこで昇天弓の判定が行われ、昇天弓が発射（Aに対する光属性30ダメージの防御フェイズ）されること。
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 0 # Aが防御側
+    assert runner.state.pending_attack_source_id == bow_id
+    assert runner.state.pending_attack_power == 30
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_LIGHT
+
+
+def test_dangerous_pestle_targets_only_alive():
+    """
+    検証内容: あぶないキネの対象は、生存している（HP > 0）のプレイヤーのみから選択されること。
+    - プレイヤー0 (生存: HP40), プレイヤー1 (死亡: HP0)。
+    - プレイヤー0があぶないキネを使用。
+    - プレイヤー1が死亡しているため、プレイヤー1がキネの対象になることは絶対にない。
+    - 100回試行し、すべてにおいてプレイヤー1が対象（PHASE_DEFENSEでアクターがプレイヤー1になる状態）にならないことをアサート。
+    """
+    pestle_id = find_card_by_name("weapons/dangerous-pestle")
+    mortar_id = find_card_by_name("sundries/dangerous-mortar")
+    super_mirror_id = find_card_by_name("armor/super-mirror")
+
+    for idx in range(100):
+        runner = SimulationRunner()
+        runner.state.seed_rng(idx)
+        runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+        runner.state.current_actor_id = 0
+        runner.set_status(0, hp=40, mp=10)
+        runner.set_status(1, hp=0, mp=10) # プレイヤー1は死亡
+
+        runner.state.set_true_hand(0, 0, pestle_id)
+        # プレイヤー1がウスを持っているが、死亡しているので無視されるべき
+        runner.state.set_true_hand(1, 0, mortar_id)
+
+        runner.step(ActionType.ACTION_SELECT_HAND_0)
+        runner.step(ActionType.ACTION_TARGET_OPP)
+
+        # プレイヤー1が死亡しているので、絶対に攻撃対象にはならず、唯一の生存プレイヤーであるプレイヤー0（自分自身）が100%対象になる
+        # 自分への自傷攻撃（光30ダメージ）が必ず適用され、HPが10になり、ターン終了（PHASE_END）に移行すること
+        assert runner.state.get_hp(0) == 10
+        assert runner.state.get_hp(1) == 0
+        assert runner.state.current_phase == godfield_core.GamePhase.PHASE_END
+
+
+

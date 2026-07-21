@@ -252,7 +252,7 @@
   drop_rate: 1
   id_str: weapons/gale-sword
 - name: スカイハープーン
-  description: 奇跡をはね返す
+  description: 奇跡を弾く
   type: weapon
   reaction_type: bounce
   usage_timing:

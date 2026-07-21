@@ -1,7 +1,7 @@
-# 火星神 (Mars)
 - name: 炎のささやき
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 火
@@ -9,10 +9,10 @@
   is_group_attack: true
   accuracy: 75
   id_str: gurdians/fire-whisper
-
 - name: 炎のつぶやき
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 火
@@ -20,10 +20,10 @@
   is_group_attack: true
   accuracy: 75
   id_str: gurdians/fire-tweet
-
 - name: 炎のしゃべり
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 火
@@ -31,10 +31,10 @@
   is_group_attack: true
   accuracy: 75
   id_str: gurdians/fire-buzz
-
 - name: 炎のうなり
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 火
@@ -42,10 +42,10 @@
   is_group_attack: true
   accuracy: 75
   id_str: gurdians/fire-roar
-
 - name: 炎の叫び
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 火
@@ -53,12 +53,10 @@
   is_group_attack: true
   accuracy: 75
   id_str: gurdians/fire-shout
-
-
-# 水星神 (Mercury)
 - name: 霧雨
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 水
@@ -67,20 +65,20 @@
   accuracy: 50
   hit_curse: fog
   id_str: gurdians/drizzle
-
 - name: かすむ息
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 水
   attack_power: 2
   hit_curse: fog
   id_str: gurdians/misty-breath
-
 - name: しぶき
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 水
@@ -88,19 +86,19 @@
   is_group_attack: true
   accuracy: 50
   id_str: gurdians/splash
-
 - name: 泡
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 水
   attack_power: 3
   id_str: gurdians/bubbles
-
 - name: あられ
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 水
@@ -108,30 +106,28 @@
   is_group_attack: true
   accuracy: 50
   id_str: gurdians/hail
-
-
-# 木星神 (Jupiter)
 - name: 枝
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 木
   attack_power: 1
   id_str: gurdians/branch
-
 - name: 根っこ
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 木
   attack_power: 2
   id_str: gurdians/root
-
 - name: 触手
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 木
@@ -139,19 +135,19 @@
   is_group_attack: true
   accuracy: 75
   id_str: gurdians/tentacles
-
 - name: 紅葉
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 木
   hit_curse: dream
   id_str: gurdians/colored-leaves
-
 - name: 落ち葉の舞
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 木
@@ -160,68 +156,64 @@
   accuracy: 75
   hit_curse: dream
   id_str: gurdians/dance-of-fallen-leaves
-
-
-# 土星神 (Saturn)
 - name: 小石
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 土
   attack_power: 2
   id_str: gurdians/pebble
-
 - name: 石
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 土
   attack_power: 4
   id_str: gurdians/stone
-
 - name: 大きな石
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 土
   attack_power: 6
   id_str: gurdians/boulder
-
 - name: 体当たり
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 土
   attack_power: 9
   id_str: gurdians/body-press
-
 - name: ダイヤモンドアクス
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 土
   attack_power: 15
   id_str: gurdians/diamond-axe
-
-
-# 天王神 (Uranus)
 - name: 点滅
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 光
   attack_power: 2
   id_str: gurdians/twinkle
-
 - name: 電撃
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 光
@@ -229,29 +221,28 @@
   is_group_attack: true
   accuracy: 25
   id_str: gurdians/electric-shock
-
 - name: 後光
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 光
   hit_curse: flash
   id_str: gurdians/halo
-
 - name: 祝福
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 光
   attack_power: 5
-  # absorb
   id_str: gurdians/blessing
-
 - name: レーザービーム
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 光
@@ -259,12 +250,10 @@
   is_group_attack: true
   accuracy: 75
   id_str: gurdians/laser-beam
-
-
-# 冥王神 (Pluto)
 - name: 思考
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 闇
@@ -272,131 +261,123 @@
   is_group_attack: true
   accuracy: 25
   id_str: gurdians/thinking
-
 - name: まばたき
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 闇
   attack_power: 2
   id_str: gurdians/wink
-
 - name: 不吉な予感
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 闇
-  hit_curse: "dark cloud"
+  hit_curse: dark cloud
   id_str: gurdians/ominous-premonition
-
 - name: 咳払い
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 闇
   attack_power: 4
   id_str: gurdians/cough
-
 - name: 挙手
-  type: weapon
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   element: 闇
   attack_power: 8
   id_str: gurdians/hand-raising
-
-
-# 海王神 (Neptune)
 - name: さざ波の音
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/sound-of-ripples
-
 - name: 潮汁
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/seafood-soup
-
 - name: 磯の香り
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/beach-aroma
-
 - name: あっさりした潮汁
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/healthy-seafood-soup
-
 - name: さわやかな磯の香り
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/fresh-beach-aroma
-
-
-# 金星神 (Venus)
 - name: 小銭ばらまき
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/coin-scattering
-
 - name: わいろ
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/bribe
-
 - name: 罰金
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/fine
-
 - name: つまらない物
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/little-something
-
 - name: 豪華なアクセサリー
-  type: sundry
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/luxury-accessory
-
-
-# 地球神 (Earth)
 - name: もらす
-  type: deal
-  usage_timing: [guardian_phase]
+  type: guardian
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   id_str: gurdians/drop
-
-
-# 月神 (Moon)
 - name: 満月刀
   type: weapon
-  usage_timing: [guardian_phase]
+  usage_timing:
+  - guardian_phase
   price: 0
   drop_rate: 0
   attack_power: 10

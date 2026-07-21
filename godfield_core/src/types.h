@@ -79,12 +79,19 @@ constexpr uint32_t TIMING_ATK_DEFENCE = 1 << 6;
 constexpr uint32_t TIMING_MIRACLE_DEFENCE = 1 << 7;
 constexpr uint32_t TIMING_GUARDIAN = 1 << 8;
 
+enum class CardType : uint8_t {
+    WEAPON = 0,
+    DEFENSE,
+    MIRACLE,
+    SUNDRY,
+    DEAL,
+    DEVIL,
+    PHENOMENA,
+    GUARDIAN
+};
+
 struct alignas(64) CardFeatures {
-    bool is_weapon;
-    bool is_defense;
-    bool is_miracle;
-    bool is_sundry;
-    bool is_deal;
+    CardType type;
     uint32_t usage_timing;
     int price;
     int drop_rate;
@@ -97,6 +104,15 @@ struct alignas(64) CardFeatures {
     HitCurse hit_curse;
     bool is_group_attack;
     DreamGroup dream_group;
+
+    inline bool is_weapon() const { return type == CardType::WEAPON; }
+    inline bool is_defense() const { return type == CardType::DEFENSE; }
+    inline bool is_miracle() const { return type == CardType::MIRACLE; }
+    inline bool is_sundry() const { return type == CardType::SUNDRY; }
+    inline bool is_deal() const { return type == CardType::DEAL; }
+    inline bool is_devil() const { return type == CardType::DEVIL; }
+    inline bool is_phenomena() const { return type == CardType::PHENOMENA; }
+    inline bool is_guardian() const { return type == CardType::GUARDIAN; }
 };
 
 enum class GamePhase {
