@@ -73,6 +73,7 @@ void confirm_card(InternalState &state, int player_id, int slot_idx) {
     if (slot_idx >= 0 && slot_idx < MAX_HAND_SIZE) {
         state.is_confirmed[player_id][slot_idx] = true;
         state.apparent_hand[player_id][slot_idx] = state.true_hand[player_id][slot_idx];
+        state.is_known_to_opp[player_id][slot_idx] = true;
     }
 }
 
@@ -309,8 +310,10 @@ bool can_afford_staged_plus_card(const InternalState &state, int player_id, int 
             is_staged[temp.staged_cards[player_id][i]] = true;
         }
         for (int j = 0; j < MAX_HAND_SIZE; ++j) {
-            if (temp.apparent_hand[player_id][j] != CARD_EMPTY && !temp.is_used[player_id][j] && !is_staged[j]) {
-                if (is_spiritual_zero_mp_card(temp.apparent_hand[player_id][j])) {
+            int card_id = temp.apparent_hand[player_id][j];
+            if (card_id < 0) card_id = temp.true_hand[player_id][j];
+            if (card_id != CARD_EMPTY && !temp.is_used[player_id][j] && !is_staged[j]) {
+                if (is_spiritual_zero_mp_card(card_id)) {
                     U++;
                 }
             }
@@ -322,12 +325,16 @@ bool can_afford_staged_plus_card(const InternalState &state, int player_id, int 
     int base_non_miracle_cost = 0;
     int num_cards = temp.num_staged_cards[player_id];
     for (int i = 0; i < num_cards; ++i) {
-        int card_id = temp.apparent_hand[player_id][temp.staged_cards[player_id][i]];
+        int idx = temp.staged_cards[player_id][i];
+        int card_id = temp.apparent_hand[player_id][idx];
+        if (card_id < 0) card_id = temp.true_hand[player_id][idx];
         const CardFeatures &f = g_card_registry[card_id];
         if (f.is_miracle()) {
             bool followed_by_spiritual = false;
             if (i + 1 < num_cards) {
-                int next_card_id = temp.apparent_hand[player_id][temp.staged_cards[player_id][i + 1]];
+                int next_idx = temp.staged_cards[player_id][i + 1];
+                int next_card_id = temp.apparent_hand[player_id][next_idx];
+                if (next_card_id < 0) next_card_id = temp.true_hand[player_id][next_idx];
                 if (is_spiritual_zero_mp_card(next_card_id)) {
                     followed_by_spiritual = true;
                 }
@@ -609,14 +616,12 @@ void cleanup_phase_end(InternalState &state) {
  */
 std::vector<int> get_staged_card_ids(const InternalState &state, int player) {
     std::vector<int> ids;
-    if (state.num_staged_cards[player] >= 2 && state.staged_cards[player][0] == -1) {
-        ids.push_back(state.staged_cards[player][1]);
-        return ids;
-    }
     for (int i = 0; i < state.num_staged_cards[player]; ++i) {
         int idx = state.staged_cards[player][i];
         if (idx >= 0 && idx < MAX_HAND_SIZE) {
-            ids.push_back(state.true_hand[player][idx]);
+            int card_id = state.apparent_hand[player][idx];
+            if (card_id < 0) card_id = state.true_hand[player][idx];
+            ids.push_back(card_id);
         }
     }
     return ids;
@@ -754,7 +759,8 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
             std::uniform_int_distribution<int> dist(0, 9);
             int phenomenon = dist(state.rng);
             int opp = 1 - target_id;
-            
+            push_event(state, target_id, EventType::TRIGGER_PHENOMENON, ID_STRING_OF_FATE, -1, static_cast<float>(phenomenon));
+
             if (phenomenon == 0) { // 夕焼け: 全員熱病
                 state.sickness[0] = SICKNESS_FEVER;
                 state.sickness[1] = SICKNESS_FEVER;
@@ -954,6 +960,9 @@ void execute_sell_resolution(InternalState &state, int seller, int buyer) {
     // 4. 売り手への売却代金（お金）の支払い（上限は99円）
     state.money[seller] = std::clamp(state.money[seller] + price, 0, 99);
     
+    // 売却イベントをログに記録
+    push_event(state, original_seller, EventType::SELL_CARD, card_id, buyer, static_cast<float>(price));
+
     // 5. 売り手の手札から売却したカードを削除し、関連フラグを初期化する
     clear_hand_slot(state, original_seller, idx); 
 
@@ -1013,6 +1022,7 @@ bool try_execute_super_mirror_reflection(InternalState &state, ActionType action
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
             state.is_known_to_opp[me][idx] = true;
+            push_event(state, me, EventType::REFLECT_DAMAGE, ID_SUPER_MIRROR, opp, 0.0f);
             
             std::swap(state.attacker_id, state.defender_id);
             state.current_actor_id = opp;
@@ -1455,15 +1465,19 @@ bool resolve_turn_end_steps(InternalState &state) {
                 if (state.hp[me] > 0 && state.sickness[me] != SICKNESS_NONE) {
                     int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
                     if (roll < 5) {
-                        if (state.sickness[me] == SICKNESS_HEAVEN) { // 天国病悪化 -> 死亡
+                        if (state.sickness[me] == SICKNESS_HEAVEN) { // 天国病悪化 -> 死亡 (発作)
                             state.hp[me] = 0;
                             state.heaven_seizure_occurred[me] = true;
+                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, 4.0f);
                         } else if (state.sickness[me] == SICKNESS_COLD) { // 風邪 -> 熱病
                             state.sickness[me] = SICKNESS_FEVER;
+                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, 2.0f);
                         } else if (state.sickness[me] == SICKNESS_FEVER) { // 熱病 -> 地獄病
                             state.sickness[me] = SICKNESS_HELL;
+                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, 3.0f);
                         } else if (state.sickness[me] == SICKNESS_HELL) { // 地獄病 -> 天国病
                             state.sickness[me] = SICKNESS_HEAVEN;
+                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, 4.0f);
                         }
                     }
                 }
@@ -1483,13 +1497,17 @@ bool resolve_turn_end_steps(InternalState &state) {
                 if (state.hp[me] > 0) {
                     if (state.sickness[me] == SICKNESS_COLD) { // 風邪: 1ダメ
                         state.hp[me] = std::max(0, state.hp[me] - 1);
+                        push_event(state, me, EventType::TAKE_DAMAGE, -1, me, 1.0f);
                     } else if (state.sickness[me] == SICKNESS_FEVER) { // 熱病: 2ダメ
                         state.hp[me] = std::max(0, state.hp[me] - 2);
+                        push_event(state, me, EventType::TAKE_DAMAGE, -1, me, 2.0f);
                     } else if (state.sickness[me] == SICKNESS_HELL) { // 地獄病: 5ダメ
                         state.hp[me] = std::max(0, state.hp[me] - 5);
+                        push_event(state, me, EventType::TAKE_DAMAGE, -1, me, 5.0f);
                     } else if (state.sickness[me] == SICKNESS_HEAVEN) { // 天国病: 5回復
                         if (!state.heaven_seizure_occurred[me]) {
                             state.hp[me] = std::min(99, state.hp[me] + 5);
+                            push_event(state, me, EventType::HEAL_HP, -1, me, 5.0f);
                         }
                     }
                 }

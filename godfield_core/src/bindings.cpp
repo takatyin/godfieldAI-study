@@ -157,6 +157,8 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("defender_id", &InternalState::defender_id)
         .def_readwrite("pending_attack_power", &InternalState::pending_attack_power)
         .def_readwrite("pending_attack_element", &InternalState::pending_attack_element)
+        .def_readwrite("pending_defense_power", &InternalState::pending_defense_power)
+        .def_readwrite("pending_sell_price", &InternalState::pending_sell_price)
         .def_readwrite("pending_absorption", &InternalState::pending_absorption)
         .def_readwrite("pending_deal_same_damage", &InternalState::pending_deal_same_damage)
         .def_readwrite("pending_is_group_attack", &InternalState::pending_is_group_attack)
@@ -301,6 +303,40 @@ PYBIND11_MODULE(godfield_core, m) {
 
     m.def("get_observation", &get_observation, "Get Observation from InternalState for player_id");
 
+    py::enum_<EventType>(m, "EventType")
+        .value("NONE", EventType::NONE)
+        .value("STAGE_CARD", EventType::STAGE_CARD)
+        .value("UNSTAGE_CARD", EventType::UNSTAGE_CARD)
+        .value("CONFIRM_ATTACK", EventType::CONFIRM_ATTACK)
+        .value("CONFIRM_DEFENSE", EventType::CONFIRM_DEFENSE)
+        .value("PASS_DEFENSE", EventType::PASS_DEFENSE)
+        .value("ATTACK_HIT", EventType::ATTACK_HIT)
+        .value("ATTACK_MISS", EventType::ATTACK_MISS)
+        .value("EFFECT_SICKNESS", EventType::EFFECT_SICKNESS)
+        .value("EFFECT_GUARDIAN", EventType::EFFECT_GUARDIAN)
+        .value("REFLECT_DAMAGE", EventType::REFLECT_DAMAGE)
+        .value("TAKE_DAMAGE", EventType::TAKE_DAMAGE)
+        .value("HEAL_HP", EventType::HEAL_HP)
+        .value("HEAL_MP", EventType::HEAL_MP)
+        .value("BUY_CARD", EventType::BUY_CARD)
+        .value("SELL_CARD", EventType::SELL_CARD)
+        .value("EXCHANGE", EventType::EXCHANGE)
+        .value("DRAW_CARD", EventType::DRAW_CARD)
+        .value("DISCARD_CARD", EventType::DISCARD_CARD)
+        .value("REFUSE_DEAL", EventType::REFUSE_DEAL)
+        .value("BLOCK_ATTACK", EventType::BLOCK_ATTACK)
+        .value("BOUNCE_ATTACK", EventType::BOUNCE_ATTACK)
+        .value("TRIGGER_PHENOMENON", EventType::TRIGGER_PHENOMENON)
+        .export_values();
+
+    py::class_<GameEvent>(m, "GameEvent")
+        .def(py::init<>())
+        .def_readwrite("actor", &GameEvent::actor)
+        .def_readwrite("event_type", &GameEvent::event_type)
+        .def_readwrite("card_id", &GameEvent::card_id)
+        .def_readwrite("target_id", &GameEvent::target_id)
+        .def_readwrite("value", &GameEvent::value);
+
     py::class_<Observation>(m, "Observation")
         .def(py::init<>())
         .def_readwrite("hp_me", &Observation::hp_me)
@@ -313,7 +349,14 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("current_staged_defense", &Observation::current_staged_defense)
         .def_readwrite("is_apocalypse", &Observation::is_apocalypse)
         .def_readwrite("history_head", &Observation::history_head)
+        .def_readwrite("history_count", &Observation::history_count)
+        .def_readwrite("player_id", &Observation::player_id)
         .def_readwrite("pending_card", &Observation::pending_card)
+        .def("get_history", [](const Observation& obs) {
+            py::list res;
+            for (int i = 0; i < HISTORY_LENGTH; ++i) res.append(obs.history[i]);
+            return res;
+        })
         .def("get_sickness_me", [](const Observation& obs) {
             py::list res;
             for (int i = 0; i < 5; ++i) res.append(obs.sickness_me[i]);

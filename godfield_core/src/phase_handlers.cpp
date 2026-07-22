@@ -20,16 +20,6 @@ StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
     Element current_element = ELEM_NONE;
     bool has_processed = false;
 
-    // マスク手札を相手に既知として設定（実手札からの仮置きの場合のみ）
-    if (state.num_staged_cards[player_id] == 0 || state.staged_cards[player_id][0] != -1) {
-        for (int i = 0; i < state.num_staged_cards[player_id]; ++i) {
-            int h_idx = state.staged_cards[player_id][i];
-            if (h_idx >= 0 && h_idx < MAX_HAND_SIZE) {
-                state.is_known_to_opp[player_id][h_idx] = true;
-            }
-        }
-    }
-
     // マジカルステッキ以外のMP消費を計算
     int other_mp_cost = 0;
     for (size_t i = 0; i < card_ids.size(); ++i) {
@@ -119,6 +109,54 @@ StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
 }
 
 
+void update_staged_pending_info(InternalState &state, int player_id) {
+    std::vector<int> card_ids = get_staged_card_ids(state, player_id);
+
+    // 防御フェーズで仮置きしている場合は、攻撃側の pending_attack_power を上書き破棄しない
+    bool is_defense_staging = (state.current_phase == GamePhase::PHASE_DEFENSE || state.current_phase == GamePhase::PHASE_MIRACLE_DEFENSE);
+
+    if (!is_defense_staging) {
+        StagedAttackInfo atk_info = evaluate_staged_attack(state, player_id);
+        state.pending_attack_power = atk_info.attack_power;
+        state.pending_attack_element = atk_info.element;
+        state.pending_absorption = atk_info.absorption;
+        state.pending_deal_same_damage = atk_info.deal_same_damage;
+
+        bool is_group = false;
+        for (int cid : card_ids) {
+            if (cid != CARD_EMPTY && (g_card_registry[cid].is_group_attack || cid == ID_MIRAGE)) {
+                is_group = true;
+                break;
+            }
+        }
+        state.pending_is_group_attack = is_group;
+    }
+
+    // 1. 売却価格計算
+    int sell_price = 0;
+    bool has_sell = false;
+    for (int cid : card_ids) {
+        if (cid == ID_SELL) {
+            has_sell = true;
+        } else if (cid != CARD_EMPTY) {
+            sell_price += g_card_registry[cid].price;
+        }
+    }
+    state.pending_sell_price = (has_sell || state.current_phase == GamePhase::PHASE_SELL_SELECT) ? sell_price : 0;
+
+    // 2. 防御力計算
+    int def_power = 0;
+    for (int cid : card_ids) {
+        if (cid == CARD_EMPTY) continue;
+        const CardFeatures &f = g_card_registry[cid];
+        if (f.defense_power > 0) {
+            def_power += f.defense_power;
+        }
+    }
+    state.pending_defense_power = def_power;
+}
+
+
 
 static void trigger_next_ring_counter(InternalState &state) {
     state.num_pending_counters--;
@@ -138,8 +176,11 @@ static void trigger_next_ring_counter(InternalState &state) {
     state.pending_is_group_attack = false;
     state.pending_attack_curse = state.pending_counter_curse[idx];
     state.pending_take_cp = state.pending_counter_take_cp[idx];
-    state.pending_attack_source_id = state.pending_counter_source_id[idx];
+    int card_id = state.pending_counter_source_id[idx];
+    state.pending_attack_source_id = card_id;
     state.num_staged_cards[defender] = 0;
+
+    push_event(state, defender, EventType::REFLECT_DAMAGE, card_id, attacker, static_cast<float>(state.pending_attack_power));
 }
 
 static void process_ring_defense_effects(InternalState &state, int me, int opp, int damage) {
@@ -293,23 +334,32 @@ void step_phase_main(InternalState &state, ActionType action, int me, int opp) {
             discard_one_card_randomly(state, me);
         }
         draw_card_to_hand(state, me);
+        push_event(state, me, EventType::DRAW_CARD, -1, me, 1.0f);
         state.current_phase = GamePhase::PHASE_END;
     } else if (action == ACTION_DISCARD) {
+        push_event(state, me, EventType::DISCARD_CARD, -1, me, 0.0f);
         state.current_phase = GamePhase::PHASE_DISCARD;
     } else if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
         if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
             int idx = action - ACTION_SELECT_HAND_0;
             int card_id = state.apparent_hand[me][idx];
+            if (card_id < 0) card_id = state.true_hand[me][idx];
             CardFeatures &f = g_card_registry[card_id];
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
+            update_staged_pending_info(state, me);
             
             if (card_id == ID_EXCHANGE) {
                 state.exchange_sum = state.hp[me] + state.mp[me] + state.money[me];
                 state.exchange_hp = -1;
                 state.current_phase = GamePhase::PHASE_EXCHANGE_HP;
                 return;
-            } else if (f.usage_timing & TIMING_MAIN_ATK) {
+            }
+
+            // 仮置きイベント
+            push_event(state, me, EventType::STAGE_CARD, card_id, -1, 0.0f);
+            
+            if (f.usage_timing & TIMING_MAIN_ATK) {
                 state.attacker_id = me;
                 state.pending_is_group_attack = f.is_group_attack;
                 if (f.is_group_attack) {
@@ -346,6 +396,11 @@ void step_phase_main_target_select(InternalState &state, ActionType action, int 
     if (action == ACTION_TARGET_SELF || action == ACTION_TARGET_OPP) {
         int target = (action == ACTION_TARGET_SELF) ? me : opp;
         if (state.num_staged_cards[me] > 0) {
+            // 仮置きされているカードを確定（公開）状態にする
+            for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+                confirm_card(state, me, state.staged_cards[me][i]);
+            }
+
             int card_id = state.true_hand[me][state.staged_cards[me][0]];
             if (card_id == ID_SELL) {
                 state.attacker_id = me;
@@ -380,14 +435,37 @@ void step_phase_main_target_select(InternalState &state, ActionType action, int 
                 return;
             }
             
+            for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+                confirm_card(state, me, state.staged_cards[me][i]);
+            }
+
             if (target == me) {
+                StagedAttackInfo info = evaluate_staged_attack(state, me);
                 auto used_cards = get_staged_card_ids(state, me);
-                apply_card_effects_to_target(state, target, used_cards);
+                int first_card = (!used_cards.empty()) ? used_cards[0] : -1;
+                push_event(state, me, EventType::CONFIRM_ATTACK, first_card, me, 0.0f);
+                
+                if (info.element == ELEM_DARKNESS && info.attack_power > 0) {
+                    state.hp[me] = 0;
+                    run_immediate_revive(state);
+                } else {
+                    apply_card_effects_to_target(state, target, used_cards);
+                }
                 state.num_staged_cards[me] = 0;
                 if (!state.is_done && state.current_phase != GamePhase::PHASE_DEFENSE) {
                     state.current_phase = GamePhase::PHASE_END;
                 }
             } else {
+                for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+                    int h_idx = state.staged_cards[me][i];
+                    if (h_idx >= 0 && h_idx < MAX_HAND_SIZE) {
+                        state.is_known_to_opp[me][h_idx] = true;
+                    }
+                }
+                auto used_cards = get_staged_card_ids(state, me);
+                int first_card = (!used_cards.empty()) ? used_cards[0] : -1;
+                push_event(state, me, EventType::CONFIRM_ATTACK, first_card, target, 0.0f);
+
                 state.attacker_id = me;
                 state.defender_id = target;
                 state.current_phase = GamePhase::PHASE_SUNDRY_SELECT_MIRROR;
@@ -406,8 +484,11 @@ void step_phase_attack_plus(InternalState &state, ActionType action, int me, int
         if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
             int idx = action - ACTION_SELECT_HAND_0;
             int card_id = state.apparent_hand[me][idx];
+            if (card_id < 0) card_id = state.true_hand[me][idx];
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
+            update_staged_pending_info(state, me);
+            push_event(state, me, EventType::STAGE_CARD, card_id, -1, 0.0f);
             
             if (card_id == ID_MIRAGE) {
                 state.pending_is_group_attack = true;
@@ -416,6 +497,15 @@ void step_phase_attack_plus(InternalState &state, ActionType action, int me, int
         }
     } else if (action == ACTION_TARGET_OPP || action == ACTION_TARGET_SELF) {
         int target = (action == ACTION_TARGET_SELF) ? me : opp;
+        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+            confirm_card(state, me, state.staged_cards[me][i]);
+        }
+        int first_card = -1;
+        if (state.num_staged_cards[me] > 0) {
+            int h_idx = state.staged_cards[me][0];
+            first_card = (state.apparent_hand[me][h_idx] >= 0) ? state.apparent_hand[me][h_idx] : state.true_hand[me][h_idx];
+        }
+        push_event(state, me, EventType::CONFIRM_ATTACK, first_card, target, 0.0f);
         execute_attack_from_staged_cards(state, me, target, false);
         return;
     }
@@ -425,18 +515,29 @@ void step_phase_group_weapon(InternalState &state, ActionType action, int me, in
     if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
         if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
             int idx = action - ACTION_SELECT_HAND_0;
+            int card_id = state.apparent_hand[me][idx];
+            if (card_id < 0) card_id = state.true_hand[me][idx];
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
+            update_staged_pending_info(state, me);
+            push_event(state, me, EventType::STAGE_CARD, card_id, -1, 0.0f);
         }
     } else if (action == ACTION_TARGET_OPP) {
         int target = opp;
+        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+            confirm_card(state, me, state.staged_cards[me][i]);
+        }
+        int first_card = (state.num_staged_cards[me] > 0) ? state.true_hand[me][state.staged_cards[me][0]] : -1;
+        push_event(state, me, EventType::CONFIRM_ATTACK, first_card, target, 0.0f);
 
         StagedAttackInfo info = evaluate_staged_attack(state, me);
         state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
 
         if (!info.hit) {
+            push_event(state, me, EventType::ATTACK_MISS, first_card, target, 0.0f);
             state.current_phase = GamePhase::PHASE_END;
         } else {
+            push_event(state, me, EventType::ATTACK_HIT, first_card, target, info.attack_power);
             setup_multiple_attacks(state, me, target, info);
 
             state.pending_attack_power = info.attack_power;
@@ -455,18 +556,27 @@ void step_phase_group_miracle(InternalState &state, ActionType action, int me, i
     if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
         if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
             int idx = action - ACTION_SELECT_HAND_0;
+            int card_id = state.apparent_hand[me][idx];
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
+            push_event(state, me, EventType::STAGE_CARD, card_id, -1, 0.0f);
         }
     } else if (action == ACTION_TARGET_OPP) {
         int target = opp;
+        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+            confirm_card(state, me, state.staged_cards[me][i]);
+        }
+        int first_card = (state.num_staged_cards[me] > 0) ? state.true_hand[me][state.staged_cards[me][0]] : -1;
+        push_event(state, me, EventType::CONFIRM_ATTACK, first_card, target, 0.0f);
 
         StagedAttackInfo info = evaluate_staged_attack(state, me);
         state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
 
         if (!info.hit) {
+            push_event(state, me, EventType::ATTACK_MISS, first_card, target, 0.0f);
             state.current_phase = GamePhase::PHASE_END;
         } else {
+            push_event(state, me, EventType::ATTACK_HIT, first_card, target, info.attack_power);
             state.pending_attack_power = info.attack_power;
             state.pending_attack_element = info.element;
             state.pending_absorption = info.absorption;
@@ -504,43 +614,54 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
 
     int total_def = 0;
     bool rainbow = false;
+
     if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
         if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
             int idx = action - ACTION_SELECT_HAND_0;
+            int card_id = state.apparent_hand[me][idx];
+            if (card_id < 0) card_id = state.true_hand[me][idx];
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
+            update_staged_pending_info(state, me);
+            push_event(state, me, EventType::STAGE_CARD, card_id, -1, 0.0f);
         }
     } else if (action == ACTION_CONFIRM) {
-        int total_def = 0;
-        bool rainbow = false;
-
         for (int i = 0; i < state.num_staged_cards[me]; ++i) {
             int h_idx = state.staged_cards[me][i];
             state.is_known_to_opp[me][h_idx] = true;
-            int card_id = state.true_hand[me][h_idx];
+            int card_id = state.apparent_hand[me][h_idx];
+            if (card_id < 0) card_id = state.true_hand[me][h_idx];
             if (card_id == ID_RAINBOW_CURTAIN) rainbow = true;
             total_def += g_card_registry[card_id].defense_power;
         }
 
+        int first_card = (state.num_staged_cards[me] > 0) ? state.true_hand[me][state.staged_cards[me][0]] : -1;
+        push_event(state, me, EventType::CONFIRM_DEFENSE, first_card, opp, static_cast<float>(total_def));
+
+        bool is_darkness_attack = (state.pending_attack_element == ELEM_DARKNESS);
         if (rainbow) {
             state.pending_attack_element = ELEM_NONE;
         }
 
         ReactionType react_type = REACTION_NONE;
+        int react_card_id = -1;
         Element effective_atk_element = state.pending_attack_element;
         for (int i = 0; i < state.num_staged_cards[me]; ++i) {
             int h_idx = state.staged_cards[me][i];
-            int card_id = state.true_hand[me][h_idx];
+            int card_id = state.apparent_hand[me][h_idx];
+            if (card_id < 0) card_id = state.true_hand[me][h_idx];
             const CardFeatures &f = g_card_registry[card_id];
             if (card_id == ID_RAINBOW_CURTAIN) continue;
             if (is_active_reaction_card(state, card_id, phase, effective_atk_element)) {
                 react_type = f.reaction_type;
+                react_card_id = card_id;
             }
         }
 
         int total_mp_cost = calculate_staged_mp_cost(state, me);
 
         if (react_type == REACTION_BLOCK) {
+            push_event(state, me, EventType::BLOCK_ATTACK, react_card_id, opp, 1.0f);
             state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
             handle_remaining_attacks_transition(state, me, phase);
             return;
@@ -552,6 +673,8 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
                 success = (roll < 50);
             }
             if (success) {
+                EventType ev_type = (react_type == REACTION_BOUNCE) ? EventType::BOUNCE_ATTACK : EventType::REFLECT_DAMAGE;
+                push_event(state, me, ev_type, react_card_id, opp, 1.0f);
                 state.attacker_id = me;
                 state.defender_id = opp;
                 state.current_actor_id = opp;
@@ -560,6 +683,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
                 state.num_staged_cards[opp] = 0;
                 return;
             } else {
+                push_event(state, me, EventType::BOUNCE_ATTACK, react_card_id, opp, 0.0f);
                 int damage = std::max(0, state.pending_attack_power - total_def);
                 if (phase == GamePhase::PHASE_DEFENSE) {
                     process_ring_defense_effects(state, me, opp, damage);
@@ -569,6 +693,9 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
                     apply_instant_death(state, me);
                 } else {
                     apply_combat_damage(state, me, damage);
+                    if (damage > 0) {
+                        push_event(state, me, EventType::TAKE_DAMAGE, -1, me, static_cast<float>(damage));
+                    }
                 }
                 if (state.pending_absorption) {
                     state.hp[me] = std::clamp(state.hp[me] + damage, 0, 99);
@@ -634,7 +761,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
             process_ring_defense_effects(state, me, opp, damage);
         }
 
-        if (damage > 0 && state.pending_attack_element == ELEM_DARKNESS && !rainbow) {
+        if (damage > 0 && is_darkness_attack && !rainbow) {
             apply_instant_death(state, me);
         } else {
             apply_combat_damage(state, me, damage);
@@ -715,6 +842,13 @@ void step_phase_miracle_plus(InternalState &state, ActionType action, int me, in
         }
     } else if (action == ACTION_TARGET_OPP || action == ACTION_TARGET_SELF) {
         int target = (action == ACTION_TARGET_SELF) ? me : opp;
+
+        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+            confirm_card(state, me, state.staged_cards[me][i]);
+        }
+
+        int first_card = (state.num_staged_cards[me] > 0) ? state.true_hand[me][state.staged_cards[me][0]] : -1;
+        push_event(state, me, EventType::CONFIRM_ATTACK, first_card, target, 0.0f);
 
         StagedAttackInfo info = evaluate_staged_attack(state, me);
         state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
@@ -838,7 +972,7 @@ void step_phase_sundry_select_mirror(InternalState &state, ActionType action, in
         for (int p = 0; p < 2; ++p) {
             for (int i = 0; i < state.num_staged_cards[p]; ++i) {
                 int cid = state.true_hand[p][state.staged_cards[p][i]];
-                if (g_card_registry[cid].is_sundry()) {
+                if (g_card_registry[cid].is_sundry() || g_card_registry[cid].is_miracle()) {
                     original_caster = p;
                     break;
                 }
@@ -923,6 +1057,8 @@ void step_phase_buy(InternalState &state, ActionType action, int me, int opp) {
             state.money[buyer] -= price;
             state.money[seller] = std::clamp(state.money[seller] + price, 0, 99);
 
+            push_event(state, buyer, EventType::BUY_CARD, card_id, seller, static_cast<float>(price));
+
             clear_hand_slot(state, seller, revealed_idx);
 
             int empty_slot = -1;
@@ -954,6 +1090,7 @@ void step_phase_buy(InternalState &state, ActionType action, int me, int opp) {
             }
         } else {
             // 購入しなかった（または購入資金不足）場合
+            push_event(state, buyer, EventType::REFUSE_DEAL, card_id, seller, 0.0f);
             // 売り手の他のスロットに同じカードタイプ（card_id）で既に手札内公開（is_known_to_opp かつ 未展開）状態のものがあるか確認
             bool already_known = false;
             for (int j = 0; j < MAX_HAND_SIZE; ++j) {
@@ -996,6 +1133,8 @@ void step_phase_exchange(InternalState &state, ActionType action, int me, int op
             state.hp[me] = hp_val;
             state.mp[me] = mp_val;
             state.money[me] = money_val;
+
+            push_event(state, me, EventType::EXCHANGE, ID_EXCHANGE, me, static_cast<float>(hp_val));
 
             if (state.hp[me] <= 0) {
                 state.hp[me] = 0;

@@ -277,7 +277,31 @@ int get_single_legal_action(const InternalState& state) {
             if (valid_count > 1) return -1;
         }
     }
-    if (valid_count == 1) return last_valid;
+    if (valid_count == 1) {
+        int actor = state.current_actor_id;
+        GamePhase phase = state.current_phase;
+        bool is_defense_phase = (phase == GamePhase::PHASE_DEFENSE || phase == GamePhase::PHASE_MIRACLE_DEFENSE);
+        bool is_mirror_reaction_phase = (phase == GamePhase::PHASE_SUNDRY_SELECT_MIRROR || 
+                                         phase == GamePhase::PHASE_SELL_SELECT_MIRROR || 
+                                         phase == GamePhase::PHASE_BUY_SELECT_MIRROR);
+
+        if (is_defense_phase || is_mirror_reaction_phase) {
+            // 防具・鏡を1枚も積んでいない(最初から有効な防具・反射カードがない)場合は ACTION_CONFIRM を自動返却して進行
+            if (state.num_staged_cards[actor] == 0 && last_valid == ACTION_CONFIRM) {
+                return ACTION_CONFIRM;
+            }
+            // カードを積んだ後は ACTION_CONFIRM しか残っていなくても自動進行せず待機
+            if (last_valid == ACTION_CONFIRM) {
+                return -1;
+            }
+        }
+
+        // その他の確定操作 (ACTION_TARGET_OPP, ACTION_TARGET_SELF) は自動実行せずプレイヤーの入力を待つ
+        if (last_valid == ACTION_TARGET_OPP || last_valid == ACTION_TARGET_SELF) {
+            return -1;
+        }
+        return last_valid;
+    }
     return -1;
 }
 
@@ -364,6 +388,27 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
     get_legal_actions(state, legal_actions);
     for (int i = 0; i < ACTION_SPACE_SIZE; ++i) {
         obs.action_mask[i] = legal_actions[i] ? 1.0f : 0.0f;
+    }
+
+    // Populate and normalize history events for observing player
+    obs.history_head = state.history_head;
+    obs.history_count = state.history_count;
+    obs.player_id = player_id;
+
+    for (int i = 0; i < HISTORY_LENGTH; ++i) {
+        GameEvent ev = state.history[i];
+        if (ev.event_type == static_cast<int>(EventType::NONE)) {
+            obs.history[i] = ev;
+            continue;
+        }
+
+        // Normalize actor and target_id (0 = observer/me, 1 = opponent)
+        ev.actor = (ev.actor == player_id) ? 0 : 1;
+        if (ev.target_id != -1) {
+            ev.target_id = (ev.target_id == player_id) ? 0 : 1;
+        }
+
+        obs.history[i] = ev;
     }
 }
 

@@ -25,6 +25,26 @@ extern std::discrete_distribution<int> g_drop_distribution;
 
 
 // ============================================================================
+// イベント履歴出力ヘルパー / Event Log Helper
+// ============================================================================
+
+/**
+ * @brief ゲームイベントを InternalState のリングバッファに追記します。
+ */
+inline void push_event(InternalState &state, int actor, EventType event_type, int card_id = -1, int target_id = -1, float value = 0.0f) {
+    GameEvent ev;
+    ev.actor = actor;
+    ev.event_type = static_cast<int>(event_type);
+    ev.card_id = card_id;
+    ev.target_id = target_id;
+    ev.value = value;
+
+    state.history[state.history_head] = ev;
+    state.history_head = (state.history_head + 1) % HISTORY_LENGTH;
+    state.history_count++;
+}
+
+// ============================================================================
 // ヘルパー関数 / Helper Functions
 // ============================================================================
 
@@ -34,6 +54,7 @@ extern std::discrete_distribution<int> g_drop_distribution;
  * @return 捨てられるカードであれば true、そうでなければ false。
  */
 bool is_discardable_card(int card_id);
+void update_staged_pending_info(InternalState &state, int player_id);
 
 /**
  * @brief 指定されたカードが「奇跡の消費MPを0にする」精霊の神器であるかを判定します。

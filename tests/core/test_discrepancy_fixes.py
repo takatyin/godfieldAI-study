@@ -93,6 +93,7 @@ def test_guardian_leaves_on_combat_damage():
     total_trials = 200
     for _ in range(total_trials):
         sim.reset_state()
+        sim.state.seed_rng(_)
         sim.set_hand(0, [bronze_club])
         # プレイヤー1に守護神（火星神）を憑ける
         sim.state.set_guardian(1, godfield_core.MARS)
@@ -104,8 +105,8 @@ def test_guardian_leaves_on_combat_damage():
         # プレイヤー1はスルー（無防備）
         sim.step(godfield_core.ActionType.ACTION_CONFIRM)
         
-        # 守護神が去った（GUARDIAN_NONEになった）か確認
-        if sim.state.get_guardian(1) == godfield_core.NONE:
+        # 守護神が去った（GuardianType.NONEになった）か確認
+        if sim.state.get_guardian(1) == godfield_core.GuardianType.NONE:
             dismiss_count += 1
             
     # 10%確率なので、200回中10〜40回程度去るはず
@@ -128,7 +129,7 @@ def test_guardian_leaves_on_combat_damage():
         sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
         sim.step(godfield_core.ActionType.ACTION_CONFIRM)
         
-        if sim.state.get_guardian(1) == godfield_core.NONE:
+        if sim.state.get_guardian(1) == godfield_core.GuardianType.NONE:
             dismiss_count_prevented += 1
             
     # 被ダメージ0なので、絶対に去らない
@@ -144,6 +145,7 @@ def test_guardian_leaves_on_sickness_damage():
     total_trials = 200
     for _ in range(total_trials):
         sim.reset_state()
+        sim.state.seed_rng(_)
         # プレイヤー0に風邪と火星神
         sim.state.set_sickness(0, godfield_core.SICKNESS_COLD)
         sim.state.set_guardian(0, godfield_core.MARS)
@@ -151,7 +153,7 @@ def test_guardian_leaves_on_sickness_damage():
         # プレイヤー0が祈る（ターン終了を進めるため）
         sim.step(godfield_core.ActionType.ACTION_PRAY)
         
-        if sim.state.get_guardian(0) == godfield_core.NONE:
+        if sim.state.get_guardian(0) == godfield_core.GuardianType.NONE:
             dismiss_count += 1
             
     # 10%確率なので、200回中10〜40回程度去るはず

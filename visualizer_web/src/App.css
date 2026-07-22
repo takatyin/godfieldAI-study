@@ -578,3 +578,125 @@ body, html {
   color: #94a3b8;
   margin-bottom: 24px;
 }
+
+/* Battle Log Panel */
+.battle-log-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+}
+
+.battle-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 170px;
+  padding-right: 4px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+}
+
+.battle-log-empty {
+  color: #475569;
+  text-align: center;
+  padding: 12px;
+  font-size: 0.75rem;
+}
+
+.log-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.4);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border-left: 3px solid #64748b;
+  line-height: 1.3;
+}
+
+.log-item.log-miss {
+  border-left-color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.log-item.log-sick {
+  border-left-color: #eab308;
+  background: rgba(234, 179, 8, 0.1);
+}
+
+.log-item.log-damage {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.log-item.log-heal {
+  border-left-color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.log-badge {
+  font-weight: 800;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fff;
+}
+
+.log-badge.actor-0 {
+  background: #3b82f6;
+}
+
+.log-badge.actor-1 {
+  background: #a855f7;
+}
+
+.log-text {
+  color: #e2e8f0;
+}
+
+/* Event Popup Overlay Animation */
+.event-popup-overlay {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1000;
+  animation: popupFade 1.5s ease-out forwards;
+}
+
+.event-popup-content {
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid #facc15;
+  box-shadow: 0 0 25px rgba(250, 204, 21, 0.5);
+  padding: 12px 28px;
+  border-radius: 9999px;
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: #facc15;
+  text-shadow: 0 0 10px rgba(250, 204, 21, 0.6);
+  letter-spacing: 1px;
+}
+
+@keyframes popupFade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -40%) scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  30% {
+    transform: translate(-50%, -50%) scale(1.0);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -60%) scale(0.9);
+  }
+}

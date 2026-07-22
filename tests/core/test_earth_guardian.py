@@ -15,7 +15,7 @@ def find_seed_for_earth_action(target_category: str) -> int:
     first_aid_id = find_card_by_name("sundries/smile-dew")
     bronze_shield_id = find_card_by_name("armor/wood-shield")
 
-    for seed in range(5000):
+    for seed in range(20000):
         sim = SimulationRunner()
         sim.state.seed_rng(seed)
 
@@ -362,13 +362,14 @@ def test_earth_dangerous_pestle_mortar():
 
     # 地球神(P1)があぶないキネをドローするシードを探す
     act_seed = None
-    for seed in range(10000):
+    for seed in range(100000):
         sim = SimulationRunner()
         sim.state.seed_rng(seed)
         sim.state.set_guardian(1, 9)
         sim.set_status(player=0, hp=99)
         sim.set_status(player=1, hp=99)
         sim.state.set_true_hand(0, 0, mortar_id)
+        sim.state.set_true_hand(1, 0, pestle_id)
         for i in range(1, 18):
             sim.state.set_true_hand(0, i, -1)
             sim.state.set_true_hand(1, i, -1)

@@ -205,6 +205,32 @@ def test_guardian_pot_dwells_guardian():
     assert 1 <= runner.state.get_guardian(0) <= 10
 
 
+def test_sundry_without_super_mirror_auto_advances():
+    """
+    検証内容: 相手が雑貨（毒）を使用し、自分にスーパーミラーがない場合。
+    - get_single_legal_action が ACTION_CONFIRM を返して自動進行（オートスキップ）すること。
+    """
+    runner = SimulationRunner()
+    poison_id = find_card_by_name("天国草")
+    shield_id = find_card_by_name("木の盾")
+
+    runner.set_status(0, hp=40)
+    runner.set_status(1, hp=40)
+    runner.state.set_true_hand(0, 0, poison_id)
+    runner.state.set_true_hand(1, 0, shield_id)
+
+    # P0がP1に「毒」を対象
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # フェイズは PHASE_SUNDRY_SELECT_MIRROR で、P1にスーパーミラーはない
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    assert runner.state.current_actor_id == 1
+
+    # スーパーミラーがないため get_single_legal_action は ACTION_CONFIRM を返し自動進行対象であること
+    assert godfield_core.get_single_legal_action(runner.state) == ActionType.ACTION_CONFIRM
+
+
 def test_thump_tear_random_healing_or_damage():
     """
     検証内容: ドキドキ涙による確率的HP増減テスト。

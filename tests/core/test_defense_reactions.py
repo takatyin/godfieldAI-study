@@ -178,6 +178,89 @@ def test_miracle_defense_reaction_rules():
     assert runner.state.current_phase == GamePhase.PHASE_MAIN
 
 
+def test_miracle_fire_defense_dress_and_shoes():
+    """
+    ユーザー報告事象の検証テスト:
+    - 相手の<炎> (火ATK10の奇跡) に対し、防御側が「きらきらドレス」(光DEF10) と「アクアシューズ」(水DEF1) を持つ。
+    - 10のドレスを出した後でも、水属性防具（アクアシューズ）を出せる選択肢が残ること。
+    - ドレスを出した後に勝手に自動進行せず、プレイヤーが選択操作可能であること。
+    """
+    runner = SimulationRunner()
+    fire_id = find_card_by_name("＜炎＞")
+    dress_id = find_card_by_name("きらきらドレス")
+    shoes_id = find_card_by_name("アクアシューズ")
+
+    runner.set_status(0, hp=40, mp=20)
+    runner.set_status(1, hp=40, mp=20)
+    runner.state.set_true_hand(0, 0, fire_id)
+    runner.state.set_true_hand(1, 0, dress_id)
+    runner.state.set_true_hand(1, 1, shoes_id)
+
+    # 1. P0が炎(10)でP1に奇跡攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    # 最初はドレス(0)もシューズ(1)も出せる
+    actions1 = godfield_core.get_legal_actions(runner.state)
+    assert actions1[ActionType.ACTION_SELECT_HAND_0] is True
+    assert actions1[ActionType.ACTION_SELECT_HAND_1] is True
+
+    # 2. P1がドレス(光10)を選択
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+
+    # ドレスを出した後でもシューズ(1)が出せること！
+    actions2 = godfield_core.get_legal_actions(runner.state)
+    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True
+
+    # また、自動進行せず PHASE_MIRACLE_DEFENSE でP1の入力を待っていること！
+    assert godfield_core.get_single_legal_action(runner.state) == -1
+    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
+
+    # 3. シューズ(水1)も追加し、確定
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 10 + 1 = 11 ガードで 0 ダメージ（完全ノーダメージで生存）
+    assert runner.state.get_hp(1) == 40
+
+
+def test_miracle_fire_defense_shoes_and_dress():
+    """
+    アクアシューズ(水1)を先に出してから きらきらドレス(光10) を重ねて出した場合でも、
+    水属性11ガードが維持されノーダメージで防げることを確認する逆順検証テスト。
+    """
+    runner = SimulationRunner()
+    fire_id = find_card_by_name("＜炎＞")
+    dress_id = find_card_by_name("きらきらドレス")
+    shoes_id = find_card_by_name("アクアシューズ")
+
+    runner.set_status(0, hp=40, mp=20)
+    runner.set_status(1, hp=40, mp=20)
+    runner.state.set_true_hand(0, 0, fire_id)
+    runner.state.set_true_hand(1, 0, shoes_id)
+    runner.state.set_true_hand(1, 1, dress_id)
+
+    # P0が炎(10)で攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # P1が先にシューズ(水1)を選択
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+
+    # その後にドレス(光10)も選択可能
+    actions2 = godfield_core.get_legal_actions(runner.state)
+    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True
+
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 水属性11ガードで火攻撃10を完全防御
+    assert runner.state.get_hp(1) == 40
+
+
 def find_bounce_seeds():
     """
     弾く（Bounce）カードのRNGシードを取得するヘルパー。
@@ -590,4 +673,187 @@ def test_special_weapons_reflection():
     runner3.step(ActionType.ACTION_CONFIRM)
     assert runner3.state.current_phase == GamePhase.PHASE_DEFENSE
     assert runner3.state.current_actor_id == 0
+
+
+def test_dual_use_sword_shield_defense():
+    """
+    検証内容: ソードシールド（武器タイプ、ATK10 / DEF10）を防御フェイズで防具として仮置きした際、
+    pending_defense_power に 10 が正しく反映され、攻撃を完全ガードできることのテスト。
+    """
+    runner = SimulationRunner()
+    sword_shield_id = find_card_by_name("ソードシールド")
+    atk_card_id = find_card_by_name("打撃の鉄板") # ATK 5
+
+    runner.set_status(0, hp=40, mp=10)
+    runner.set_status(1, hp=40, mp=10)
+
+    runner.state.set_true_hand(0, 0, atk_card_id)
+    runner.state.set_true_hand(1, 0, sword_shield_id)
+
+    # P0が打撃の鉄板(ATK5)で攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    # P1がソードシールド(DEF10)を出してガード
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is True, "ソードシールドが防御の合法手であること"
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.pending_defense_power == 10, "仮置き防御力 pending_defense_power が 10 になること"
+
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 5 - 10 <= 0 で完全ガード成功
+    assert runner.state.get_hp(1) == 40
+
+
+def test_dual_use_demon_gauntlet_attack():
+    """
+    検証内容: 鬼の小手（防具タイプ、DEF5 / ATK10）を攻撃プラスフェイズで攻撃アイテムとして仮置き・使用した際、
+    pending_attack_power に 10 が正しく反映され、相手に 10 ダメージを与えられることのテスト。
+    """
+    runner = SimulationRunner()
+    demon_gauntlet_id = find_card_by_name("鬼の小手")
+    atk_card_id = find_card_by_name("打撃の鉄板") # ATK 5
+
+    runner.set_status(0, hp=40, mp=10)
+    runner.set_status(1, hp=40, mp=10)
+
+    runner.state.set_true_hand(0, 0, atk_card_id)
+    runner.state.set_true_hand(0, 1, demon_gauntlet_id)
+
+    # P0が打撃の鉄板(ATK5)を出して攻撃プラスフェイズへ
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.current_phase == GamePhase.PHASE_ATTACK_PLUS
+
+    # 鬼の小手(ATK10)をプラス攻撃として重ね出し
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "鬼の小手が攻撃プラスの合法手であること"
+
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    assert runner.state.pending_attack_power == 15, "合計攻撃力 pending_attack_power が 5 + 10 = 15 になること"
+
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # P1が防御せずスルー
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 40 - 15 = 25 HP になること
+    assert runner.state.get_hp(1) == 25
+
+
+def test_sky_harpoon_and_angel_bow_miracle_defense():
+    """
+    検証内容: 武器タイプでありながら奇跡リアクション効果を持つ「スカイハープーン」(bounce) や
+    「エンゼルの弓」(block) が、奇跡攻撃に対する防御フェイズで正しくリアクション手として機能することのテスト。
+    """
+    runner = SimulationRunner()
+    fire_miracle_id = find_card_by_name("＜炎＞")
+    sky_harpoon_id = find_card_by_name("スカイハープーン")
+    angel_bow_id = find_card_by_name("エンゼルの弓")
+
+    runner.set_status(0, hp=40, mp=20)
+    runner.set_status(1, hp=40, mp=20)
+
+    runner.state.set_true_hand(0, 0, fire_miracle_id)
+    runner.state.set_true_hand(1, 0, sky_harpoon_id)
+    runner.state.set_true_hand(1, 1, angel_bow_id)
+
+    # P0が＜炎＞(10)でP1に奇跡攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    # P1の合法手に「スカイハープーン」(0) も「エンゼルの弓」(1) も含まれていること！
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is True, "スカイハープーンが奇跡防御の合法手であること"
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "エンゼルの弓が奇跡防御の合法手であること"
+
+    # スカイハープーンで奇跡を弾く（50%弾く）
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 奇跡攻撃に対するリアクション解決が正しく行われること
+    assert runner.state.get_hp(1) == 40 or runner.state.get_hp(1) == 30
+
+
+def test_miracle_reaction_plus_spiritual_card_mp0():
+    """
+    検証内容: 奇跡リアクションカード(＜乱気流＞や＜壁＞)を仮置きした後、
+    例外的にその直後に「精霊系カード」(精霊の杖等)を重ね出しして MP 消費を 0 にできることをテスト。
+    """
+    runner = SimulationRunner()
+    fire_miracle_id = find_card_by_name("miracles/flame") # ＜炎＞ 奇跡
+    turbulence_id = find_card_by_name("miracles/turbulence") # ＜乱気流＞ 奇跡リアクション (MP3)
+    spirit_staff_id = find_card_by_name("weapons/spiritual-staff") # 精霊の杖 (精霊系)
+
+    runner.set_status(0, hp=40, mp=20)
+    runner.set_status(1, hp=40, mp=2) # MPが2しかない状態（乱気流の通常消費3MPには足りない）
+
+    runner.state.set_true_hand(0, 0, fire_miracle_id)
+    runner.state.set_true_hand(1, 0, turbulence_id)
+    runner.state.set_true_hand(1, 1, spirit_staff_id)
+
+    # P0が＜炎＞でP1に奇跡攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
+
+    # P1が1枚目に＜乱気流＞(スロット0)を仮置き
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+
+    # ＜乱気流＞が仮置きされた直後、手札スロット1の「精霊の杖」が合法手になること！
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "奇跡リアクションの後に精霊カードが選択可能であること"
+
+    # P1が精霊の杖(スロット1)を選択して確定
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # MP消費が0になるため、MPは減らずに2のまま維持されること！
+    assert runner.state.get_mp(1) == 2
+
+
+def test_wall_miracle_reaction_plus_spiritual_card_mp0():
+    """
+    検証内容: 無属性物理武器攻撃に対し、奇跡リアクションカードである＜壁＞(MP3)を仮置きした後、
+    直後に「精霊系カード」(精霊の足袋等)を重ね出しして MP 消費を 0 にできることをテスト。
+    """
+    runner = SimulationRunner()
+    punch_id = find_card_by_name("weapons/punch") # パンチ (無属性物理武器)
+    wall_id = find_card_by_name("miracles/wall") # ＜壁＞ 奇跡物理リアクション (MP3)
+    spirit_tabi_id = find_card_by_name("armor/spiritual-socks") # 精霊の足袋 (精霊系)
+
+    runner.set_status(0, hp=40, mp=20)
+    runner.set_status(1, hp=40, mp=2) # MPが2しかない状態
+
+    runner.state.set_true_hand(0, 0, punch_id)
+    runner.state.set_true_hand(1, 0, wall_id)
+    runner.state.set_true_hand(1, 1, spirit_tabi_id)
+
+    # P0がパンチでP1に無属性物理攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+
+    # P1が1枚目に＜壁＞(スロット0)を仮置き
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+
+    # ＜壁＞が仮置きされた直後、手札スロット1の「精霊の足袋」が合法手になること！
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "＜壁＞の後に精霊の足袋が選択可能であること"
+
+    # P1が精霊の足袋(スロット1)を選択して確定
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # ＜壁＞の攻撃阻止が成功し、MP消費が0になるため、MPは減らずに2のまま維持されること！
+    assert runner.state.get_mp(1) == 2
 

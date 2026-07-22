@@ -58,8 +58,8 @@
         }
     </style>
 </head>
-<body class="text-slate-100 min-h-screen flex flex-col p-4 gap-4">
-    <div id="app" class="flex flex-col flex-grow gap-4 min-h-0">
+<body class="text-slate-100 h-screen max-h-screen overflow-hidden flex flex-col p-4 gap-3 bg-slate-950">
+    <div id="app" class="flex flex-col flex-grow h-full min-h-0 overflow-hidden gap-3">
         
         <!-- Connection overlay -->
         <div v-if="!connected || !data" class="fixed inset-0 bg-slate-950 flex flex-col items-center justify-content-center z-50 p-8 justify-center">
@@ -95,7 +95,7 @@
             </div>
         </header>
 
-        <!-- Game Flow & Combat Dashboard -->
+        <!-- Game Flow & Combat Dashboard (Authentic GodField Style Player VS Header) -->
         <div class="glass rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 border border-slate-800 shadow-xl" v-if="data">
             <div class="flex items-center gap-3">
                 <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full font-bold text-xs uppercase tracking-widest animate-pulse">
@@ -107,27 +107,32 @@
             </div>
             
             <div class="flex-grow flex items-center justify-center">
-                <!-- Attack/Defense Status Alert -->
-                <div v-if="data.pending_attack_power > 0" class="px-6 py-2 bg-red-950/40 border border-red-500/40 rounded-xl flex items-center gap-3 text-red-300 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
-                    <span class="relative flex h-2 w-2">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                <!-- Authentic Attacker ➔ Defender Bar -->
+                <div v-if="data.pending_attack_power > 0" class="flex items-center gap-3 bg-slate-950/60 px-5 py-2 rounded-2xl border border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.15)]">
+                    <span :class="['px-3 py-1 rounded-xl text-xs font-black border shadow', data.attacker_id === 0 ? 'bg-blue-600/30 border-blue-400 text-blue-200' : 'bg-purple-600/30 border-purple-400 text-purple-200']">
+                        {{ data.attacker_id === 0 ? 'あなた (P0)' : '相手 (P1)' }}
                     </span>
-                    <span class="text-xs font-bold">
-                        プレイヤー {{ data.attacker_id }} から プレイヤー {{ data.defender_id }} へ 
-                        <span class="bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 rounded text-white font-extrabold text-sm mx-1">
-                            {{ data.pending_attack_power }}
-                        </span> 
-                        の攻撃中 (属性: {{ getElementLabel(data.pending_attack_element) }})
+
+                    <div class="flex items-center gap-1">
+                        <span class="text-lg font-black text-rose-500 animate-pulse">➔</span>
+                        <span class="text-xs font-black px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/40">
+                            {{ data.pending_attack_power }} ({{ getElementLabel(data.pending_attack_element) }})
+                        </span>
+                        <span class="text-lg font-black text-rose-500 animate-pulse">➔</span>
+                    </div>
+
+                    <span :class="['px-3 py-1 rounded-xl text-xs font-black border shadow', data.defender_id === 0 ? 'bg-blue-600/30 border-blue-400 text-blue-200' : 'bg-purple-600/30 border-purple-400 text-purple-200']">
+                        {{ data.defender_id === 0 ? 'あなた (P0)' : '相手 (P1)' }}
                     </span>
                 </div>
-                <div v-else class="text-xs font-bold text-slate-500">
-                    静穏状態（攻撃は発生していません）
+                <div v-else class="text-xs font-bold text-slate-500 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                    静穏状態（現在、攻撃は発生していません）
                 </div>
             </div>
             
             <div class="text-xs text-slate-400">
-                現在操作中: 
+                現在手番: 
                 <span :class="['px-2.5 py-0.5 rounded-md font-extrabold text-xs ml-1', data.current_actor_id === 0 ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-[0_0_8px_rgba(59,130,246,0.2)]' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30 shadow-[0_0_8px_rgba(168,85,247,0.2)]']">
                     プレイヤー {{ data.current_actor_id }}
                 </span>
@@ -150,187 +155,205 @@
                     </button>
                 </div>
 
-                <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-800">
-                    <span class="font-bold text-lg text-blue-400">あなた (プレイヤー0)</span>
-                    <span v-if="currentActorId === 0" class="text-xs bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 rounded-full font-bold animate-pulse">思考中</span>
-                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3 pb-2 border-b border-slate-800">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <span class="font-bold text-lg text-blue-400">あなた (プレイヤー0)</span>
+                        <span v-if="currentActorId === 0" class="text-xs bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 rounded-full font-bold animate-pulse">思考中</span>
 
-                <!-- Compact Stats & Ailments -->
-                <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 p-2 rounded-xl border border-slate-800/80 mb-3 text-[11px]">
-                    <div class="flex items-center gap-3">
-                        <div class="flex items-center gap-1">
-                            <span class="text-slate-500 font-medium">HP</span>
-                            <span class="text-rose-500 font-extrabold text-sm">{{ data.p0_obs.hp_me }}</span>
-                        </div>
-                        <div class="flex items-center gap-1">
-                            <span class="text-slate-500 font-medium">MP</span>
-                            <span class="text-cyan-400 font-extrabold text-sm">{{ data.p0_obs.mp_me }}</span>
-                        </div>
-                        <div class="flex items-center gap-1">
-                            <span class="text-slate-500 font-medium">所持金</span>
-                            <span class="text-amber-500 font-extrabold text-sm">{{ data.p0_obs.money_me }}円</span>
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center gap-1.5">
-                        <span v-if="data.p0_obs.guardian_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 font-bold text-[9px] leading-none">
-                            {{ data.p0_obs.guardian_me }}
-                        </span>
-                        <span v-if="data.p0_obs.sickness_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30 font-bold text-[9px] leading-none">
-                            {{ data.p0_obs.sickness_me }}
-                        </span>
-                        <span v-for="c in data.p0_obs.curses_me" :key="c" class="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 font-bold text-[9px] leading-none">
-                            {{ c }}
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Staged Row (moved above hand) -->
-                <div class="mb-3">
-                    <h3 class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">場に出しているカード</h3>
-                    <div class="bg-slate-950/40 rounded-lg p-1.5 flex gap-1.5 min-h-[36px] items-center border border-slate-900 mb-2">
-                        <span v-if="data.p0_obs.staged.length === 0" class="text-xs text-slate-600 w-full text-center py-1">場にカードを出していません</span>
-                        <span v-for="(card, idx) in data.p0_obs.staged" :key="idx" :class="['text-[9px] px-2 py-0.5 rounded font-bold border shadow-sm', getCardColorClass(card)]">
-                            {{ card.name }}
-                        </span>
-                    </div>
-                    <div class="bg-slate-950/40 rounded-lg p-1.5 flex gap-1.5 min-h-[36px] items-center border border-slate-900">
-                        <span v-if="data.p0_obs.opponent_staged.length === 0" class="text-xs text-slate-600 w-full text-center py-1">相手はカードを出していません</span>
-                        <span v-for="(card, idx) in data.p0_obs.opponent_staged" :key="idx" :class="['text-[9px] px-2 py-0.5 rounded font-bold border shadow-sm', getCardColorClass(card)]">
-                            {{ card.name }}
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Hand -->
-                <div class="flex flex-col flex-grow min-h-0 mb-4">
-                    <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">手札 ({{ countCards(data.p0_obs.hand) }}枚)</h3>
-                    <div class="grid grid-cols-9 gap-1.5 overflow-y-auto pr-1">
-                        <div v-for="slot in getSortedHand(data.p0_obs.hand)" :key="slot.originalIndex" 
-                             :class="[
-                                'rounded-lg border select-none transition flex flex-col items-center bg-slate-900 overflow-hidden relative shadow', 
-                                isCardPlayable(0, slot.originalIndex) ? 'cursor-pointer ring-2 ring-emerald-500/50 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)] hover:-translate-y-0.5' : 'opacity-50 border-slate-800',
-                                slot.card && slot.card.selected ? 'ring-2 ring-amber-500 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105 z-10' : '',
-                                slot.card && slot.card.deployed ? 'border-purple-500/70 border-dashed shadow-[0_0_10px_rgba(168,85,247,0.4)]' : ''
-                             ]"
-                             @click="isCardPlayable(0, slot.originalIndex) && sendAction(slot.originalIndex)">
-                            <template v-if="slot.card">
-                                <!-- Square Image -->
-                                <div class="w-full aspect-square overflow-hidden bg-slate-950/40 relative">
-                                    <img v-if="!slot.card.hidden && slot.card.id_str" 
-                                         :src="'/assets/image/items/' + slot.card.id_str + '.webp'" 
-                                         class="w-full h-full object-cover object-center" />
-                                    <div v-else-if="slot.card.hidden" class="absolute inset-0 flex items-center justify-center text-[16px] text-purple-400 font-extrabold card-back">？</div>
-                                    <div v-else class="absolute inset-0 flex items-center justify-center text-[9px] text-slate-600">No Image</div>
-                                    
-                                    <!-- Deployed Badge -->
-                                    <div v-if="slot.card.deployed" class="absolute top-1 left-1 bg-purple-600/90 text-white font-black text-[7px] px-1 py-0.5 rounded border border-purple-400 leading-none shadow z-20">展開中</div>
+                        <!-- Stats (HP, MP, CP) & Status (Ailments / Guardian) Right Next to Title -->
+                        <div class="flex items-center gap-3 bg-slate-900/80 px-3 py-1 rounded-xl border border-slate-800/80 text-[11px] shadow-inner">
+                            <div class="flex items-center gap-2.5">
+                                <div class="flex items-center gap-1">
+                                    <span class="text-slate-400 font-medium">HP</span>
+                                    <span class="text-rose-500 font-extrabold text-sm">{{ data.p0_obs.hp_me }}</span>
                                 </div>
-
-                                <!-- Power Label -->
-                                <div v-if="hasPowerLabel(slot.card, data.p0_obs.current_phase, 0)"
-                                     :class="['w-full h-[18px] flex items-center justify-center text-[11px] font-extrabold border-t border-black/10 leading-none', getPowerLabelClass(slot.card, data.p0_obs.current_phase, 0)]"
-                                     :style="getPowerLabelStyle(slot.card, data.p0_obs.current_phase, 0)">
-                                    {{ getPowerLabelText(slot.card, data.p0_obs.current_phase, 0) }}
+                                <div class="flex items-center gap-1">
+                                    <span class="text-slate-400 font-medium">MP</span>
+                                    <span class="text-cyan-400 font-extrabold text-sm">{{ data.p0_obs.mp_me }}</span>
                                 </div>
-                                <div v-else class="w-full h-[18px] border-t border-black/10 bg-slate-950/10"></div>
-                            </template>
-                            <template v-else>
-                                <!-- Empty slot -->
-                                <div class="w-full aspect-square flex items-center justify-center text-[9px] text-slate-700 font-bold border-b border-slate-800 border-dashed">
-                                    空
+                                <div class="flex items-center gap-1">
+                                    <span class="text-slate-400 font-medium">CP</span>
+                                    <span class="text-amber-500 font-extrabold text-sm">{{ data.p0_obs.money_me }}円</span>
                                 </div>
-                                <div class="w-full h-[18px] flex items-center justify-center text-[8px] text-slate-500 bg-slate-950/20 font-bold leading-none">
-                                    Slot {{ slot.originalIndex }}
-                                </div>
-                            </template>
+                            </div>
+                            
+                            <div class="flex items-center gap-1 border-l border-slate-800 pl-2.5" v-if="data.p0_obs.guardian_me !== 'なし' || data.p0_obs.sickness_me !== 'なし' || (data.p0_obs.curses_me && data.p0_obs.curses_me.length > 0)">
+                                <span v-if="data.p0_obs.guardian_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 font-bold text-[10px] leading-none">
+                                    {{ data.p0_obs.guardian_me }}
+                                </span>
+                                <span v-if="data.p0_obs.sickness_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30 font-bold text-[10px] leading-none">
+                                    {{ data.p0_obs.sickness_me }}
+                                </span>
+                                <span v-for="c in data.p0_obs.curses_me" :key="c" class="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 font-bold text-[10px] leading-none">
+                                    {{ c }}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Legal Actions -->
-                <div v-if="currentActorId === 0" class="flex flex-col gap-2 mt-auto">
-                    <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider">選択可能なアクション</h3>
-                    <div class="flex flex-col gap-1.5 overflow-y-auto max-height-[180px] pr-1">
-                        <button v-for="act in getNonCardActions(data.p0_obs)" :key="act.action_id"
-                                :class="['w-full py-2 px-3 text-xs font-bold rounded-lg text-left border transition', getActionButtonClass(act.action_id)]"
-                                @click="sendAction(act.action_id)">
-                            {{ act.description }}
-                        </button>
+                <!-- Staged Row (GodField Authentic Item Cards & Power Badge) -->
+                <div class="mb-4 flex flex-col gap-2">
+                    <h3 class="text-[11px] text-slate-400 font-bold uppercase tracking-wider flex items-center justify-between">
+                        <span>場に出しているカード</span>
+                    </h3>
+
+                    <!-- Cards Container -->
+                    <div class="bg-slate-950/50 rounded-2xl p-3 flex flex-wrap gap-2.5 min-h-[96px] items-center border border-slate-800/80 shadow-inner">
+                        <template v-if="data.p0_obs.staged && data.p0_obs.staged.length > 0">
+                            <!-- Authentic GodField Item Card Box (High Contrast Light Background) -->
+                            <div v-for="(card, idx) in data.p0_obs.staged" :key="idx" 
+                                 class="flex items-center gap-2.5 p-2 rounded-xl border bg-[#d4edda] border-[#a3d9b1] text-slate-900 shadow-md min-w-[170px] max-w-[210px] transition-transform hover:scale-105">
+                                <!-- Item Image -->
+                                <div class="w-11 h-11 rounded-lg overflow-hidden bg-slate-950/20 shrink-0 border border-emerald-600/30 shadow-inner">
+                                    <img v-if="card.id_str" :src="'/assets/image/items/' + card.id_str + '.webp'" class="w-full h-full object-cover" />
+                                    <div v-else class="w-full h-full flex items-center justify-center text-[9px] text-slate-600">No Img</div>
+                                </div>
+                                
+                                <!-- Item Info -->
+                                <div class="flex flex-col flex-grow min-w-0 justify-between h-full py-0.5">
+                                    <div class="text-xs font-black truncate text-[#155724] leading-tight">{{ card.name }}</div>
+                                    <div class="flex items-center justify-between mt-1">
+                                        <span class="text-xs font-black" :style="getPowerLabelStyle(card)">
+                                            {{ card.power_label }}
+                                        </span>
+                                        <span v-if="card.price" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-300/80 text-amber-950 border border-amber-500/40">
+                                            ¥{{ card.price }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <span v-else class="text-xs text-slate-500 w-full text-center py-4 italic font-medium">カードを出していません</span>
                     </div>
 
-                    <!-- Money exchange values -->
-                    <div v-if="getNumberActions(data.p0_obs).length > 0" class="flex flex-col gap-1 mt-2">
-                        <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">両替数値を選択</span>
-                        <div class="grid grid-cols-6 gap-1 bg-slate-950/30 p-1.5 rounded-lg max-h-[100px] overflow-y-auto">
-                            <button v-for="act in getNumberActions(data.p0_obs)" :key="act.action_id"
-                                    class="py-1 px-2 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 transition text-center"
+                    <!-- Total Power/Defense Pill Badge (Authentic GodField Style) -->
+                    <div v-if="data.p0_obs.staged_total_badge" class="flex justify-start mt-1">
+                        <div :class="['px-6 py-1.5 rounded-full text-base font-extrabold tracking-wider border-2 shadow-lg transition-all transform hover:scale-105', data.p0_obs.staged_total_badge.badge_class]">
+                            {{ data.p0_obs.staged_total_badge.label }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions & Hand (Grouped at the bottom area) -->
+                <div class="flex flex-col mt-auto gap-2.5">
+                    <!-- Legal Actions (Placed directly ABOVE hand cards, in bottom area) -->
+                    <div v-if="currentActorId === 0" class="flex flex-col gap-1.5 bg-slate-900/40 p-2 rounded-xl border border-slate-800/60">
+                        <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider">選択可能なアクション</h3>
+                        <div class="flex flex-wrap gap-2 overflow-y-auto max-h-[140px] pr-1">
+                            <button v-for="act in getNonCardActions(data.p0_obs)" :key="act.action_id"
+                                    :class="['py-2 px-4 text-xs font-bold rounded-xl border transition shadow-md', getActionButtonClass(act.action_id)]"
                                     @click="sendAction(act.action_id)">
-                                {{ act.action_id - 22 }}
+                                {{ act.smart_label || act.description }}
                             </button>
+                        </div>
+
+                        <!-- Money exchange values -->
+                        <div v-if="getNumberActions(data.p0_obs).length > 0" class="flex flex-col gap-1 mt-1">
+                            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">両替数値を選択</span>
+                            <div class="grid grid-cols-6 gap-1 bg-slate-950/30 p-1.5 rounded-lg max-h-[100px] overflow-y-auto">
+                                <button v-for="act in getNumberActions(data.p0_obs)" :key="act.action_id"
+                                        class="py-1 px-2 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 transition text-center"
+                                        @click="sendAction(act.action_id)">
+                                    {{ act.action_id - 22 }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hand (Fixed at the VERY BOTTOM) -->
+                    <div class="flex flex-col">
+                        <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">手札 ({{ countCards(data.p0_obs.hand) }}枚)</h3>
+                        <div class="grid grid-cols-9 gap-1.5 overflow-y-auto pr-1">
+                            <div v-for="slot in getSortedHand(data.p0_obs.hand)" :key="slot.originalIndex" 
+                                 :class="[
+                                    'rounded-lg border select-none transition flex flex-col items-center bg-slate-900 overflow-hidden relative shadow', 
+                                    isCardPlayable(0, slot.originalIndex) ? 'cursor-pointer ring-2 ring-emerald-500/50 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)] hover:-translate-y-0.5' : 'opacity-50 border-slate-800',
+                                    slot.card && slot.card.selected ? 'ring-2 ring-amber-500 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105 z-10' : '',
+                                    slot.card && slot.card.deployed ? 'border-purple-500/70 border-dashed shadow-[0_0_10px_rgba(168,85,247,0.4)]' : ''
+                                 ]"
+                                 @click="isCardPlayable(0, slot.originalIndex) && sendAction(slot.originalIndex)">
+                                <template v-if="slot.card">
+                                    <!-- Square Image -->
+                                    <div class="w-full aspect-square overflow-hidden bg-slate-950/40 relative">
+                                        <img v-if="!slot.card.hidden && slot.card.id_str" 
+                                             :src="'/assets/image/items/' + slot.card.id_str + '.webp'" 
+                                             class="w-full h-full object-cover object-center" />
+                                        <div v-else-if="slot.card.hidden" class="absolute inset-0 flex items-center justify-center text-[16px] text-purple-400 font-extrabold card-back">？</div>
+                                        <div v-else class="absolute inset-0 flex items-center justify-center text-[9px] text-slate-600">No Image</div>
+                                        
+                                        <!-- Deployed Badge -->
+                                        <div v-if="slot.card.deployed" class="absolute top-1 left-1 bg-purple-600/90 text-white font-black text-[7px] px-1 py-0.5 rounded border border-purple-400 leading-none shadow z-20">展開中</div>
+                                    </div>
+
+                                    <!-- Power Label -->
+                                    <div v-if="hasPowerLabel(slot.card, data.p0_obs.current_phase, 0)"
+                                         :class="['w-full h-[18px] flex items-center justify-center text-[11px] font-extrabold border-t border-black/10 leading-none bg-slate-200 text-slate-950']"
+                                         :style="getPowerLabelStyle(slot.card, data.p0_obs.current_phase, 0)">
+                                        {{ slot.card.power_label }}
+                                    </div>
+                                    <div v-else class="w-full h-[18px] border-t border-black/10 bg-slate-950/10"></div>
+                                </template>
+                                <template v-else>
+                                    <!-- Empty slot -->
+                                    <div class="w-full aspect-square flex items-center justify-center text-[9px] text-slate-700 font-bold border-b border-slate-800 border-dashed">
+                                        空
+                                    </div>
+                                    <div class="w-full h-[18px] flex items-center justify-center text-[8px] text-slate-500 bg-slate-950/20 font-bold leading-none">
+                                        Slot {{ slot.originalIndex }}
+                                    </div>
+                                </template>
+                            </div>
                         </div>
                     </div>
                 </div>
 
             </div>
 
-            <!-- Central Column -->
-            <div class="flex flex-col gap-4">
+            <!-- Central Column (Fixed Height Battle Log) -->
+            <div class="flex flex-col gap-3 h-full min-h-0 max-h-[calc(100vh-200px)] overflow-hidden">
                 
-                <!-- Match Meta -->
-                <div class="glass rounded-2xl p-4 text-center">
-                    <div class="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">ターン</div>
-                    <div class="text-3xl font-extrabold bg-gradient-to-r from-yellow-300 to-amber-500 bg-clip-text text-transparent mb-3">
-                        {{ data.p0_obs.current_turn }}
+                <!-- Battle Log (Fixed Window Height & Reversed Chronological Order) -->
+                <div class="glass rounded-2xl p-4 flex flex-col gap-3 border border-slate-800 h-full min-h-0 overflow-hidden shadow-xl">
+                    <div class="flex items-center justify-between pb-2 border-b border-slate-800/80 shrink-0">
+                        <span class="text-xs text-slate-300 uppercase tracking-widest font-extrabold flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)] animate-pulse"></span>
+                            バトルログ
+                        </span>
+                        <span class="text-[11px] text-slate-400 font-mono bg-slate-900/80 px-2.5 py-0.5 rounded-md border border-slate-800 shadow-inner" v-if="data.p0_obs.event_log">
+                            {{ data.p0_obs.event_log.length }} 件
+                        </span>
                     </div>
-                    
-                    <div class="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">フェーズ</div>
-                    <div class="inline-block bg-slate-950/60 border border-slate-800 px-4 py-1 rounded-full text-xs font-bold mb-4">
-                        {{ getPhaseLabel(data.p0_obs.current_phase) }}
-                    </div>
-
-                    <div class="flex flex-col items-center">
-                        <div class="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1.5">現在の手番</div>
-                        <div :class="['px-5 py-1.5 rounded-lg font-extrabold text-sm border shadow-md transition', 
-                                     currentActorId === 0 ? 'bg-blue-600/20 text-blue-400 border-blue-500/40' : 'bg-purple-600/20 text-purple-400 border-purple-500/40']">
-                            Player {{ currentActorId }} {{ currentActorId === 0 ? '(あなた)' : '(相手)' }}
+                    <div class="flex flex-col gap-2 overflow-y-auto pr-1 text-xs flex-grow h-full min-h-0 custom-scrollbar" id="battleLogContainer">
+                        <template v-if="data.p0_obs.event_log && data.p0_obs.event_log.length > 0">
+                            <div v-for="(item, idx) in data.p0_obs.event_log.slice().reverse()" :key="idx" 
+                                 :class="[
+                                     'flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-950/60 border-l-4 leading-relaxed transition-all duration-150 hover:bg-slate-900/80 hover:translate-x-0.5 shadow-sm shrink-0',
+                                     item.event_type === 3 ? 'border-blue-400 bg-blue-500/10' : '',
+                                     item.event_type === 7 ? 'border-slate-400 bg-slate-800/20' : '',
+                                     item.event_type === 8 ? 'border-amber-500 bg-amber-500/10' : '',
+                                     item.event_type === 10 ? 'border-pink-500 bg-pink-500/10' : '',
+                                     item.event_type === 11 ? 'border-red-500 bg-red-500/10' : '',
+                                     item.event_type === 12 ? 'border-emerald-500 bg-emerald-500/10' : '',
+                                     item.event_type === 14 ? 'border-cyan-400 bg-cyan-500/10' : '',
+                                     item.event_type === 15 ? 'border-amber-400 bg-amber-500/10' : '',
+                                     item.event_type === 16 ? 'border-indigo-400 bg-indigo-500/10' : '',
+                                     item.event_type === 19 ? 'border-slate-500 bg-slate-800/30' : '',
+                                     item.event_type === 20 ? 'border-purple-500 bg-purple-500/10' : '',
+                                     item.event_type === 21 ? 'border-fuchsia-500 bg-fuchsia-500/10' : '',
+                                     item.event_type === 22 ? 'border-violet-400 bg-violet-500/15' : '',
+                                     ![3,7,8,10,11,12,14,15,16,19,20,21,22].includes(item.event_type) ? 'border-slate-700' : ''
+                                 ]">
+                                <span :class="['px-2 py-0.5 rounded text-[10px] font-black text-white shrink-0 shadow-sm', item.actor === 0 ? 'bg-blue-600' : 'bg-purple-600']">
+                                    P{{ item.actor }}
+                                </span>
+                                <span class="text-slate-100 text-xs font-medium tracking-wide">{{ item.text }}</span>
+                            </div>
+                        </template>
+                        <div v-else class="text-slate-500 italic text-center py-20 text-xs">
+                            対戦ログはありません
                         </div>
                     </div>
-                </div>
-
-                <!-- Pending target display -->
-                <div class="glass rounded-2xl p-4 flex flex-col items-center text-center gap-3 border border-slate-800">
-                    <div class="text-xs text-slate-400 uppercase tracking-widest font-bold">保留中のターゲット</div>
-                    
-                    <div v-if="getActiveObs() && getActiveObs().pending_card" class="w-[84px]">
-                        <div class="rounded-lg border border-slate-700 bg-slate-900 overflow-hidden flex flex-col items-center select-none shadow-md">
-                            <!-- Square Image -->
-                            <div class="w-full aspect-square overflow-hidden bg-slate-950/40 relative">
-                                <img v-if="getActiveObs().pending_card.id_str" 
-                                     :src="'/assets/image/items/' + getActiveObs().pending_card.id_str + '.webp'" 
-                                     class="w-full h-full object-cover object-center" />
-                                <div v-else class="absolute inset-0 flex items-center justify-center text-[9px] text-slate-600">No Image</div>
-                            </div>
-
-                            <!-- Power Label -->
-                            <div v-if="hasPowerLabel(getActiveObs().pending_card, getActiveObs().current_phase, currentActorId)"
-                                 :class="['w-full h-[18px] flex items-center justify-center text-[11px] font-extrabold border-t border-black/10 leading-none', getPowerLabelClass(getActiveObs().pending_card, getActiveObs().current_phase, currentActorId)]"
-                                 :style="getPowerLabelStyle(getActiveObs().pending_card, getActiveObs().current_phase, currentActorId)">
-                                {{ getPowerLabelText(getActiveObs().pending_card, getActiveObs().current_phase, currentActorId) }}
-                            </div>
-                        </div>
-                    </div>
-                    <div v-else class="text-xs text-slate-500 italic my-4">
-                        保留中のカードはありません
-                    </div>
-                </div>
-
-                <!-- Instructions -->
-                <div class="glass rounded-2xl p-4 text-xs text-slate-400 flex flex-col gap-2 flex-grow">
-                    <div class="text-xs text-slate-300 uppercase tracking-widest font-bold mb-1">遊び方・ヘルプ</div>
-                    <p>1. ハイライトされた手札カードをクリックすると、場に仮置き（Staged）されます。</p>
-                    <p>2. その後、手番プレイヤー画面の下部に「相手を対象にする」「自分を対象にする」「確定」などのボタンが表示されるので、それをクリックすると効果が解決されます。</p>
-                    <p>3. 相手(P1)をAIにしている場合、自動で相手は思考を行います。チェックを外せば2Pの手動操作が可能です。</p>
                 </div>
             </div>
 
@@ -347,132 +370,161 @@
                     </button>
                 </div>
 
-                <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-800">
-                    <span class="font-bold text-lg text-purple-400">相手 (プレイヤー1)</span>
-                    <span v-if="currentActorId === 1" class="text-xs bg-gradient-to-r from-purple-500 to-blue-500 px-2 py-0.5 rounded-full font-bold animate-pulse">思考中</span>
-                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3 pb-2 border-b border-slate-800">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <span class="font-bold text-lg text-purple-400">相手 (プレイヤー1)</span>
+                        <span v-if="currentActorId === 1" class="text-xs bg-gradient-to-r from-purple-500 to-blue-500 px-2 py-0.5 rounded-full font-bold animate-pulse">思考中</span>
 
-                <!-- Compact Stats & Ailments -->
-                <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 p-2 rounded-xl border border-slate-800/80 mb-3 text-[11px]">
-                    <div class="flex items-center gap-3">
-                        <div class="flex items-center gap-1">
-                            <span class="text-slate-500 font-medium">HP</span>
-                            <span class="text-rose-500 font-extrabold text-sm">{{ data.p1_obs.hp_me }}</span>
+                        <!-- Stats (HP, MP, CP) & Status (Ailments / Guardian) Right Next to Title -->
+                        <div class="flex items-center gap-3 bg-slate-900/80 px-3 py-1 rounded-xl border border-slate-800/80 text-[11px] shadow-inner">
+                            <div class="flex items-center gap-2.5">
+                                <div class="flex items-center gap-1">
+                                    <span class="text-slate-400 font-medium">HP</span>
+                                    <span class="text-rose-500 font-extrabold text-sm">{{ data.p1_obs.hp_me }}</span>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <span class="text-slate-400 font-medium">MP</span>
+                                    <span class="text-cyan-400 font-extrabold text-sm">{{ data.p1_obs.mp_me }}</span>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <span class="text-slate-400 font-medium">CP</span>
+                                    <span class="text-amber-500 font-extrabold text-sm">{{ data.p1_obs.money_me }}円</span>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center gap-1 border-l border-slate-800 pl-2.5" v-if="data.p1_obs.guardian_me !== 'なし' || data.p1_obs.sickness_me !== 'なし' || (data.p1_obs.curses_me && data.p1_obs.curses_me.length > 0)">
+                                <span v-if="data.p1_obs.guardian_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 font-bold text-[10px] leading-none">
+                                    {{ data.p1_obs.guardian_me }}
+                                </span>
+                                <span v-if="data.p1_obs.sickness_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30 font-bold text-[10px] leading-none">
+                                    {{ data.p1_obs.sickness_me }}
+                                </span>
+                                <span v-for="c in data.p1_obs.curses_me" :key="c" class="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 font-bold text-[10px] leading-none">
+                                    {{ c }}
+                                </span>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-1">
-                            <span class="text-slate-500 font-medium">MP</span>
-                            <span class="text-cyan-400 font-extrabold text-sm">{{ data.p1_obs.mp_me }}</span>
-                        </div>
-                        <div class="flex items-center gap-1">
-                            <span class="text-slate-500 font-medium">所持金</span>
-                            <span class="text-amber-500 font-extrabold text-sm">{{ data.p1_obs.money_me }}円</span>
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center gap-1.5">
-                        <span v-if="data.p1_obs.guardian_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 font-bold text-[9px] leading-none">
-                            {{ data.p1_obs.guardian_me }}
-                        </span>
-                        <span v-if="data.p1_obs.sickness_me !== 'なし'" class="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30 font-bold text-[9px] leading-none">
-                            {{ data.p1_obs.sickness_me }}
-                        </span>
-                        <span v-for="c in data.p1_obs.curses_me" :key="c" class="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 font-bold text-[9px] leading-none">
-                            {{ c }}
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Staged Row (moved above hand) -->
-                <div class="mb-3">
-                    <h3 class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">場に出しているカード</h3>
-                    <div class="bg-slate-950/40 rounded-lg p-1.5 flex gap-1.5 min-h-[36px] items-center border border-slate-900 mb-2">
-                        <span v-if="data.p1_obs.staged.length === 0" class="text-xs text-slate-600 w-full text-center py-1">場にカードを出していません</span>
-                        <span v-for="(card, idx) in data.p1_obs.staged" :key="idx" :class="['text-[9px] px-2 py-0.5 rounded font-bold border shadow-sm', getCardColorClass(card)]">
-                            {{ card.name }}
-                        </span>
-                    </div>
-                    <div class="bg-slate-950/40 rounded-lg p-1.5 flex gap-1.5 min-h-[36px] items-center border border-slate-900">
-                        <span v-if="data.p1_obs.opponent_staged.length === 0" class="text-xs text-slate-600 w-full text-center py-1">相手はカードを出していません</span>
-                        <span v-for="(card, idx) in data.p1_obs.opponent_staged" :key="idx" :class="['text-[9px] px-2 py-0.5 rounded font-bold border shadow-sm', getCardColorClass(card)]">
-                            {{ card.name }}
-                        </span>
                     </div>
                 </div>
 
-                <!-- Hand -->
-                <div class="flex flex-col flex-grow min-h-0 mb-4">
-                    <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">
-                        手札 ({{ countCards(data.p1_obs.hand) }}枚) 
-                        <span v-if="aiEnabled" class="text-[10px] text-slate-500 normal-case">(AI自動操作中)</span>
+                <!-- Staged Row (GodField Authentic Item Cards & Power Badge) -->
+                <div class="mb-4 flex flex-col gap-2">
+                    <h3 class="text-[11px] text-slate-400 font-bold uppercase tracking-wider flex items-center justify-between">
+                        <span>場に出しているカード</span>
                     </h3>
-                    <div class="grid grid-cols-9 gap-1.5 overflow-y-auto pr-1">
-                        <div v-for="slot in getSortedHand(data.p1_obs.hand)" :key="slot.originalIndex" 
-                             :class="[
-                                'rounded-lg border select-none transition flex flex-col items-center bg-slate-900 overflow-hidden relative shadow', 
-                                isCardPlayable(1, slot.originalIndex) ? 'cursor-pointer ring-2 ring-emerald-500/50 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)] hover:-translate-y-0.5' : 'opacity-50 border-slate-800',
-                                slot.card && slot.card.selected ? 'ring-2 ring-amber-500 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105 z-10' : '',
-                                slot.card && slot.card.deployed ? 'border-purple-500/70 border-dashed shadow-[0_0_10px_rgba(168,85,247,0.4)]' : ''
-                             ]"
-                             @click="isCardPlayable(1, slot.originalIndex) && sendAction(slot.originalIndex)">
-                            <template v-if="slot.card">
-                                <!-- Square Image -->
-                                <div class="w-full aspect-square overflow-hidden bg-slate-950/40 relative">
-                                    <img v-if="!slot.card.hidden && slot.card.id_str" 
-                                         :src="'/assets/image/items/' + slot.card.id_str + '.webp'" 
-                                         class="w-full h-full object-cover object-center" />
-                                    <div v-else-if="slot.card.hidden" class="absolute inset-0 flex items-center justify-center text-[16px] text-purple-400 font-extrabold card-back">？</div>
-                                    <div v-else class="absolute inset-0 flex items-center justify-center text-[9px] text-slate-600">No Image</div>
-                                    
-                                    <!-- Deployed Badge -->
-                                    <div v-if="slot.card.deployed" class="absolute top-1 left-1 bg-purple-600/90 text-white font-black text-[7px] px-1 py-0.5 rounded border border-purple-400 leading-none shadow z-20">展開中</div>
-                                </div>
 
-                                <!-- Power Label -->
-                                <div v-if="hasPowerLabel(slot.card, data.p1_obs.current_phase, 1)"
-                                     :class="['w-full h-[18px] flex items-center justify-center text-[11px] font-extrabold border-t border-black/10 leading-none', getPowerLabelClass(slot.card, data.p1_obs.current_phase, 1)]"
-                                     :style="getPowerLabelStyle(slot.card, data.p1_obs.current_phase, 1)">
-                                    {{ getPowerLabelText(slot.card, data.p1_obs.current_phase, 1) }}
+                    <!-- Cards Container -->
+                    <div class="bg-slate-950/50 rounded-2xl p-3 flex flex-wrap gap-2.5 min-h-[96px] items-center border border-slate-800/80 shadow-inner">
+                        <template v-if="data.p1_obs.staged && data.p1_obs.staged.length > 0">
+                            <!-- Authentic GodField Item Card Box (High Contrast Light Background) -->
+                            <div v-for="(card, idx) in data.p1_obs.staged" :key="idx" 
+                                 class="flex items-center gap-2.5 p-2 rounded-xl border bg-[#d4edda] border-[#a3d9b1] text-slate-900 shadow-md min-w-[170px] max-w-[210px] transition-transform hover:scale-105">
+                                <!-- Item Image -->
+                                <div class="w-11 h-11 rounded-lg overflow-hidden bg-slate-950/20 shrink-0 border border-emerald-600/30 shadow-inner">
+                                    <img v-if="card.id_str" :src="'/assets/image/items/' + card.id_str + '.webp'" class="w-full h-full object-cover" />
+                                    <div v-else class="w-full h-full flex items-center justify-center text-[9px] text-slate-600">No Img</div>
                                 </div>
-                                <div v-else class="w-full h-[18px] border-t border-black/10 bg-slate-950/10"></div>
-                            </template>
-                            <template v-else>
-                                <!-- Empty slot -->
-                                <div class="w-full aspect-square flex items-center justify-center text-[9px] text-slate-700 font-bold border-b border-slate-800 border-dashed">
-                                    空
+                                
+                                <!-- Item Info -->
+                                <div class="flex flex-col flex-grow min-w-0 justify-between h-full py-0.5">
+                                    <div class="text-xs font-black truncate text-[#155724] leading-tight">{{ card.name }}</div>
+                                    <div class="flex items-center justify-between mt-1">
+                                        <span class="text-xs font-black" :style="getPowerLabelStyle(card, data.p1_obs.current_phase, 1)">
+                                            {{ card.power_label }}
+                                        </span>
+                                        <span v-if="card.price" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-300/80 text-amber-950 border border-amber-500/40">
+                                            ¥{{ card.price }}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div class="w-full h-[18px] flex items-center justify-center text-[8px] text-slate-500 bg-slate-950/20 font-bold leading-none">
-                                    Slot {{ slot.originalIndex }}
-                                </div>
-                            </template>
+                            </div>
+                        </template>
+                        <span v-else class="text-xs text-slate-500 w-full text-center py-4 italic font-medium">カードを出していません</span>
+                    </div>
+
+                    <!-- Total Power/Defense Pill Badge (Authentic GodField Style) -->
+                    <div v-if="data.p1_obs.staged_total_badge" class="flex justify-start mt-1">
+                        <div :class="['px-6 py-1.5 rounded-full text-base font-extrabold tracking-wider border-2 shadow-lg transition-all transform hover:scale-105', data.p1_obs.staged_total_badge.badge_class]">
+                            {{ data.p1_obs.staged_total_badge.label }}
                         </div>
                     </div>
                 </div>
 
-
-                <!-- Legal Actions -->
-                <div v-if="currentActorId === 1 && !aiEnabled" class="flex flex-col gap-2 mt-auto">
-                    <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider">選択可能なアクション</h3>
-                    <div class="flex flex-col gap-1.5 overflow-y-auto max-height-[180px] pr-1">
-                        <button v-for="act in getNonCardActions(data.p1_obs)" :key="act.action_id"
-                                :class="['w-full py-2 px-3 text-xs font-bold rounded-lg text-left border transition', getActionButtonClass(act.action_id)]"
-                                @click="sendAction(act.action_id)">
-                            {{ act.description }}
-                        </button>
-                    </div>
-
-                    <!-- Money exchange values -->
-                    <div v-if="getNumberActions(data.p1_obs).length > 0" class="flex flex-col gap-1 mt-2">
-                        <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">両替数値を選択</span>
-                        <div class="grid grid-cols-6 gap-1 bg-slate-950/30 p-1.5 rounded-lg max-h-[100px] overflow-y-auto">
-                            <button v-for="act in getNumberActions(data.p1_obs)" :key="act.action_id"
-                                    class="py-1 px-2 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 transition text-center"
+                <!-- Actions & Hand (Grouped at the bottom area) -->
+                <div class="flex flex-col mt-auto gap-2.5">
+                    <!-- Legal Actions (Placed directly ABOVE hand cards when AI is disabled) -->
+                    <div v-if="currentActorId === 1 && !aiEnabled" class="flex flex-col gap-1.5 bg-slate-900/40 p-2 rounded-xl border border-slate-800/60">
+                        <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider">選択可能なアクション</h3>
+                        <div class="flex flex-wrap gap-2 overflow-y-auto max-h-[140px] pr-1">
+                            <button v-for="act in getNonCardActions(data.p1_obs)" :key="act.action_id"
+                                    :class="['py-2 px-4 text-xs font-bold rounded-xl border transition shadow-md', getActionButtonClass(act.action_id)]"
                                     @click="sendAction(act.action_id)">
-                                {{ act.action_id - 22 }}
+                                {{ act.smart_label || act.description }}
                             </button>
                         </div>
+
+                        <!-- Money exchange values -->
+                        <div v-if="getNumberActions(data.p1_obs).length > 0" class="flex flex-col gap-1 mt-1">
+                            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">両替数値を選択</span>
+                            <div class="grid grid-cols-6 gap-1 bg-slate-950/30 p-1.5 rounded-lg max-h-[100px] overflow-y-auto">
+                                <button v-for="act in getNumberActions(data.p1_obs)" :key="act.action_id"
+                                        class="py-1 px-2 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 transition text-center"
+                                        @click="sendAction(act.action_id)">
+                                    {{ act.action_id - 22 }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hand (Fixed at the VERY BOTTOM) -->
+                    <div class="flex flex-col">
+                        <h3 class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">
+                            手札 ({{ countCards(data.p1_obs.hand) }}枚) 
+                            <span v-if="aiEnabled" class="text-[10px] text-slate-500 normal-case">(AI自動操作中)</span>
+                        </h3>
+                        <div class="grid grid-cols-9 gap-1.5 overflow-y-auto pr-1">
+                            <div v-for="slot in getSortedHand(data.p1_obs.hand)" :key="slot.originalIndex" 
+                                 :class="[
+                                    'rounded-lg border select-none transition flex flex-col items-center bg-slate-900 overflow-hidden relative shadow', 
+                                    isCardPlayable(1, slot.originalIndex) ? 'cursor-pointer ring-2 ring-emerald-500/50 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)] hover:-translate-y-0.5' : 'opacity-50 border-slate-800',
+                                    slot.card && slot.card.selected ? 'ring-2 ring-amber-500 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105 z-10' : '',
+                                    slot.card && slot.card.deployed ? 'border-purple-500/70 border-dashed shadow-[0_0_10px_rgba(168,85,247,0.4)]' : ''
+                                 ]"
+                                 @click="isCardPlayable(1, slot.originalIndex) && sendAction(slot.originalIndex)">
+                                <template v-if="slot.card">
+                                    <!-- Square Image -->
+                                    <div class="w-full aspect-square overflow-hidden bg-slate-950/40 relative">
+                                        <img v-if="!slot.card.hidden && slot.card.id_str" 
+                                             :src="'/assets/image/items/' + slot.card.id_str + '.webp'" 
+                                             class="w-full h-full object-cover object-center" />
+                                        <div v-else-if="slot.card.hidden" class="absolute inset-0 flex items-center justify-center text-[16px] text-purple-400 font-extrabold card-back">？</div>
+                                        <div v-else class="absolute inset-0 flex items-center justify-center text-[9px] text-slate-600">No Image</div>
+                                        
+                                        <!-- Deployed Badge -->
+                                        <div v-if="slot.card.deployed" class="absolute top-1 left-1 bg-purple-600/90 text-white font-black text-[7px] px-1 py-0.5 rounded border border-purple-400 leading-none shadow z-20">展開中</div>
+                                    </div>
+
+                                    <!-- Power Label -->
+                                    <div v-if="hasPowerLabel(slot.card, data.p1_obs.current_phase, 1)"
+                                         :class="['w-full h-[18px] flex items-center justify-center text-[11px] font-extrabold border-t border-black/10 leading-none bg-slate-200 text-slate-950']"
+                                         :style="getPowerLabelStyle(slot.card, data.p1_obs.current_phase, 1)">
+                                        {{ slot.card.power_label }}
+                                    </div>
+                                    <div v-else class="w-full h-[18px] border-t border-black/10 bg-slate-950/10"></div>
+                                </template>
+                                <template v-else>
+                                    <!-- Empty slot -->
+                                    <div class="w-full aspect-square flex items-center justify-center text-[9px] text-slate-700 font-bold border-b border-slate-800 border-dashed">
+                                        空
+                                    </div>
+                                    <div class="w-full h-[18px] flex items-center justify-center text-[8px] text-slate-500 bg-slate-950/20 font-bold leading-none">
+                                        Slot {{ slot.originalIndex }}
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
             </div>
 
         </div>
@@ -482,168 +534,27 @@
         const { createApp } = Vue;
 
         const CardVisuals = {
-            isSellRelatedPhase(phase) {
-                if (phase === 'PHASE_SELL_SELECT' || phase === 'PHASE_SELL_SELECT_MIRROR') {
-                    return true;
-                }
-                if (phase === 'PHASE_MAIN_TARGET_SELECT') {
-                    const hasStagedSell = (this.data?.p0_obs?.staged?.some(c => c && c.name === '売る') || 
-                                          this.data?.p1_obs?.staged?.some(c => c && c.name === '売る'));
-                    if (hasStagedSell) {
-                        return true;
-                    }
-                }
-                return false;
-            },
-            canReactInPhase(card, phase) {
-                if (!card || !card.reaction_type) return false;
-                if (!card.usage_timing) return false;
-                
-                if (phase === 'PHASE_DEFENSE') {
-                    const name = card.name;
-                    const isSuperMirror = name === 'スーパーミラー';
-                    const isPhysicalReaction = ['壁', '反射剣', '乱弾武剣'].includes(name);
-                    
-                    if (isSuperMirror) return true;
-                    if (isPhysicalReaction) {
-                        const attackElem = this.data?.pending_attack_element || 'none';
-                        return attackElem.toLowerCase() === 'none';
-                    }
-                    return false;
-                }
-                if (phase === 'PHASE_MIRACLE_DEFENSE') {
-                    return card.usage_timing.includes('miracle_defence_phase');
-                }
-                return false;
-            },
             getCardColorClass(card) {
                 if (!card) return 'bg-slate-900/10 border-slate-800 text-slate-600';
                 if (card.hidden) return 'border-purple-900/30 card-back text-purple-400';
                 
-                const elem = card.element.toLowerCase();
-                if (elem === 'fire') return 'bg-red-950/20 border-red-500/30 text-red-300';
-                if (elem === 'water') return 'bg-blue-950/20 border-blue-500/30 text-blue-300';
-                if (elem === 'wood') return 'bg-green-950/20 border-green-500/30 text-green-300';
-                if (elem === 'stone') return 'bg-stone-900/40 border-stone-500/30 text-stone-300';
-                if (elem === 'light') return 'bg-yellow-950/20 border-yellow-500/30 text-yellow-300';
-                if (elem === 'darkness') return 'bg-purple-950/20 border-purple-500/30 text-purple-300';
-                return 'bg-slate-900 border-slate-800 text-slate-300';
+                const elem = (card.element || 'none').toLowerCase();
+                if (elem.includes('fire') || elem.includes('火')) return 'bg-red-950/30 border-red-500/40 text-red-400';
+                if (elem.includes('water') || elem.includes('水')) return 'bg-blue-950/30 border-blue-500/40 text-blue-400';
+                if (elem.includes('wood') || elem.includes('木')) return 'bg-orange-950/30 border-orange-500/40 text-orange-400';
+                if (elem.includes('stone') || elem.includes('土')) return 'bg-slate-900/50 border-slate-400/40 text-slate-300';
+                if (elem.includes('light') || elem.includes('光')) return 'bg-yellow-950/30 border-yellow-500/40 text-yellow-300';
+                if (elem.includes('darkness') || elem.includes('闇')) return 'bg-purple-950/30 border-purple-500/40 text-purple-300';
+                return 'bg-slate-900 border-slate-800 text-slate-200';
             },
             hasPowerLabel(card, phase, playerId) {
-                if (!card) return false;
-                if (card.hidden) return true;
-                
-                if (this.isSellRelatedPhase(phase) && playerId === this.currentActorId) {
-                    return true;
-                }
-                
-                const isSpirit = card.name && card.name.includes('精霊');
-                if (phase === 'PHASE_MIRACLE_PLUS' && isSpirit && playerId === this.currentActorId) {
-                    return true;
-                }
-                
-                if (card.type === 'weapon' || card.type === 'defense') return true;
-                if (card.type === 'miracle' && (card.attack_power > 0 || card.defense_power > 0)) return true;
-                return false;
+                if (!card || card.hidden) return false;
+                if (card.name === '売る' || card.name === '買戻し') return false;
+                return Boolean(card.power_label);
             },
-            getPowerLabelText(card, phase, playerId) {
-                if (!card) return '';
-                if (card.hidden) return '？';
-                
-                if (this.isSellRelatedPhase(phase) && playerId === this.currentActorId) {
-                    return `¥${card.price || 0}`;
-                }
-                
-                const isDefensePhase = phase === 'PHASE_DEFENSE' || phase === 'PHASE_MIRACLE_DEFENSE';
-                
-                if (isDefensePhase && playerId === this.currentActorId && this.canReactInPhase(card, phase)) {
-                    if (card.reaction_type === 'bounce') return '弾く';
-                    if (card.reaction_type === 'reflect') return 'はね返す';
-                    if (card.reaction_type === 'block') return '止める';
-                }
-                
-                const isSpirit = card.name && card.name.includes('精霊');
-                if (phase === 'PHASE_MIRACLE_PLUS' && isSpirit && playerId === this.currentActorId) {
-                    return 'コスト0';
-                }
-                const isPlus = card.usage_timing && (card.usage_timing.includes('atk_plus_phase') || card.usage_timing.includes('miracle_plus_phase'));
-                const prefix = isPlus ? '+' : '';
-                
-                if (card.type === 'weapon') {
-                    const canDefend = card.usage_timing && (card.usage_timing.includes('atk_defence_phase') || card.usage_timing.includes('miracle_defence_phase'));
-                    if (isDefensePhase && playerId === this.currentActorId && canDefend) {
-                        const defVal = card.defense_power > 0 ? card.defense_power : card.attack_power;
-                        return `守${defVal}`;
-                    } else {
-                        const pct = (!isDefensePhase && card.is_group_attack) ? `${card.accuracy}%` : '';
-                        return `${pct}${prefix}攻${card.attack_power}`;
-                    }
-                }
-                
-                if (card.type === 'defense') {
-                    if (phase === 'PHASE_ATTACK_PLUS' && isPlus && playerId === this.currentActorId) {
-                        return `+攻${card.defense_power}`;
-                    }
-                    return `守${card.defense_power}`;
-                }
-                
-                if (card.type === 'miracle') {
-                    if (isDefensePhase && playerId === this.currentActorId) {
-                        if (card.defense_power > 0) {
-                            return `守${card.defense_power}`;
-                        } else if (card.attack_power > 0) {
-                            return `守${card.attack_power}`;
-                        }
-                    } else {
-                        const pct = (!isDefensePhase && card.is_group_attack) ? `${card.accuracy}%` : '';
-                        if (card.attack_power > 0) {
-                            return `${pct}${prefix}攻${card.attack_power}`;
-                        } else if (card.defense_power > 0) {
-                            return `${pct}${prefix}守${card.defense_power}`;
-                        }
-                    }
-                }
-                
-                return '';
-            },
-            getPowerLabelClass(card, phase, playerId) {
-                if (!card || card.hidden) return 'bg-slate-950/40';
-                
-                const isDefensePhase = phase === 'PHASE_DEFENSE' || phase === 'PHASE_MIRACLE_DEFENSE';
-                if (isDefensePhase && playerId === this.currentActorId && this.canReactInPhase(card, phase)) {
-                    if (card.reaction_type === 'bounce') return 'bg-[#f1a80a] text-white';
-                    if (card.reaction_type === 'reflect') return 'bg-[#ff3b70] text-white';
-                    if (card.reaction_type === 'block') return 'bg-[#00a82f] text-white';
-                }
-                
-                if (card.type === 'miracle') {
-                    return 'bg-[#e8f0fe]';
-                }
-                return 'bg-[#e6f4ea]';
-            },
-            getPowerLabelStyle(card, phase, playerId) {
-                if (!card || card.hidden) return { color: '#64748b' };
-                
-                if (this.isSellRelatedPhase(phase) && playerId === this.currentActorId) {
-                    return { color: '#1e293b' }; // Neutral slate color for prices
-                }
-                
-                const isDefensePhase = phase === 'PHASE_DEFENSE' || phase === 'PHASE_MIRACLE_DEFENSE';
-                if (isDefensePhase && playerId === this.currentActorId && this.canReactInPhase(card, phase)) {
-                    return { color: '#ffffff' };
-                }
-                
-                const elem = card.element || 'none';
-                const colors = {
-                    'none': '#111111',
-                    '火': '#ff6666',
-                    '水': '#6666ff',
-                    '木': '#ff9900',
-                    '土': '#6688aa',
-                    '光': '#c5c500',
-                    '闇': '#aa55cc'
-                };
-                return { color: colors[elem] || '#111111' };
+            getPowerLabelStyle(card) {
+                if (!card || card.hidden) return { color: '#94a3b8' };
+                return { color: card.text_color || '#000000' };
             }
         };
 
@@ -695,6 +606,28 @@
                     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                         this.ws.send(JSON.stringify({ type: 'reset' }));
                     }
+                },
+                getElementBadgeClass(element, role) {
+                    const elem = (element || '').toLowerCase();
+                    if (elem === 'fire' || elem === '火') {
+                        return 'bg-gradient-to-r from-red-600 to-rose-700 border border-red-400 text-white shadow-[0_0_12px_rgba(239,68,68,0.4)]';
+                    }
+                    if (elem === 'water' || elem === '水') {
+                        return 'bg-gradient-to-r from-blue-600 to-cyan-700 border border-blue-400 text-white shadow-[0_0_12px_rgba(59,130,246,0.4)]';
+                    }
+                    if (elem === 'wood' || elem === '木') {
+                        return 'bg-gradient-to-r from-orange-500 to-amber-600 border border-orange-400 text-white shadow-[0_0_12px_rgba(249,115,22,0.4)]';
+                    }
+                    if (elem === 'light' || elem === '光') {
+                        return 'bg-gradient-to-r from-amber-400 to-yellow-400 border border-yellow-200 text-slate-950 font-black shadow-[0_0_12px_rgba(245,158,11,0.4)]';
+                    }
+                    if (elem === 'darkness' || elem === '闇') {
+                        return 'bg-gradient-to-r from-purple-800 to-indigo-950 border border-purple-400 text-purple-200 shadow-[0_0_12px_rgba(168,85,247,0.4)]';
+                    }
+                    if (elem === 'stone' || elem === '土') {
+                        return 'bg-gradient-to-r from-slate-600 to-slate-800 border border-slate-400 text-slate-100 shadow-[0_0_12px_rgba(100,116,139,0.4)]';
+                    }
+                    return 'bg-gradient-to-r from-slate-800 to-slate-950 border border-slate-600 text-white font-black shadow-[0_0_12px_rgba(0,0,0,0.6)]';
                 },
                 toggleAI() {
                     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -784,6 +717,12 @@
             },
             mounted() {
                 this.connect();
+            },
+            updated() {
+                this.$nextTick(() => {
+                    const el = document.getElementById('battleLogContainer');
+                    if (el) el.scrollTop = 0;
+                });
             }
         }).mount('#app');
     </script>

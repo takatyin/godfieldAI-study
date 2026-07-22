@@ -136,12 +136,38 @@ enum class GamePhase {
     PHASE_END
 };
 
+enum class EventType : uint8_t {
+    NONE = 0,
+    STAGE_CARD = 1,       // カード仮置き (武器/防具/奇跡/雑貨等)
+    UNSTAGE_CARD = 2,     // 仮置き解除
+    CONFIRM_ATTACK = 3,   // 攻撃確定
+    CONFIRM_DEFENSE = 4,  // 防御確定 (ガード)
+    PASS_DEFENSE = 5,     // 防御スルー (ダメージ直接受領)
+    ATTACK_HIT = 6,       // 攻撃ヒット
+    ATTACK_MISS = 7,      // 攻撃ミス / 命中失敗 (全体攻撃等)
+    EFFECT_SICKNESS = 8,  // 病気効果発動 (天国病の発作, 地獄病等)
+    EFFECT_GUARDIAN = 9,  // 守護神効果発動
+    REFLECT_DAMAGE = 10,  // 反射 / バウンス発動
+    TAKE_DAMAGE = 11,     // ダメージ適用
+    HEAL_HP = 12,         // HP回復
+    HEAL_MP = 13,         // MP回復
+    BUY_CARD = 14,        // カード購入
+    SELL_CARD = 15,       // カード売却
+    EXCHANGE = 16,        // 両替
+    DRAW_CARD = 17,       // カードドロー
+    DISCARD_CARD = 18,    // カード廃棄
+    REFUSE_DEAL = 19,     // 取引見送り・購入拒否
+    BLOCK_ATTACK = 20,    // 阻止発動 (BLOCK)
+    BOUNCE_ATTACK = 21,   // 弾く発動 (BOUNCE: value=1.0で成功, 0.0で失敗)
+    TRIGGER_PHENOMENON = 22 // 超常現象発動 (運命のひも等: value=phenomenon_id)
+};
+
 struct GameEvent {
     int actor;       // 0: 自分(観測者), 1: 相手 (視点正規化時に XOR で反転する)
-    int phase;       // フェイズID
-    int action_type; // 攻撃, 防御, スルー, 買う, 等
-    int card_id;     // 使用されたカードID (非公開情報は 0 にマスキング)
-    float damage;    // 確定したダメージ量などのスカラー値
+    int event_type;  // EventType enum
+    int card_id;     // 関連カードID (非公開情報は 0 にマスキング, なしは -1)
+    int target_id;   // 対象プレイヤー (0: 自分, 1: 相手, なしは -1)
+    float value;     // ダメージ量 / 回復量 / 成功フラグなどの値
 };
 
 struct alignas(64) Observation {
@@ -173,12 +199,16 @@ struct alignas(64) Observation {
     int opponent_staged_cards[MAX_HAND_SIZE]; // 相手が場に出しているカードID（攻撃順など）
     int pending_card;                         // 注目カード（飛んできた攻撃や買う対象など。なし=0）
 
-    // イベント履歴（リングバッファ）
+    // イベント履歴（リングバッファ: 64 * 5 = 320 float + 1 float head = 321 float -> 129 + 321 = 450）
     GameEvent history[HISTORY_LENGTH];
-    int history_head; // 次に書き込むインデックス
+    int history_head;  // 次に書き込むインデックス
 
-    // 合法手マスク
+    // 合法手マスク (インデックス 450..571)
     float action_mask[ACTION_SPACE_SIZE]; // 1.0 = 選択可能, 0.0 = 選択不可
+
+    // 追加メタデータ (action_maskの直後に配置)
+    int history_count; // 通算イベント生成数
+    int player_id;     // 観測プレイヤーID (0 or 1)
 };
 
 struct Transition {
@@ -233,6 +263,8 @@ struct alignas(64) InternalState {
     int defender_id;                // 防御側のプレイヤーID (自分自身を攻撃する場合もあるため必要)
     int pending_attack_power;       // 現在保留中の攻撃力
     Element pending_attack_element; // 現在保留中の攻撃の属性
+    int pending_defense_power;      // 現在保留中の防御力
+    int pending_sell_price;         // 現在保留中の売却価格
     bool pending_absorption;        // 現在保留中の攻撃がHP吸収を持つか
     bool pending_deal_same_damage;  // 現在保留中の攻撃が自傷効果（邪神の大剣）を持つか
     bool pending_is_group_attack;   // 現在保留中の攻撃が全体攻撃であるか
@@ -277,4 +309,9 @@ struct alignas(64) InternalState {
     bool is_done;    // ゲームが終了したかどうか（誰かのHPが0になった、最大ターン数を超過した等）
     float p0_reward; // Player 0 が受け取る報酬（勝利で 1.0, 敗北で -1.0, 引き分けで 0.0）
     float p1_reward; // Player 1 が受け取る報酬（勝利で 1.0, 敗北で -1.0, 引き分けで 0.0）
+
+    // === イベント履歴 (リングバッファ) ===
+    GameEvent history[HISTORY_LENGTH];
+    int history_head = 0;  // 次に書き込むインデックス
+    int history_count = 0; // 通算イベント生成数
 };

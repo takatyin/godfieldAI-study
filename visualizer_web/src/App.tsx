@@ -18,6 +18,16 @@ type LegalAction = {
   description: string;
 };
 
+type EventLogItem = {
+  actor: number;
+  event_type: number;
+  card_id: number;
+  card_name?: string;
+  target_id: number;
+  value: number;
+  text: string;
+};
+
 type Observation = {
   player_id: number;
   hp_me: number;
@@ -43,6 +53,8 @@ type Observation = {
   current_turn: number;
   is_done: boolean;
   is_apocalypse: boolean;
+  event_log?: EventLogItem[];
+  history_count?: number;
 };
 
 type ServerMessage = {
@@ -56,7 +68,10 @@ function App() {
   const [data, setData] = useState<ServerMessage | null>(null);
   const [connected, setConnected] = useState(false);
   const [seed, setSeed] = useState<number>(42);
+  const [battleLog, setBattleLog] = useState<EventLogItem[]>([]);
+  const [activePopup, setActivePopup] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const connect = () => {
     const ws = new WebSocket('ws://localhost:8000/ws');
@@ -69,8 +84,28 @@ function App() {
 
     ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data);
+        const msg: ServerMessage = JSON.parse(event.data);
         setData(msg);
+
+        // Update battle log if p0_obs has event_log
+        if (msg.p0_obs && msg.p0_obs.event_log) {
+          const logs = msg.p0_obs.event_log;
+          setBattleLog(logs);
+
+          // Trigger animation popup for the most recent impactful event
+          if (logs.length > 0) {
+            const latest = logs[logs.length - 1];
+            if (latest.event_type === 7) {
+              setActivePopup('MISS!');
+            } else if (latest.event_type === 8) {
+              setActivePopup(latest.text);
+            } else if (latest.event_type === 11 && latest.value >= 10) {
+              setActivePopup(`-${latest.value} DAMAGED!`);
+            } else if (latest.event_type === 10) {
+              setActivePopup('REFLECTED!');
+            }
+          }
+        }
       } catch (e) {
         console.error('Failed to parse websocket message', e);
       }
@@ -89,6 +124,19 @@ function App() {
       if (wsRef.current) wsRef.current.close();
     };
   }, []);
+
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [battleLog]);
+
+  useEffect(() => {
+    if (activePopup) {
+      const timer = setTimeout(() => setActivePopup(null), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [activePopup]);
 
   const sendAction = (actionId: number) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -430,6 +478,40 @@ function App() {
             )}
           </div>
           
+          {/* Battle Log panel */}
+          <div className="center-card battle-log-card">
+            <div className="turn-display">バトルログ</div>
+            <div className="battle-log-list">
+              {battleLog.length > 0 ? (
+                battleLog.map((item, idx) => {
+                  let badgeClass = 'log-badge actor-' + item.actor;
+                  let itemClass = 'log-item';
+                  if (item.event_type === 7) itemClass += ' log-miss';
+                  if (item.event_type === 8) itemClass += ' log-sick';
+                  if (item.event_type === 11) itemClass += ' log-damage';
+                  if (item.event_type === 12) itemClass += ' log-heal';
+
+                  return (
+                    <div key={`log-${idx}`} className={itemClass}>
+                      <span className={badgeClass}>P{item.actor}</span>
+                      <span className="log-text">{item.text}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="battle-log-empty">対戦ログはありません</div>
+              )}
+              <div ref={logEndRef} />
+            </div>
+          </div>
+
+          {/* Popup Animation Overlay */}
+          {activePopup && (
+            <div className="event-popup-overlay">
+              <div className="event-popup-content">{activePopup}</div>
+            </div>
+          )}
+
           <div className="center-card" style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div className="turn-display">ヘルプ＆遊び方</div>
             <div>

@@ -18,7 +18,11 @@ EnvPool::~EnvPool() {}
 
 void EnvPool::reset(int seed) {
     for (int i = 0; i < num_envs_; ++i) {
-        states_[i].rng.seed(seed + i);
+        std::mt19937 rng_copy;
+        rng_copy.seed(seed + i);
+        states_[i] = InternalState();
+        states_[i].rng = rng_copy;
+
         states_[i].current_actor_id = 0;
         states_[i].current_turn = 0;
         states_[i].current_phase = GamePhase::PHASE_MAIN;
@@ -38,10 +42,14 @@ void EnvPool::reset(int seed) {
         states_[i].pending_take_cp = false;
         states_[i].pending_attack_source_id = CARD_EMPTY;
         states_[i].sickness[0] = SICKNESS_NONE; states_[i].sickness[1] = SICKNESS_NONE;
+        states_[i].guardian[0] = GUARDIAN_NONE; states_[i].guardian[1] = GUARDIAN_NONE;
         std::memset(states_[i].curses, 0, sizeof(states_[i].curses));
         states_[i].turn_end_state = 0;
         states_[i].pending_ascension_bows[0] = 0; states_[i].pending_ascension_bows[1] = 0;
         states_[i].heaven_seizure_occurred[0] = false; states_[i].heaven_seizure_occurred[1] = false;
+        states_[i].history_head = 0;
+        states_[i].history_count = 0;
+        std::memset(states_[i].history, 0, sizeof(states_[i].history));
 
         // Draw initial hands
         for (int p=0; p<2; ++p) {

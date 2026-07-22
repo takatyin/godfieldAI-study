@@ -335,3 +335,25 @@ def test_magnetic_storm_dream():
             assert confirmed is False, f"Player {p} slot {i} should not be confirmed"
             assert app_id != -1 and app_id != true_id
 
+
+def test_string_of_fate_event_logging():
+    """運命のひもを使用した際、TRIGGER_PHENOMENON (22) イベントが正常に発行されることを確認"""
+    sim = SimulationRunner()
+    sim.state.seed_rng(0)
+    fate_id = find_card_by_name("運命のひも")
+
+    sim.set_status(player=0, hp=99, mp=10, money=10)
+    sim.state.set_true_hand(0, 0, fate_id)
+
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
+
+    obs = godfield_core.get_observation(sim.state, 0)
+    history = obs.get_history()
+
+    phenomenon_events = [ev for ev in history if hasattr(ev, "event_type") and ev.event_type == int(godfield_core.EventType.TRIGGER_PHENOMENON)]
+    assert len(phenomenon_events) > 0
+    ev = phenomenon_events[0]
+    assert ev.card_id == fate_id
+    assert 0 <= int(ev.value) <= 9
+

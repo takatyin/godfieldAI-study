@@ -94,8 +94,10 @@ class SimulationRunner:
                 card = cards[i]
                 card_id = self._name_to_id.get(card) if isinstance(card, str) else card
                 self.state.set_true_hand(player, i, card_id)
+                self.state.set_apparent_hand(player, i, card_id)
             else:
                 self.state.set_true_hand(player, i, -1)  # empty
+                self.state.set_apparent_hand(player, i, -1)
             self.state.set_is_known_to_opp(player, i, False)
             self.state.set_is_used(player, i, False)
 

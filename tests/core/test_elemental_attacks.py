@@ -377,3 +377,34 @@ def test_element_mixing_light_darkness():
     # 無属性（ELEM_NONE）になっていることをアサート
     assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
     assert runner.state.pending_attack_power == 14  # 9 + 5 = 14
+
+
+def test_chikurincho_and_wand_of_mystic_water():
+    """
+    検証内容: ちくりんちょ（闇属性）に魔水のワンド（属性変更: 水）を重ねた場合、最終属性が水属性（ELEM_WATER）になることを確認します。
+    """
+    runner = SimulationRunner()
+    chikurincho = find_card_by_name("ちくりんちょ")
+    wand = find_card_by_name("魔水のワンド")
+
+    runner.set_status(player=0, hp=99, mp=50, money=50)
+    runner.set_status(player=1, hp=50, mp=50, money=50)
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, chikurincho)
+    runner.state.set_true_hand(0, 1, wand)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    print(f"DEBUG: Before target opp: phase={runner.state.current_phase}")
+    runner.step(ActionType.ACTION_TARGET_OPP)
+    print(f"DEBUG: After target opp: pending_elem={runner.state.pending_attack_element}, power={runner.state.pending_attack_power}, phase={runner.state.current_phase}")
+
+    runner.step(ActionType.ACTION_CONFIRM)
+    print(f"DEBUG: After confirm: hp1={runner.state.get_hp(1)}, phase={runner.state.current_phase}")
+    obs = godfield_core.get_observation(runner.state, 0)
+    for ev in obs.get_history():
+        print(f"EV: actor={ev.actor}, type={ev.event_type}, card={ev.card_id}, target={ev.target_id}, val={ev.value}")
+    assert runner.state.get_hp(1) == 44

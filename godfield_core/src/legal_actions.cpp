@@ -91,21 +91,29 @@ void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTI
 void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     bool has_mirage = false;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        if (state.apparent_hand[me][state.staged_cards[me][i]] == ID_MIRAGE) {
-            has_mirage = true;
-            break;
+        int idx = state.staged_cards[me][i];
+        if (idx >= 0 && idx < MAX_HAND_SIZE) {
+            int card_id = state.apparent_hand[me][idx];
+            if (card_id < 0) card_id = state.true_hand[me][idx];
+            if (card_id == ID_MIRAGE) {
+                has_mirage = true;
+                break;
+            }
         }
     }
 
     if (has_mirage) {
         for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-            if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
-                if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
-                
+            if (!state.is_used[me][i]) {
                 int card_id = state.apparent_hand[me][i];
-                if (card_id == ID_MIRAGE || is_spiritual_zero_mp_card(card_id)) {
-                    if (can_afford_staged_plus_card(state, me, i)) {
-                        legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+                if (card_id < 0) card_id = state.true_hand[me][i];
+                if (card_id > 0 && card_id < 300) {
+                    if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
+                    
+                    if (card_id == ID_MIRAGE || card_id == ID_AURA || is_spiritual_zero_mp_card(card_id) || card_id == ID_WAND_OF_IGNITION || card_id == ID_WAND_OF_MYSTIC_WATER) {
+                        if (can_afford_staged_plus_card(state, me, i)) {
+                            legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+                        }
                     }
                 }
             }
@@ -158,6 +166,17 @@ void legal_phase_group_miracle(const InternalState &state, bool legal_actions[AC
 /**
  * @brief 物理および奇跡防御フェイズで共通する、防御アクションの合法性チェックを行います。
  */
+static bool is_element_counter(Element atk_elem, Element def_elem) {
+    if (def_elem == ELEM_LIGHT) return true;
+    if (atk_elem == ELEM_NONE || atk_elem == ELEM_DARKNESS) return true;
+    if (atk_elem == ELEM_FIRE && def_elem == ELEM_WATER) return true;
+    if (atk_elem == ELEM_WATER && def_elem == ELEM_FIRE) return true;
+    if (atk_elem == ELEM_WOOD && def_elem == ELEM_STONE) return true;
+    if (atk_elem == ELEM_STONE && def_elem == ELEM_WOOD) return true;
+    return false;
+}
+
+
 static void legal_defense_common(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp, GamePhase defense_phase) {
     bool rainbow = false;
     Element effective_atk_element = state.pending_attack_element;
@@ -254,17 +273,19 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
                     allowed_as_first = (state.num_staged_cards[me] == 0) || 
                                        (state.num_staged_cards[me] == 1 && state.apparent_hand[me][state.staged_cards[me][0]] == ID_RAINBOW_CURTAIN);
                 } else {
-                    // 奇跡防御：虹のカーテンの後にリアクションカードを重ねることは非合法（1枚目のみ許可）
+                    // 奇跡防御：リアクションは1枚目のみ
                     allowed_as_first = (state.num_staged_cards[me] == 0);
                 }
                 if (allowed_as_first) {
                     legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+                    continue;
                 }
-                continue;
+                // リアクションとして許可されない場合（例: 虹のカーテンの後の2枚目）でも、
+                // 防御力(defense_power > 0)を持つカードであれば通常の防具判定(Step 4)へ進む
             }
 
-            // 4. 一般防具の判定
-            if (f.reaction_type != REACTION_NONE) {
+            // 4. 一般防具の判定（通常の防具、指輪防具、またはリアクション不発時に防御力を持つ防具）
+            if (f.reaction_type != REACTION_NONE && f.defense_power <= 0) {
                 continue;
             }
             bool is_weapon_atk = false;
@@ -273,14 +294,7 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
             }
             if (state.pending_attack_power > 0 || is_weapon_atk) {
                 uint32_t allowed_timings = (defense_phase == GamePhase::PHASE_DEFENSE) ? TIMING_ATK_DEFENCE : TIMING_MIRACLE_DEFENCE;
-                bool counters_element = false;
-                if (defense_phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
-                    if (f.element == ELEM_LIGHT) counters_element = true;
-                    else if (effective_atk_element == ELEM_FIRE && f.element == ELEM_WATER) counters_element = true;
-                    else if (effective_atk_element == ELEM_WATER && f.element == ELEM_FIRE) counters_element = true;
-                    else if (effective_atk_element == ELEM_WOOD && f.element == ELEM_STONE) counters_element = true;
-                    else if (effective_atk_element == ELEM_STONE && f.element == ELEM_WOOD) counters_element = true;
-                }
+                bool counters_element = is_element_counter(effective_atk_element, f.element);
                 if (defense_phase == GamePhase::PHASE_MIRACLE_DEFENSE && (rainbow || counters_element)) {
                     allowed_timings |= TIMING_ATK_DEFENCE;
                 }
@@ -291,6 +305,8 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
                     else if (cand_e == ELEM_LIGHT) {
                         if (current_def_element == ELEM_NONE && !has_non_element && !has_multiple_different_elements && !has_light && base_def_element == ELEM_NONE)
                             next_def_element = ELEM_LIGHT;
+                        else if (current_def_element != ELEM_NONE && current_def_element != ELEM_LIGHT && !has_non_element && !has_multiple_different_elements)
+                            next_def_element = current_def_element;
                     } else {
                         if (current_def_element == ELEM_NONE) {
                             if (!has_non_element && !has_multiple_different_elements && !has_light && base_def_element == ELEM_NONE)
@@ -299,24 +315,19 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
                                 next_def_element = cand_e;
                             else next_def_element = ELEM_NONE;
                         } else if (current_def_element != cand_e) {
-                            next_def_element = ELEM_NONE;
+                            if (current_def_element == ELEM_LIGHT && !has_non_element && !has_multiple_different_elements) {
+                                next_def_element = cand_e;
+                            } else {
+                                next_def_element = ELEM_NONE;
+                            }
                         }
                     }
 
                     bool can_defend = false;
                     if (effective_atk_element == ELEM_LIGHT) {
-                        if (rainbow) can_defend = true;
-                    } else if (effective_atk_element == ELEM_NONE || effective_atk_element == ELEM_DARKNESS) {
-                        can_defend = true;
+                        can_defend = rainbow;
                     } else {
-                        Element required_def = ELEM_NONE;
-                        if (effective_atk_element == ELEM_FIRE) required_def = ELEM_WATER;
-                        else if (effective_atk_element == ELEM_WATER) required_def = ELEM_FIRE;
-                        else if (effective_atk_element == ELEM_WOOD) required_def = ELEM_STONE;
-                        else if (effective_atk_element == ELEM_STONE) required_def = ELEM_WOOD;
-
-                        if (rainbow) can_defend = true;
-                        else if (next_def_element == required_def || next_def_element == ELEM_LIGHT) can_defend = true;
+                        can_defend = rainbow || is_element_counter(effective_atk_element, next_def_element);
                     }
 
                     if (can_defend) {

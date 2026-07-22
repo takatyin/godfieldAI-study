@@ -24,3 +24,23 @@ def test_basic_attack_state_transition():
     # アクションは無視され、状態が変わっていないことをアサート
     assert sim.state.current_phase == godfield_core.GamePhase.PHASE_GUARDIAN
     assert sim.state.current_actor_id == 0
+
+
+def test_env_pool_reset_clears_events():
+    """EnvPool.reset(seed) がイベント履歴(events)や状態異常・守護神を完全にクリアすることを確認"""
+    pool = godfield_core.EnvPool(1)
+    pool.reset(0)
+
+    state = pool.get_state(0)
+    godfield_core.step_game(state, godfield_core.ActionType.ACTION_PRAY)
+    obs = godfield_core.get_observation(state, 0)
+    assert len(obs.get_history()) > 0
+
+    # リセット実行
+    pool.reset(42)
+    new_state = pool.get_state(0)
+    new_obs = godfield_core.get_observation(new_state, 0)
+
+    # リセット直後は過去のイベントログがクリアされ初期状態になっていること
+    valid_events = [ev for ev in new_obs.get_history() if hasattr(ev, "event_type") and ev.event_type != 0]
+    assert len(valid_events) == 0

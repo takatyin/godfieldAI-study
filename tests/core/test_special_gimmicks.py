@@ -58,13 +58,13 @@ def test_earth_guardian_group_attack_fix():
     found = False
     weapon_attack_count = 0
 
-    # 2000回シードを探索
-    for seed in range(2000):
+    # 20000回シードを探索
+    for seed in range(20000):
         sim = SimulationRunner()
         sim.state.seed_rng(seed)
         sim.set_status(player=0, hp=40, mp=10, money=10)
         sim.set_status(player=1, hp=40, mp=10, money=10)
-        sim.state.set_guardian(1, 9)  # 相手（プレイヤー1）の守護神を地球神(9)にする
+        sim.state.set_guardian(1, 9)  # (プレイヤー1)の守護神を地球神(9)にする
 
         # 祈ることでターンを終了させ、PHASE_END を自動進行させる
         sim.step(godfield_core.ActionType.ACTION_PRAY)

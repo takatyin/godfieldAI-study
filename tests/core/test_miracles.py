@@ -227,6 +227,45 @@ def test_miracle_cure_curse_flash():
     assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_FLASH) == False
 
 
+def test_miracle_darkness_defense_by_any_armor():
+    """
+    検証内容: 闇属性攻撃＜闇＞に対する防御の合法手テスト。
+    - 相手からの＜闇＞(闇属性ATK5の奇跡攻撃) に対し、防御側が持つ無属性防具（木の盾）や属性防具（きらきらドレス）
+      が合法手 (legal action) として選択可能であることを検証。
+    - 完全防御によって無事に生存できることを確認する。
+    """
+    runner = SimulationRunner()
+    darkness_id = find_card_by_name("＜闇＞")
+    wood_shield_id = find_card_by_name("木の盾")
+    dress_id = find_card_by_name("きらきらドレス")
+
+    runner.set_status(0, hp=40, mp=20)
+    runner.set_status(1, hp=40, mp=20)
+
+    runner.state.set_true_hand(0, 0, darkness_id)
+    runner.state.set_true_hand(1, 0, wood_shield_id)
+    runner.state.set_true_hand(1, 1, dress_id)
+
+    # 1. P0が＜闇＞(ATK 5)でP1に奇跡攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
+    assert runner.state.current_actor_id == 1
+
+    # 2. P1の合法手に「木の盾」(0) も「きらきらドレス」(1) も含まれていること！
+    actions = godfield_core.get_legal_actions(runner.state)
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is True, "無属性防具(木の盾)が選択可能であること"
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "光属性防具(きらきらドレス)が選択可能であること"
+
+    # 3. きらきらドレス(DEF10)を出して計DEF10で完全防御
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # 完全防御成功（即死せずHP40で生存）
+    assert runner.state.get_hp(1) == 40
+
+
 def test_miracle_multiple_uses_per_turn():
     """
     検証内容: 一度展開された奇跡の同ターン中の複数回使用禁止ルールのテスト。

@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy
 import numpy.typing
 import typing
-__all__: list[str] = ['ACTION_CONFIRM', 'ACTION_DEAL_NO', 'ACTION_DEAL_YES', 'ACTION_DISCARD', 'ACTION_NUM_0', 'ACTION_NUM_1', 'ACTION_NUM_10', 'ACTION_NUM_11', 'ACTION_NUM_12', 'ACTION_NUM_13', 'ACTION_NUM_14', 'ACTION_NUM_15', 'ACTION_NUM_16', 'ACTION_NUM_17', 'ACTION_NUM_18', 'ACTION_NUM_19', 'ACTION_NUM_2', 'ACTION_NUM_20', 'ACTION_NUM_21', 'ACTION_NUM_22', 'ACTION_NUM_23', 'ACTION_NUM_24', 'ACTION_NUM_25', 'ACTION_NUM_26', 'ACTION_NUM_27', 'ACTION_NUM_28', 'ACTION_NUM_29', 'ACTION_NUM_3', 'ACTION_NUM_30', 'ACTION_NUM_31', 'ACTION_NUM_32', 'ACTION_NUM_33', 'ACTION_NUM_34', 'ACTION_NUM_35', 'ACTION_NUM_36', 'ACTION_NUM_37', 'ACTION_NUM_38', 'ACTION_NUM_39', 'ACTION_NUM_4', 'ACTION_NUM_40', 'ACTION_NUM_41', 'ACTION_NUM_42', 'ACTION_NUM_43', 'ACTION_NUM_44', 'ACTION_NUM_45', 'ACTION_NUM_46', 'ACTION_NUM_47', 'ACTION_NUM_48', 'ACTION_NUM_49', 'ACTION_NUM_5', 'ACTION_NUM_50', 'ACTION_NUM_51', 'ACTION_NUM_52', 'ACTION_NUM_53', 'ACTION_NUM_54', 'ACTION_NUM_55', 'ACTION_NUM_56', 'ACTION_NUM_57', 'ACTION_NUM_58', 'ACTION_NUM_59', 'ACTION_NUM_6', 'ACTION_NUM_60', 'ACTION_NUM_61', 'ACTION_NUM_62', 'ACTION_NUM_63', 'ACTION_NUM_64', 'ACTION_NUM_65', 'ACTION_NUM_66', 'ACTION_NUM_67', 'ACTION_NUM_68', 'ACTION_NUM_69', 'ACTION_NUM_7', 'ACTION_NUM_70', 'ACTION_NUM_71', 'ACTION_NUM_72', 'ACTION_NUM_73', 'ACTION_NUM_74', 'ACTION_NUM_75', 'ACTION_NUM_76', 'ACTION_NUM_77', 'ACTION_NUM_78', 'ACTION_NUM_79', 'ACTION_NUM_8', 'ACTION_NUM_80', 'ACTION_NUM_81', 'ACTION_NUM_82', 'ACTION_NUM_83', 'ACTION_NUM_84', 'ACTION_NUM_85', 'ACTION_NUM_86', 'ACTION_NUM_87', 'ACTION_NUM_88', 'ACTION_NUM_89', 'ACTION_NUM_9', 'ACTION_NUM_90', 'ACTION_NUM_91', 'ACTION_NUM_92', 'ACTION_NUM_93', 'ACTION_NUM_94', 'ACTION_NUM_95', 'ACTION_NUM_96', 'ACTION_NUM_97', 'ACTION_NUM_98', 'ACTION_NUM_99', 'ACTION_PRAY', 'ACTION_SELECT_HAND_0', 'ACTION_SELECT_HAND_1', 'ACTION_SELECT_HAND_10', 'ACTION_SELECT_HAND_11', 'ACTION_SELECT_HAND_12', 'ACTION_SELECT_HAND_13', 'ACTION_SELECT_HAND_14', 'ACTION_SELECT_HAND_15', 'ACTION_SELECT_HAND_16', 'ACTION_SELECT_HAND_17', 'ACTION_SELECT_HAND_2', 'ACTION_SELECT_HAND_3', 'ACTION_SELECT_HAND_4', 'ACTION_SELECT_HAND_5', 'ACTION_SELECT_HAND_6', 'ACTION_SELECT_HAND_7', 'ACTION_SELECT_HAND_8', 'ACTION_SELECT_HAND_9', 'ACTION_TARGET_OPP', 'ACTION_TARGET_SELF', 'ActionType', 'CARD_EMPTY', 'CURSE_COLD', 'CURSE_DARK_CLOUD', 'CURSE_DREAM', 'CURSE_FEVER', 'CURSE_FLASH', 'CURSE_FOG', 'CURSE_HEAVEN', 'CURSE_HELL', 'CURSE_NONE', 'CurseType', 'EARTH', 'ELEM_DARKNESS', 'ELEM_FIRE', 'ELEM_LIGHT', 'ELEM_NONE', 'ELEM_STONE', 'ELEM_WATER', 'ELEM_WOOD', 'Element', 'EnvPool', 'GamePhase', 'GuardianType', 'HitCurse', 'InternalState', 'JUPITER', 'MARS', 'MERCURY', 'MOON', 'NEPTUNE', 'NONE', 'Observation', 'PHASE_ATTACK_PLUS', 'PHASE_BUY', 'PHASE_BUY_SELECT_MIRROR', 'PHASE_DEFENSE', 'PHASE_DISCARD', 'PHASE_END', 'PHASE_EXCHANGE_HP', 'PHASE_EXCHANGE_MP', 'PHASE_GROUP_MIRACLE_PLUS', 'PHASE_GROUP_WEAPON', 'PHASE_GUARDIAN', 'PHASE_MAIN', 'PHASE_MAIN_TARGET_SELECT', 'PHASE_MIRACLE_DEFENSE', 'PHASE_MIRACLE_PLUS', 'PHASE_SELL_SELECT', 'PHASE_SELL_SELECT_MIRROR', 'PHASE_SUNDRY_SELECT_MIRROR', 'PLUTO', 'REACTION_BLOCK', 'REACTION_BOUNCE', 'REACTION_NONE', 'REACTION_REFLECT', 'ReactionType', 'SATURN', 'SICKNESS_COLD', 'SICKNESS_FEVER', 'SICKNESS_HEAVEN', 'SICKNESS_HELL', 'SICKNESS_NONE', 'SicknessType', 'TIMING_ATK_DEFENCE', 'TIMING_ATK_PLUS', 'TIMING_MAIN_ATK', 'TIMING_MAIN_DEAL', 'TIMING_MAIN_MIRACLE', 'TIMING_MAIN_SUNDRY', 'TIMING_MIRACLE_DEFENCE', 'TIMING_MIRACLE_PLUS', 'URANUS', 'VENUS', 'clear_state', 'get_card_name', 'get_legal_actions', 'get_observation', 'get_opponent_staged_cards_for_obs', 'get_registry_size', 'get_single_legal_action', 'init_game_logic', 'step_game']
+__all__: list[str] = ['ACTION_CONFIRM', 'ACTION_DEAL_NO', 'ACTION_DEAL_YES', 'ACTION_DISCARD', 'ACTION_NUM_0', 'ACTION_NUM_1', 'ACTION_NUM_10', 'ACTION_NUM_11', 'ACTION_NUM_12', 'ACTION_NUM_13', 'ACTION_NUM_14', 'ACTION_NUM_15', 'ACTION_NUM_16', 'ACTION_NUM_17', 'ACTION_NUM_18', 'ACTION_NUM_19', 'ACTION_NUM_2', 'ACTION_NUM_20', 'ACTION_NUM_21', 'ACTION_NUM_22', 'ACTION_NUM_23', 'ACTION_NUM_24', 'ACTION_NUM_25', 'ACTION_NUM_26', 'ACTION_NUM_27', 'ACTION_NUM_28', 'ACTION_NUM_29', 'ACTION_NUM_3', 'ACTION_NUM_30', 'ACTION_NUM_31', 'ACTION_NUM_32', 'ACTION_NUM_33', 'ACTION_NUM_34', 'ACTION_NUM_35', 'ACTION_NUM_36', 'ACTION_NUM_37', 'ACTION_NUM_38', 'ACTION_NUM_39', 'ACTION_NUM_4', 'ACTION_NUM_40', 'ACTION_NUM_41', 'ACTION_NUM_42', 'ACTION_NUM_43', 'ACTION_NUM_44', 'ACTION_NUM_45', 'ACTION_NUM_46', 'ACTION_NUM_47', 'ACTION_NUM_48', 'ACTION_NUM_49', 'ACTION_NUM_5', 'ACTION_NUM_50', 'ACTION_NUM_51', 'ACTION_NUM_52', 'ACTION_NUM_53', 'ACTION_NUM_54', 'ACTION_NUM_55', 'ACTION_NUM_56', 'ACTION_NUM_57', 'ACTION_NUM_58', 'ACTION_NUM_59', 'ACTION_NUM_6', 'ACTION_NUM_60', 'ACTION_NUM_61', 'ACTION_NUM_62', 'ACTION_NUM_63', 'ACTION_NUM_64', 'ACTION_NUM_65', 'ACTION_NUM_66', 'ACTION_NUM_67', 'ACTION_NUM_68', 'ACTION_NUM_69', 'ACTION_NUM_7', 'ACTION_NUM_70', 'ACTION_NUM_71', 'ACTION_NUM_72', 'ACTION_NUM_73', 'ACTION_NUM_74', 'ACTION_NUM_75', 'ACTION_NUM_76', 'ACTION_NUM_77', 'ACTION_NUM_78', 'ACTION_NUM_79', 'ACTION_NUM_8', 'ACTION_NUM_80', 'ACTION_NUM_81', 'ACTION_NUM_82', 'ACTION_NUM_83', 'ACTION_NUM_84', 'ACTION_NUM_85', 'ACTION_NUM_86', 'ACTION_NUM_87', 'ACTION_NUM_88', 'ACTION_NUM_89', 'ACTION_NUM_9', 'ACTION_NUM_90', 'ACTION_NUM_91', 'ACTION_NUM_92', 'ACTION_NUM_93', 'ACTION_NUM_94', 'ACTION_NUM_95', 'ACTION_NUM_96', 'ACTION_NUM_97', 'ACTION_NUM_98', 'ACTION_NUM_99', 'ACTION_PRAY', 'ACTION_SELECT_HAND_0', 'ACTION_SELECT_HAND_1', 'ACTION_SELECT_HAND_10', 'ACTION_SELECT_HAND_11', 'ACTION_SELECT_HAND_12', 'ACTION_SELECT_HAND_13', 'ACTION_SELECT_HAND_14', 'ACTION_SELECT_HAND_15', 'ACTION_SELECT_HAND_16', 'ACTION_SELECT_HAND_17', 'ACTION_SELECT_HAND_2', 'ACTION_SELECT_HAND_3', 'ACTION_SELECT_HAND_4', 'ACTION_SELECT_HAND_5', 'ACTION_SELECT_HAND_6', 'ACTION_SELECT_HAND_7', 'ACTION_SELECT_HAND_8', 'ACTION_SELECT_HAND_9', 'ACTION_TARGET_OPP', 'ACTION_TARGET_SELF', 'ATTACK_HIT', 'ATTACK_MISS', 'ActionType', 'BLOCK_ATTACK', 'BOUNCE_ATTACK', 'BUY_CARD', 'CARD_EMPTY', 'CONFIRM_ATTACK', 'CONFIRM_DEFENSE', 'CURSE_COLD', 'CURSE_DARK_CLOUD', 'CURSE_DREAM', 'CURSE_FEVER', 'CURSE_FLASH', 'CURSE_FOG', 'CURSE_HEAVEN', 'CURSE_HELL', 'CURSE_NONE', 'CurseType', 'DISCARD_CARD', 'DRAW_CARD', 'EARTH', 'EFFECT_GUARDIAN', 'EFFECT_SICKNESS', 'ELEM_DARKNESS', 'ELEM_FIRE', 'ELEM_LIGHT', 'ELEM_NONE', 'ELEM_STONE', 'ELEM_WATER', 'ELEM_WOOD', 'EXCHANGE', 'Element', 'EnvPool', 'EventType', 'GameEvent', 'GamePhase', 'GuardianType', 'HEAL_HP', 'HEAL_MP', 'HitCurse', 'InternalState', 'JUPITER', 'MARS', 'MERCURY', 'MOON', 'NEPTUNE', 'NONE', 'Observation', 'PASS_DEFENSE', 'PHASE_ATTACK_PLUS', 'PHASE_BUY', 'PHASE_BUY_SELECT_MIRROR', 'PHASE_DEFENSE', 'PHASE_DISCARD', 'PHASE_END', 'PHASE_EXCHANGE_HP', 'PHASE_EXCHANGE_MP', 'PHASE_GROUP_MIRACLE_PLUS', 'PHASE_GROUP_WEAPON', 'PHASE_GUARDIAN', 'PHASE_MAIN', 'PHASE_MAIN_TARGET_SELECT', 'PHASE_MIRACLE_DEFENSE', 'PHASE_MIRACLE_PLUS', 'PHASE_SELL_SELECT', 'PHASE_SELL_SELECT_MIRROR', 'PHASE_SUNDRY_SELECT_MIRROR', 'PLUTO', 'REACTION_BLOCK', 'REACTION_BOUNCE', 'REACTION_NONE', 'REACTION_REFLECT', 'REFLECT_DAMAGE', 'REFUSE_DEAL', 'ReactionType', 'SATURN', 'SELL_CARD', 'SICKNESS_COLD', 'SICKNESS_FEVER', 'SICKNESS_HEAVEN', 'SICKNESS_HELL', 'SICKNESS_NONE', 'STAGE_CARD', 'SicknessType', 'TAKE_DAMAGE', 'TIMING_ATK_DEFENCE', 'TIMING_ATK_PLUS', 'TIMING_MAIN_ATK', 'TIMING_MAIN_DEAL', 'TIMING_MAIN_MIRACLE', 'TIMING_MAIN_SUNDRY', 'TIMING_MIRACLE_DEFENCE', 'TIMING_MIRACLE_PLUS', 'TRIGGER_PHENOMENON', 'UNSTAGE_CARD', 'URANUS', 'VENUS', 'clear_state', 'get_card_name', 'get_legal_actions', 'get_observation', 'get_opponent_staged_cards_for_obs', 'get_registry_size', 'get_single_legal_action', 'init_game_logic', 'step_game']
 class ActionType:
     """
     Members:
@@ -522,6 +522,139 @@ class EnvPool:
         ...
     def step_all(self, actions: typing.Annotated[numpy.typing.ArrayLike, numpy.int32]) -> None:
         ...
+class EventType:
+    """
+    Members:
+    
+      NONE
+    
+      STAGE_CARD
+    
+      UNSTAGE_CARD
+    
+      CONFIRM_ATTACK
+    
+      CONFIRM_DEFENSE
+    
+      PASS_DEFENSE
+    
+      ATTACK_HIT
+    
+      ATTACK_MISS
+    
+      EFFECT_SICKNESS
+    
+      EFFECT_GUARDIAN
+    
+      REFLECT_DAMAGE
+    
+      TAKE_DAMAGE
+    
+      HEAL_HP
+    
+      HEAL_MP
+    
+      BUY_CARD
+    
+      SELL_CARD
+    
+      EXCHANGE
+    
+      DRAW_CARD
+    
+      DISCARD_CARD
+    
+      REFUSE_DEAL
+    
+      BLOCK_ATTACK
+    
+      BOUNCE_ATTACK
+    
+      TRIGGER_PHENOMENON
+    """
+    ATTACK_HIT: typing.ClassVar[EventType]  # value = <EventType.ATTACK_HIT: 6>
+    ATTACK_MISS: typing.ClassVar[EventType]  # value = <EventType.ATTACK_MISS: 7>
+    BLOCK_ATTACK: typing.ClassVar[EventType]  # value = <EventType.BLOCK_ATTACK: 20>
+    BOUNCE_ATTACK: typing.ClassVar[EventType]  # value = <EventType.BOUNCE_ATTACK: 21>
+    BUY_CARD: typing.ClassVar[EventType]  # value = <EventType.BUY_CARD: 14>
+    CONFIRM_ATTACK: typing.ClassVar[EventType]  # value = <EventType.CONFIRM_ATTACK: 3>
+    CONFIRM_DEFENSE: typing.ClassVar[EventType]  # value = <EventType.CONFIRM_DEFENSE: 4>
+    DISCARD_CARD: typing.ClassVar[EventType]  # value = <EventType.DISCARD_CARD: 18>
+    DRAW_CARD: typing.ClassVar[EventType]  # value = <EventType.DRAW_CARD: 17>
+    EFFECT_GUARDIAN: typing.ClassVar[EventType]  # value = <EventType.EFFECT_GUARDIAN: 9>
+    EFFECT_SICKNESS: typing.ClassVar[EventType]  # value = <EventType.EFFECT_SICKNESS: 8>
+    EXCHANGE: typing.ClassVar[EventType]  # value = <EventType.EXCHANGE: 16>
+    HEAL_HP: typing.ClassVar[EventType]  # value = <EventType.HEAL_HP: 12>
+    HEAL_MP: typing.ClassVar[EventType]  # value = <EventType.HEAL_MP: 13>
+    NONE: typing.ClassVar[EventType]  # value = <EventType.NONE: 0>
+    PASS_DEFENSE: typing.ClassVar[EventType]  # value = <EventType.PASS_DEFENSE: 5>
+    REFLECT_DAMAGE: typing.ClassVar[EventType]  # value = <EventType.REFLECT_DAMAGE: 10>
+    REFUSE_DEAL: typing.ClassVar[EventType]  # value = <EventType.REFUSE_DEAL: 19>
+    SELL_CARD: typing.ClassVar[EventType]  # value = <EventType.SELL_CARD: 15>
+    STAGE_CARD: typing.ClassVar[EventType]  # value = <EventType.STAGE_CARD: 1>
+    TAKE_DAMAGE: typing.ClassVar[EventType]  # value = <EventType.TAKE_DAMAGE: 11>
+    TRIGGER_PHENOMENON: typing.ClassVar[EventType]  # value = <EventType.TRIGGER_PHENOMENON: 22>
+    UNSTAGE_CARD: typing.ClassVar[EventType]  # value = <EventType.UNSTAGE_CARD: 2>
+    __members__: typing.ClassVar[dict[str, EventType]]  # value = {'NONE': <EventType.NONE: 0>, 'STAGE_CARD': <EventType.STAGE_CARD: 1>, 'UNSTAGE_CARD': <EventType.UNSTAGE_CARD: 2>, 'CONFIRM_ATTACK': <EventType.CONFIRM_ATTACK: 3>, 'CONFIRM_DEFENSE': <EventType.CONFIRM_DEFENSE: 4>, 'PASS_DEFENSE': <EventType.PASS_DEFENSE: 5>, 'ATTACK_HIT': <EventType.ATTACK_HIT: 6>, 'ATTACK_MISS': <EventType.ATTACK_MISS: 7>, 'EFFECT_SICKNESS': <EventType.EFFECT_SICKNESS: 8>, 'EFFECT_GUARDIAN': <EventType.EFFECT_GUARDIAN: 9>, 'REFLECT_DAMAGE': <EventType.REFLECT_DAMAGE: 10>, 'TAKE_DAMAGE': <EventType.TAKE_DAMAGE: 11>, 'HEAL_HP': <EventType.HEAL_HP: 12>, 'HEAL_MP': <EventType.HEAL_MP: 13>, 'BUY_CARD': <EventType.BUY_CARD: 14>, 'SELL_CARD': <EventType.SELL_CARD: 15>, 'EXCHANGE': <EventType.EXCHANGE: 16>, 'DRAW_CARD': <EventType.DRAW_CARD: 17>, 'DISCARD_CARD': <EventType.DISCARD_CARD: 18>, 'REFUSE_DEAL': <EventType.REFUSE_DEAL: 19>, 'BLOCK_ATTACK': <EventType.BLOCK_ATTACK: 20>, 'BOUNCE_ATTACK': <EventType.BOUNCE_ATTACK: 21>, 'TRIGGER_PHENOMENON': <EventType.TRIGGER_PHENOMENON: 22>}
+    def __eq__(self, other: typing.Any) -> bool:
+        ...
+    def __getstate__(self) -> int:
+        ...
+    def __hash__(self) -> int:
+        ...
+    def __index__(self) -> int:
+        ...
+    def __init__(self, value: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    def __int__(self) -> int:
+        ...
+    def __ne__(self, other: typing.Any) -> bool:
+        ...
+    def __repr__(self) -> str:
+        ...
+    def __setstate__(self, state: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    def __str__(self) -> str:
+        ...
+    @property
+    def name(self) -> str:
+        ...
+    @property
+    def value(self) -> int:
+        ...
+class GameEvent:
+    def __init__(self) -> None:
+        ...
+    @property
+    def actor(self) -> int:
+        ...
+    @actor.setter
+    def actor(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def card_id(self) -> int:
+        ...
+    @card_id.setter
+    def card_id(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def event_type(self) -> int:
+        ...
+    @event_type.setter
+    def event_type(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def target_id(self) -> int:
+        ...
+    @target_id.setter
+    def target_id(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def value(self) -> float:
+        ...
+    @value.setter
+    def value(self, arg0: typing.SupportsFloat | typing.SupportsIndex) -> None:
+        ...
 class GamePhase:
     """
     Members:
@@ -874,6 +1007,18 @@ class InternalState:
     def pending_attack_source_id(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
         ...
     @property
+    def pending_defense_power(self) -> int:
+        ...
+    @pending_defense_power.setter
+    def pending_defense_power(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def pending_sell_price(self) -> int:
+        ...
+    @pending_sell_price.setter
+    def pending_sell_price(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    @property
     def remaining_attacks(self) -> int:
         ...
     @remaining_attacks.setter
@@ -904,6 +1049,8 @@ class Observation:
         ...
     def get_hand_cards(self) -> list:
         ...
+    def get_history(self) -> list:
+        ...
     def get_opponent_hand_cards(self) -> list:
         ...
     def get_opponent_staged_cards(self) -> list:
@@ -923,6 +1070,12 @@ class Observation:
         ...
     @current_staged_defense.setter
     def current_staged_defense(self, arg0: typing.SupportsFloat | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def history_count(self) -> int:
+        ...
+    @history_count.setter
+    def history_count(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
         ...
     @property
     def history_head(self) -> int:
@@ -983,6 +1136,12 @@ class Observation:
         ...
     @pending_card.setter
     def pending_card(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def player_id(self) -> int:
+        ...
+    @player_id.setter
+    def player_id(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
         ...
 class ReactionType:
     """
@@ -1234,7 +1393,14 @@ ACTION_SELECT_HAND_8: ActionType  # value = <ActionType.ACTION_SELECT_HAND_8: 8>
 ACTION_SELECT_HAND_9: ActionType  # value = <ActionType.ACTION_SELECT_HAND_9: 9>
 ACTION_TARGET_OPP: ActionType  # value = <ActionType.ACTION_TARGET_OPP: 18>
 ACTION_TARGET_SELF: ActionType  # value = <ActionType.ACTION_TARGET_SELF: 19>
+ATTACK_HIT: EventType  # value = <EventType.ATTACK_HIT: 6>
+ATTACK_MISS: EventType  # value = <EventType.ATTACK_MISS: 7>
+BLOCK_ATTACK: EventType  # value = <EventType.BLOCK_ATTACK: 20>
+BOUNCE_ATTACK: EventType  # value = <EventType.BOUNCE_ATTACK: 21>
+BUY_CARD: EventType  # value = <EventType.BUY_CARD: 14>
 CARD_EMPTY: int = -1
+CONFIRM_ATTACK: EventType  # value = <EventType.CONFIRM_ATTACK: 3>
+CONFIRM_DEFENSE: EventType  # value = <EventType.CONFIRM_DEFENSE: 4>
 CURSE_COLD: HitCurse  # value = <HitCurse.CURSE_COLD: 5>
 CURSE_DARK_CLOUD: CurseType  # value = <CurseType.CURSE_DARK_CLOUD: 2>
 CURSE_DREAM: CurseType  # value = <CurseType.CURSE_DREAM: 3>
@@ -1244,7 +1410,11 @@ CURSE_FOG: CurseType  # value = <CurseType.CURSE_FOG: 0>
 CURSE_HEAVEN: HitCurse  # value = <HitCurse.CURSE_HEAVEN: 8>
 CURSE_HELL: HitCurse  # value = <HitCurse.CURSE_HELL: 7>
 CURSE_NONE: HitCurse  # value = <HitCurse.CURSE_NONE: 0>
+DISCARD_CARD: EventType  # value = <EventType.DISCARD_CARD: 18>
+DRAW_CARD: EventType  # value = <EventType.DRAW_CARD: 17>
 EARTH: GuardianType  # value = <GuardianType.EARTH: 9>
+EFFECT_GUARDIAN: EventType  # value = <EventType.EFFECT_GUARDIAN: 9>
+EFFECT_SICKNESS: EventType  # value = <EventType.EFFECT_SICKNESS: 8>
 ELEM_DARKNESS: Element  # value = <Element.ELEM_DARKNESS: 6>
 ELEM_FIRE: Element  # value = <Element.ELEM_FIRE: 1>
 ELEM_LIGHT: Element  # value = <Element.ELEM_LIGHT: 5>
@@ -1252,12 +1422,16 @@ ELEM_NONE: Element  # value = <Element.ELEM_NONE: 0>
 ELEM_STONE: Element  # value = <Element.ELEM_STONE: 4>
 ELEM_WATER: Element  # value = <Element.ELEM_WATER: 2>
 ELEM_WOOD: Element  # value = <Element.ELEM_WOOD: 3>
+EXCHANGE: EventType  # value = <EventType.EXCHANGE: 16>
+HEAL_HP: EventType  # value = <EventType.HEAL_HP: 12>
+HEAL_MP: EventType  # value = <EventType.HEAL_MP: 13>
 JUPITER: GuardianType  # value = <GuardianType.JUPITER: 3>
 MARS: GuardianType  # value = <GuardianType.MARS: 1>
 MERCURY: GuardianType  # value = <GuardianType.MERCURY: 2>
 MOON: GuardianType  # value = <GuardianType.MOON: 10>
 NEPTUNE: GuardianType  # value = <GuardianType.NEPTUNE: 7>
-NONE: GuardianType  # value = <GuardianType.NONE: 0>
+NONE: EventType  # value = <EventType.NONE: 0>
+PASS_DEFENSE: EventType  # value = <EventType.PASS_DEFENSE: 5>
 PHASE_ATTACK_PLUS: GamePhase  # value = <GamePhase.PHASE_ATTACK_PLUS: 3>
 PHASE_BUY: GamePhase  # value = <GamePhase.PHASE_BUY: 11>
 PHASE_BUY_SELECT_MIRROR: GamePhase  # value = <GamePhase.PHASE_BUY_SELECT_MIRROR: 12>
@@ -1281,12 +1455,17 @@ REACTION_BLOCK: ReactionType  # value = <ReactionType.REACTION_BLOCK: 3>
 REACTION_BOUNCE: ReactionType  # value = <ReactionType.REACTION_BOUNCE: 1>
 REACTION_NONE: ReactionType  # value = <ReactionType.REACTION_NONE: 0>
 REACTION_REFLECT: ReactionType  # value = <ReactionType.REACTION_REFLECT: 2>
+REFLECT_DAMAGE: EventType  # value = <EventType.REFLECT_DAMAGE: 10>
+REFUSE_DEAL: EventType  # value = <EventType.REFUSE_DEAL: 19>
 SATURN: GuardianType  # value = <GuardianType.SATURN: 4>
+SELL_CARD: EventType  # value = <EventType.SELL_CARD: 15>
 SICKNESS_COLD: SicknessType  # value = <SicknessType.SICKNESS_COLD: 1>
 SICKNESS_FEVER: SicknessType  # value = <SicknessType.SICKNESS_FEVER: 2>
 SICKNESS_HEAVEN: SicknessType  # value = <SicknessType.SICKNESS_HEAVEN: 4>
 SICKNESS_HELL: SicknessType  # value = <SicknessType.SICKNESS_HELL: 3>
 SICKNESS_NONE: SicknessType  # value = <SicknessType.SICKNESS_NONE: 0>
+STAGE_CARD: EventType  # value = <EventType.STAGE_CARD: 1>
+TAKE_DAMAGE: EventType  # value = <EventType.TAKE_DAMAGE: 11>
 TIMING_ATK_DEFENCE: int = 64
 TIMING_ATK_PLUS: int = 16
 TIMING_MAIN_ATK: int = 1
@@ -1295,5 +1474,7 @@ TIMING_MAIN_MIRACLE: int = 2
 TIMING_MAIN_SUNDRY: int = 4
 TIMING_MIRACLE_DEFENCE: int = 128
 TIMING_MIRACLE_PLUS: int = 32
+TRIGGER_PHENOMENON: EventType  # value = <EventType.TRIGGER_PHENOMENON: 22>
+UNSTAGE_CARD: EventType  # value = <EventType.UNSTAGE_CARD: 2>
 URANUS: GuardianType  # value = <GuardianType.URANUS: 5>
 VENUS: GuardianType  # value = <GuardianType.VENUS: 8>
