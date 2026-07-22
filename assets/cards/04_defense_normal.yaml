@@ -379,7 +379,7 @@
   type: defense
   usage_timing:
   - atk_defence_phase
-  price: 10
+  price: 8
   defense_power: 8
   drop_rate: 6
   id_str: armor/steel-shield
@@ -387,7 +387,7 @@
   type: defense
   usage_timing:
   - atk_defence_phase
-  price: 10
+  price: 20
   defense_power: 8
   drop_rate: 1
   id_str: armor/beautiful-glasswork

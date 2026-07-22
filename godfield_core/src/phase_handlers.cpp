@@ -180,7 +180,7 @@ static void trigger_next_ring_counter(InternalState &state) {
     state.pending_attack_source_id = card_id;
     state.num_staged_cards[defender] = 0;
 
-    push_event(state, defender, EventType::REFLECT_DAMAGE, card_id, attacker, static_cast<float>(state.pending_attack_power));
+    push_event(state, defender, EventType::RING_EFFECT, card_id, attacker, 0.0f);
 }
 
 static void process_ring_defense_effects(InternalState &state, int me, int opp, int damage) {
@@ -256,6 +256,7 @@ static void process_ring_defense_effects(InternalState &state, int me, int opp, 
             }
         } else if (card_id == ID_NEPTUNE_RING) {
             state.mp[me] = std::clamp(state.mp[me] + damage * 2, 0, 99);
+            push_event(state, me, EventType::RING_EFFECT, card_id, opp, 0.0f);
         } else if (card_id == ID_VENUS_RING) {
             if (state.num_pending_counters < 10) {
                 int idx = state.num_pending_counters++;
@@ -337,7 +338,7 @@ void step_phase_main(InternalState &state, ActionType action, int me, int opp) {
         push_event(state, me, EventType::DRAW_CARD, -1, me, 1.0f);
         state.current_phase = GamePhase::PHASE_END;
     } else if (action == ACTION_DISCARD) {
-        push_event(state, me, EventType::DISCARD_CARD, -1, me, 0.0f);
+        push_event(state, me, EventType::STAGE_CARD, -1, -1, 0.0f);
         state.current_phase = GamePhase::PHASE_DISCARD;
     } else if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
         if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
@@ -596,6 +597,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
         if (st.hp[player] < hp_before && st.guardian[player] > GUARDIAN_NONE) {
             int roll = std::uniform_int_distribution<int>(0, 99)(st.rng);
             if (roll < 10) {
+                push_event(st, player, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(st.guardian[player]));
                 st.guardian[player] = GUARDIAN_NONE;
             }
         }
@@ -607,6 +609,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
         if (st.hp[player] < hp_before && st.guardian[player] > GUARDIAN_NONE) {
             int roll = std::uniform_int_distribution<int>(0, 99)(st.rng);
             if (roll < 10) {
+                push_event(st, player, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(st.guardian[player]));
                 st.guardian[player] = GUARDIAN_NONE;
             }
         }
@@ -991,11 +994,11 @@ void step_phase_sundry_select_mirror(InternalState &state, ActionType action, in
         if (state.pending_attack_source_id != CARD_EMPTY) {
             int source_id = state.pending_attack_source_id;
             if (source_id == ID_COLORED_LEAVES) {
-                state.curses[state.defender_id][CURSE_TYPE_DREAM] = true;
+                apply_curse_state(state, state.defender_id, CURSE_TYPE_DREAM);
             } else if (source_id == ID_OMINOUS_PREMONITION) {
-                state.curses[state.defender_id][CURSE_TYPE_DARK_CLOUD] = true;
+                apply_curse_state(state, state.defender_id, CURSE_TYPE_DARK_CLOUD);
             } else if (source_id == ID_HALO) {
-                state.curses[state.defender_id][CURSE_TYPE_FLASH] = true;
+                apply_curse_state(state, state.defender_id, CURSE_TYPE_FLASH);
             } else if (source_id == ID_BRIBE) {
                 state.money[state.defender_id] = std::min(99, state.money[state.defender_id] + state.pending_attack_power);
             } else if (source_id == ID_FINE) {
@@ -1161,6 +1164,7 @@ void step_phase_discard(InternalState &state, ActionType action, int me, int opp
                 if (is_discardable_card(card_id)) {
                     state.staged_cards[me][state.num_staged_cards[me]++] = idx;
                     state.is_used[me][idx] = true;
+                    push_event(state, me, EventType::STAGE_CARD, card_id, -1, 0.0f);
                 }
             }
         }
@@ -1169,6 +1173,8 @@ void step_phase_discard(InternalState &state, ActionType action, int me, int opp
             int discarded_count = state.num_staged_cards[me];
             for (int i = 0; i < state.num_staged_cards[me]; ++i) {
                 int hand_idx = state.staged_cards[me][i];
+                int card_id = state.true_hand[me][hand_idx];
+                push_event(state, me, EventType::DISCARD_CARD, card_id, me, 0.0f);
                 clear_hand_slot(state, me, hand_idx);
             }
             state.num_staged_cards[me] = 0;

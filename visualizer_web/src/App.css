@@ -547,6 +547,22 @@ body, html {
 }
 
 /* Done Game Modal / Overlay */
+@keyframes gameOverFadeIn {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    pointer-events: none;
+  }
+  99% {
+    pointer-events: none;
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+}
+
 .game-over-overlay {
   position: absolute;
   top: 0;
@@ -554,7 +570,6 @@ body, html {
   width: 100%;
   height: 100%;
   background: rgba(15, 23, 42, 0.8);
-  backdrop-filter: blur(8px);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -563,6 +578,9 @@ body, html {
   z-index: 100;
   border: 1px solid rgba(255,255,255,0.05);
   text-align: center;
+  animation: gameOverFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.2s forwards;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .game-over-title {

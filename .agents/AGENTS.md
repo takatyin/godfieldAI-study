@@ -103,4 +103,13 @@ When working with GodField game rules or mechanics, follow these strict guidelin
 
 1. **Verify Specifications with the User**: The rules of GodField are highly complex and can be updated/tweaked frequently. Avoid assuming a rule is correct based on general game mechanics or internet search results (as old wikis/blogs may contain outdated or incorrect rules). If you encounter any ambiguous or suspicious game logic/mechanics, **you MUST immediately ask the user for clarification** before proceeding to change code.
 2. **Prioritize Documenting Specifications First**: Always update `docs/rules.md` (or other specification docs) when clarifying or implementing a rule.
-3. **No Hallucinated Cards or Behaviors**: Never assume card names (e.g., `霧氷の鎧`) or actions exist in the codebase unless they are defined in `assets/godfield_cards.json` or YAML files.
+3. **No Hallucinated Cards or Behaviors (YAML/JSON Verification)**: Never assume card names (e.g., `霧氷の鎧`) or actions exist in the codebase unless they are defined in `assets/godfield_cards.json` or YAML files. **To prevent hallucinations, you MUST search the YAML files under `assets/cards/` or check `assets/godfield_cards.json` directly to verify the exact characters, terms, and spelling before writing code or comments.** In particular, the word `買戻し` (Buyback) is a hallucination and does not exist as a card name; it must always be referred to as `買う` (Buy).
+
+## Code Implementation Quality & Bug Prevention (Critical)
+
+To prevent introducing regression bugs, incomplete logic, or index mismatches, every agent MUST follow these practices:
+
+1. **Verify Data Structures and C++ Source Directly**: Never make assumptions about how lists, states, or bindings are structured (e.g. whether an observation's list is dense, sparse, or maps to hand slots). Use grep to locate the C++ implementation (`make_observation`, bindings, etc.) and check its logic directly before writing Python helper code.
+2. **Establish Branch Coverage for Joint/Edge Cases**: Do not implement logic based solely on simple binary outcomes (e.g. win/lose). Consider all combinations of states (e.g. both players dying simultaneously resulting in a draw) and ensure the check order resolves joint conditions first.
+3. **Write Diverse Multi-Index Tests**: When testing index-related logic (like hand slots or staged slots), do not write tests using only index `0`. Always test indices greater than `0`, multi-card selections, and various hand slot order permutations to verify that the math/matching holds up.
+4. **Remind the User to Restart Daemon Processes**: When modifying server-side files (like `visualize_server.py`), explicitly instruct the developer to restart the running terminal server process, as it does not automatically hot-reload in this codebase.

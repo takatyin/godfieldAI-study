@@ -111,7 +111,10 @@ def format_event_log(ev, player_id):
     etype = ev.event_type
     text = ""
     if etype == 1:
-        text = f"{actor_name} 置いた 【{card_name}】"
+        if ev.card_id == -1:
+            text = f"{actor_name} 置いた 【捨てる】"
+        else:
+            text = f"{actor_name} 置いた 【{card_name}】"
     elif etype == 3:
         if ev.card_id > 0:
             if ev.target_id == ev.actor:
@@ -132,27 +135,51 @@ def format_event_log(ev, player_id):
     elif etype == 6:
         text = f"{actor_name} 攻撃ヒット ({int(ev.value)}ダメージ)"
     elif etype == 7:
-        text = f"{actor_name} 全体攻撃 命中失敗 (ミス！)"
-    elif etype == 8:
-        sick_val = int(ev.value)
-        sick_name = "天国病の発作" if sick_val == 4 and ev.card_id == 4 else ("病気効果" if sick_val == 0 else "病気効果")
-        if sick_val == 1: sick_name = "風邪の発現"
-        elif sick_val == 2: sick_name = "熱病への悪化"
-        elif sick_val == 3: sick_name = "地獄病への悪化"
-        elif sick_val == 4: sick_name = "天国病の発作"
-        text = f"{actor_name} 効果発動 {sick_name}！"
-    elif etype == 10:
-        if ev.card_id > 0:
-            if "指輪" in card_name:
-                text = f"{actor_name} 【{card_name}】 の反撃が発動！"
-            else:
-                text = f"{actor_name} 【{card_name}】 で跳ね返した！"
+        if ev.card_id == 109:
+            text = f"{actor_name} 【昇天弓】 命中失敗 (ミス！)"
         else:
-            text = f"{actor_name} 跳ね返した！"
+            text = f"{actor_name} 全体攻撃 命中失敗 (ミス！)"
+    elif etype == 8:
+        v = int(ev.value)
+        sick_type = v & 0x0F
+        is_damage = bool(v & 16)
+        is_heal = bool(v & 32)
+        is_worsened = bool(v & 64)
+        is_seizure = bool(v & 128)
+
+        sick_names = {1: "風邪", 2: "熱病", 3: "地獄病", 4: "天国病"}
+        s_name = sick_names.get(sick_type, "病気")
+
+        if is_seizure:
+            text = f"{actor_name} 【{s_name}】の発作が発生！"
+        elif is_worsened:
+            text = f"{actor_name} 病気が【{s_name}】に悪化した！"
+        elif is_heal:
+            text = f"{actor_name} 【{s_name}】の効果で HP 5 回復"
+        elif is_damage:
+            dmg = 1 if sick_type == 1 else (2 if sick_type == 2 else 5)
+            text = f"{actor_name} 【{s_name}】の症状で {dmg} ダメージ"
+        else:
+            text = f"{actor_name} 病気効果発動！"
+    elif etype == 9:
+        guardian_id = int(ev.value)
+        guardian_names = {
+            1: "火星神", 2: "水星神", 3: "木星神", 4: "土星神", 5: "天王神",
+            6: "冥王神", 7: "海王神", 8: "金星神", 9: "地球神", 10: "月神"
+        }
+        g_name = guardian_names.get(guardian_id, "守護神")
+        if card_name and card_name != "？" and not card_name.startswith("裏向き") and not card_name.startswith("カードID:"):
+            text = f"{actor_name} (守護神: {g_name}) の【{card_name}】が発動！"
+        else:
+            text = f"{actor_name} の守護神 ({g_name}) が行動！"
+    elif etype == 10:
+        text = f"{actor_name} 【{card_name}】 で跳ね返した！" if ev.card_id > 0 else f"{actor_name} 跳ね返した！"
     elif etype == 11:
         text = f"{actor_name} {int(ev.value)} ダメージを受けた"
     elif etype == 12:
         text = f"{actor_name} HP {int(ev.value)} 回復"
+    elif etype == 13:
+        text = f"{actor_name} MP {int(ev.value)} 回復"
     elif etype == 14:
         price_str = f" ({int(ev.value)}円)" if ev.value > 0 else ""
         text = f"{actor_name} 【{card_name}】 を購入した{price_str}"
@@ -190,6 +217,39 @@ def format_event_log(ev, player_id):
         ]
         p_msg = phenomena_messages[p_id] if 0 <= p_id < len(phenomena_messages) else "超常現象が発生！"
         text = f"{actor_name} 【運命のひも】 で{p_msg}"
+    elif etype == 23:
+        text = f"{actor_name} 【{card_name}】 で跳ね返した！" if ev.card_id > 0 else f"{actor_name} 跳ね返した！"
+    elif etype == 24:
+        text = f"{actor_name} 【{card_name}】 の反撃が発動！" if ev.card_id > 0 else f"{actor_name} 指輪効果発動！"
+    elif etype == 25:
+        guardian_id = int(ev.value)
+        guardian_names = {
+            1: "火星神", 2: "水星神", 3: "木星神", 4: "土星神", 5: "天王神",
+            6: "冥王神", 7: "海王神", 8: "金星神", 9: "地球神", 10: "月神"
+        }
+        g_name = guardian_names.get(guardian_id, "守護神")
+        text = f"{actor_name} に守護神 ({g_name}) が宿った！"
+    elif etype == 26:
+        guardian_id = int(ev.value)
+        guardian_names = {
+            1: "火星神", 2: "水星神", 3: "木星神", 4: "土星神", 5: "天王神",
+            6: "冥王神", 7: "海王神", 8: "金星神", 9: "地球神", 10: "月神"
+        }
+        g_name = guardian_names.get(guardian_id, "守護神")
+        text = f"{actor_name} の守護神 ({g_name}) は帰っていった"
+    elif etype == 27:
+        v = int(ev.value)
+        curse_type = v & 0x0F
+        is_applied = bool(v & 16)
+        is_cleared = bool(v & 32)
+        curse_names = {1: "霧", 2: "閃光", 3: "暗雲", 4: "夢"}
+        c_name = curse_names.get(curse_type, "呪い")
+        if is_applied:
+            text = f"{actor_name} 【{c_name}】状態になった！"
+        elif is_cleared:
+            text = f"{actor_name} 【{c_name}】状態から回復した"
+        else:
+            text = f"{actor_name} 呪い状態変化"
     else:
         text = f"{actor_name} イベント (種別:{etype})"
 
@@ -312,8 +372,13 @@ def compute_staged_total_badge(staged_cards, player_id, game_state):
     sell_price = getattr(game_state, "pending_sell_price", 0)
     has_sell = any(c and c.get("name") == "売る" for c in staged_cards)
     if (has_sell or "SELL" in phase):
-        # pending_sell_price が 0 の場合でも、staged_cards 内の「売る」「買戻し」以外の価格の合計を算出
-        calc_price = sum(c.get("price", 0) for c in staged_cards if c and c.get("name") not in ["売る", "買戻し"])
+        # 1枚目の「売る」「買う」はアクションカード（トリガー）なので除外し、2枚目以降（売却対象）の価格を合計する
+        calc_price = 0
+        for idx, c in enumerate(staged_cards):
+            if c:
+                if idx == 0 and c.get("name") in ["売る", "買う"]:
+                    continue
+                calc_price += c.get("price", 0)
         total_price = sell_price if sell_price > 0 else calc_price
         return {
             "label": f"¥{total_price}",
@@ -396,7 +461,7 @@ def compute_smart_action_label(action_id, staged_cards, game_state):
     first_name = first_card.get("name", "") if first_card else ""
 
     if action_id == 18:
-        if phase in ["PHASE_TRADE", "PHASE_BUY", "PHASE_BUY_SELECT_MIRROR"]:
+        if phase in ["PHASE_BUY", "PHASE_BUY_SELECT_MIRROR"]:
             return "買う"
         if phase in ["PHASE_SELL_SELECT", "PHASE_SELL_SELECT_MIRROR"]:
             return "承諾"
@@ -404,7 +469,7 @@ def compute_smart_action_label(action_id, staged_cards, game_state):
             # 全体攻撃や、売買・両替・確定系のカードは「決定」を表示
             is_non_targeted = (
                 first_card.get("is_group_attack", False)
-                or first_name in ["売る", "買戻し"]
+                or first_name in ["売る", "買う"]
                 or "昇天" in first_name
                 or "両替" in first_name
             )
@@ -413,13 +478,17 @@ def compute_smart_action_label(action_id, staged_cards, game_state):
         return "相手を対象"
 
     if action_id == 19:
-        if phase in ["PHASE_TRADE", "PHASE_BUY", "PHASE_BUY_SELECT_MIRROR"]:
-            return "断る"
+        if phase in ["PHASE_TRADE", "PHASE_BUY"]:
+            return "買わない"
+        if phase in ["PHASE_BUY_SELECT_MIRROR", "PHASE_SELL_SELECT_MIRROR", "PHASE_SUNDRY_SELECT_MIRROR"]:
+            if staged_cards:
+                return "はね返す"
+            return "受け入れる"
         if phase in ["PHASE_DEFENSE", "PHASE_MIRACLE_DEFENSE"]:
             return "確定"
         if phase == "PHASE_DISCARD":
             return "捨てる"
-        if phase in ["PHASE_SELL_SELECT", "PHASE_SELL_SELECT_MIRROR"]:
+        if phase in ["PHASE_SELL_SELECT"]:
             return "確定"
         if staged_cards:
             return "自分を対象"
@@ -456,14 +525,50 @@ def serialize_observation(obs, player_id):
     staged_cards_info = [cards_by_id.get(cid) for cid in staged_cids]
     has_sell_staged = any(c and c.get("name") == "売る" for c in staged_cards_info)
     is_sell_mode = phase in ["PHASE_SELL_SELECT", "PHASE_SELL_SELECT_MIRROR"] or has_sell_staged
+    is_buy_mode = phase in ["PHASE_BUY", "PHASE_BUY_SELECT_MIRROR"]
+    is_transaction_mode = is_sell_mode or is_buy_mode
 
     # 防御側ターン中かを検出
     is_defender = phase in ["PHASE_DEFENSE", "PHASE_MIRACLE_DEFENSE"] and state.current_actor_id == player_id
 
-    def compute_card_power_label(card):
+    def compute_card_power_label(card, slot_idx=None, owner_id=None, is_staged=False):
         """現在のコンテキスト（売却、防御、攻撃プラス、メイン等）に応じて、
         カードが持つ意味（価格、+攻、守、リアクション名、特殊効果等）を算出する。"""
-        if not card or card.get("name") in ["売る", "買戻し"]:
+        if not card:
+            return ""
+
+        # 手札内のカードであり、かつ使用中（ステージング済み）の場合は、手札側でのラベル表示を非表示にする
+        if slot_idx is not None and owner_id is not None and not is_staged:
+            if state.get_is_used(owner_id, slot_idx):
+                return ""
+
+        # 取引系カード（売る・買う）のトリガー判定
+        is_trigger = False
+        if card.get("name") in ["売る", "買う"]:
+            if owner_id is not None:
+                trigger_slot_idx = None
+                if state.get_num_staged_cards(owner_id) > 0:
+                    trigger_slot_idx = state.get_staged_card(owner_id, 0)
+                
+                if trigger_slot_idx is not None:
+                    is_trigger = (slot_idx == trigger_slot_idx)
+                else:
+                    # まだ何もステージングされていない手札カードの中の「売る」「買う」
+                    # 基本的に、現在手番のプレイヤーがメインフェイズでこれから使う場合は trigger になる可能性があるが、
+                    # 手札に並んでいる時点（未選択）ではトリガーではないので False
+                    is_trigger = False
+            else:
+                # owner_id がない場合はトリガーとみなす（安全側フォールバック）
+                is_trigger = True
+
+        # コンテキスト1: 取引モード（売買選択フェイズ、または売買カード仮置き中）
+        if is_transaction_mode:
+            if is_trigger:
+                return ""
+            price = card.get("price", 0)
+            return f"¥{price}"
+
+        if card.get("name") in ["売る", "買う"]:
             return ""
 
         # コンテキスト1: 売却モード（PHASE_SELL_SELECT や「売る」カード選択中）
@@ -477,8 +582,8 @@ def serialize_observation(obs, player_id):
         df = card.get("defense_power", 0)
         reaction = card.get("reaction_type")
         timings = card.get("usage_timing", [])
-        is_plus = any("plus" in str(t).lower() for t in timings)
-        prefix = "+" if is_plus else ""
+        is_atk_plus = any("atk_plus" in str(t).lower() for t in timings)
+        prefix = "+" if is_atk_plus else ""
 
         is_group = card.get("is_group_attack", False)
         acc = card.get("accuracy", 100)
@@ -525,17 +630,15 @@ def serialize_observation(obs, player_id):
             return "全体"
 
         # コンテキスト4: 攻撃・攻撃プラス
-        is_attack_plus_phase = phase in ["PHASE_ATTACK_PLUS", "PHASE_MIRACLE_PLUS"]
-
         # 攻撃プラスフェイズ中は、プラス攻撃として使用可能なカードに +攻X を表示
-        if is_attack_plus_phase and is_plus and atk > 0:
+        if phase == "PHASE_ATTACK_PLUS" and is_atk_plus and atk > 0:
             return f"{pct}{prefix}攻{atk}"
 
         # メインフェイズ（1枚目の単体攻撃選択中）
         if phase == "PHASE_MAIN":
             has_main_atk = any("main_atk" in str(t).lower() for t in timings)
             if has_main_atk and atk > 0:
-                return f"{pct}攻{atk}"
+                return f"{pct}{prefix}攻{atk}"
             elif df > 0:
                 return f"守{df}"
 
@@ -547,7 +650,7 @@ def serialize_observation(obs, player_id):
 
         return ""
 
-    def get_card_info(card_id):
+    def get_card_info(card_id, slot_idx=None, owner_id=None, is_staged=False):
         if card_id == -1:
             return None
         card = cards_by_id.get(card_id)
@@ -567,7 +670,7 @@ def serialize_observation(obs, player_id):
                 "reaction_type": card.get("reaction_type"),
                 "text_color": get_element_text_color(card.get("element", "none")),
             }
-            info["power_label"] = compute_card_power_label(info)
+            info["power_label"] = compute_card_power_label(info, slot_idx, owner_id, is_staged)
             return info
         return {
             "id": card_id,
@@ -600,7 +703,7 @@ def serialize_observation(obs, player_id):
 
     hand = []
     for idx, cid in enumerate(obs.get_hand_cards()):
-        card_info = get_card_info(cid)
+        card_info = get_card_info(cid, slot_idx=idx, owner_id=player_id)
         if card_info:
             card_info["slot_idx"] = idx
             card_info["selected"] = state.get_is_used(player_id, idx)
@@ -615,14 +718,19 @@ def serialize_observation(obs, player_id):
                         break
             card_info["deployed_order"] = deployed_order
         hand.append(card_info)
-    staged = [get_card_info(cid) for cid in obs.get_staged_cards() if cid != -1]
+    staged = []
+    for idx, cid in enumerate(obs.get_staged_cards()):
+        if cid == -1:
+            continue
+        actual_slot_idx = state.get_staged_card(player_id, idx)
+        staged.append(get_card_info(cid, slot_idx=actual_slot_idx, owner_id=player_id, is_staged=True))
 
     opp_id = 1 - player_id
     opp_hand = []
     for idx, cid in enumerate(obs.get_opponent_hand_cards()):
         if state.get_apparent_hand(opp_id, idx) == -1:
             continue
-        card_info = get_card_info(cid)
+        card_info = get_card_info(cid, slot_idx=idx, owner_id=opp_id)
         if card_info:
             card_info["slot_idx"] = idx
             card_info["hidden"] = cid == 0 or cid == -1
@@ -638,7 +746,12 @@ def serialize_observation(obs, player_id):
             card_info["deployed_order"] = deployed_order
         opp_hand.append(card_info)
 
-    opp_staged = [get_card_info(cid) for cid in obs.get_opponent_staged_cards() if cid != -1]
+    opp_staged = []
+    for idx, cid in enumerate(obs.get_opponent_staged_cards()):
+        if cid == -1:
+            continue
+        actual_slot_idx = state.get_staged_card(opp_id, idx)
+        opp_staged.append(get_card_info(cid, slot_idx=actual_slot_idx, owner_id=opp_id, is_staged=True))
 
     # Convert legal actions
     legal_mask = obs.get_action_mask()
@@ -672,11 +785,19 @@ def serialize_observation(obs, player_id):
                     desc = "自分を対象にしてカードを使用"
                 elif state.current_phase in [
                     godfield_core.GamePhase.PHASE_BUY,
-                    godfield_core.GamePhase.PHASE_BUY_SELECT_MIRROR,
                 ]:
-                    desc = "断る"
+                    desc = "買わない"
+                elif state.current_phase in [
+                    godfield_core.GamePhase.PHASE_BUY_SELECT_MIRROR,
+                    godfield_core.GamePhase.PHASE_SELL_SELECT_MIRROR,
+                    godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR,
+                ]:
+                    if state.get_num_staged_cards(state.current_actor_id) > 0:
+                        desc = "はね返す"
+                    else:
+                        desc = "受け入れる"
                 else:
-                    desc = "自分を対象 / 断る / 確定"
+                    desc = "自分を対象 / 買わない / 受け入れる / はね返す / 確定"
             elif idx == 20:
                 action_name = "ACTION_PRAY"
                 desc = "祈る"
@@ -691,51 +812,13 @@ def serialize_observation(obs, player_id):
             smart_label = compute_smart_action_label(idx, staged, state)
             legal_actions.append({"action_id": idx, "name": action_name, "description": desc, "smart_label": smart_label})
 
-    # History log extraction with delayed streaming until confirmation
+    # History log extraction
     raw_history = obs.get_history()
     event_log = []
-    confirm_etypes = {3, 4, 5, 6, 14, 15, 16, 18, 19, 20, 21, 22}
-
-    for idx, ev in enumerate(raw_history):
+    for ev in raw_history:
         if not hasattr(ev, "event_type") or ev.event_type == 0:
             continue
-
-        # 相手(actor==1)の非公開イベントに対するカードID補正処理
-        target_ev = ev
-        if ev.actor == 1:
-            resolved_card_id = ev.card_id
-            if resolved_card_id == 0:
-                for f_ev in raw_history[idx:]:
-                    if f_ev.actor == ev.actor and f_ev.card_id > 0:
-                        resolved_card_id = f_ev.card_id
-                        break
-            
-            if ev.event_type == 1 and ev.card_id == 0:
-                has_following_confirm = any(
-                    f_ev.actor == ev.actor and f_ev.event_type in confirm_etypes
-                    for f_ev in raw_history[idx + 1 :]
-                )
-                is_actor_changed = state.current_actor_id != ev.actor
-
-                # 相手が確定を押すまで遅延配信（表示保留）
-                if not has_following_confirm and not is_actor_changed:
-                    continue
-
-                # 両替(ID 230)は仮置きログを表示しない
-                if resolved_card_id == 230:
-                    continue
-
-            class TempEvent:
-                def __init__(self, original, cid):
-                    self.actor = original.actor
-                    self.event_type = original.event_type
-                    self.card_id = cid
-                    self.target_id = original.target_id
-                    self.value = original.value
-
-            target_ev = TempEvent(ev, resolved_card_id)
-
-        fmt = format_event_log(target_ev, player_id)
+        fmt = format_event_log(ev, player_id)
         if fmt:
             event_log.append(fmt)
 

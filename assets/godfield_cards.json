@@ -954,7 +954,7 @@
       "atk_plus_phase",
       "main_atk_phase"
     ],
-    "price": 3,
+    "price": 6,
     "element": "木",
     "attack_power": 3,
     "drop_rate": 1,
@@ -1401,7 +1401,7 @@
     "usage_timing": [
       "main_atk_phase"
     ],
-    "price": 10,
+    "price": 4,
     "element": "土",
     "attack_power": 6,
     "drop_rate": 1,
@@ -2071,7 +2071,7 @@
     "usage_timing": [
       "atk_defence_phase"
     ],
-    "price": 10,
+    "price": 8,
     "defense_power": 8,
     "drop_rate": 6,
     "id_str": "armor/steel-shield",
@@ -2083,7 +2083,7 @@
     "usage_timing": [
       "atk_defence_phase"
     ],
-    "price": 10,
+    "price": 20,
     "defense_power": 8,
     "drop_rate": 1,
     "id_str": "armor/beautiful-glasswork",

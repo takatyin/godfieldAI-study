@@ -15,7 +15,7 @@ def test_flash_prevents_unaffordable_wall():
 
     wall = find_card_by_name("＜壁＞")
     plushie = find_card_by_name("精霊のぬいぐるみ")
-    wooden_shield = find_card_by_name("木の盾")
+    leather_clothes = find_card_by_name("armor/leather-clothes")
 
     # 攻撃情報をセット
     runner.state.current_phase = GamePhase.PHASE_DEFENSE
@@ -29,7 +29,7 @@ def test_flash_prevents_unaffordable_wall():
     runner.state.set_num_staged_cards(0, 0)
     runner.state.set_true_hand(0, 0, wall)
     runner.state.set_true_hand(0, 1, plushie)
-    runner.state.set_true_hand(0, 2, wooden_shield)
+    runner.state.set_true_hand(0, 2, leather_clothes)
     runner.state.set_curses(0, CurseType.CURSE_FLASH, True)  # 閃光状態
 
     # 合法手を取得
@@ -42,10 +42,10 @@ def test_flash_prevents_unaffordable_wall():
     # - 「精霊のぬいぐるみ」は単体では防御を開始できないため非合法 (False)
     assert legal_actions[ActionType.ACTION_SELECT_HAND_1] == False
 
-    # - 「木の盾」はMP消費0なので合法 (True)
+    # - 「革の服」はMP消費0なので合法 (True)
     assert legal_actions[ActionType.ACTION_SELECT_HAND_2] == True
 
-    # 実際に木の盾で受ける
+    # 実際に革の服で受ける
     runner.step(ActionType.ACTION_SELECT_HAND_2)
 
     # 閃光状態のため、1枚置いた時点でACTION_CONFIRM以外の選択（他の手札選択）が非合法になることを検証
@@ -57,5 +57,5 @@ def test_flash_prevents_unaffordable_wall():
     # 防御を確定して完了
     runner.step(ActionType.ACTION_CONFIRM)
 
-    # 木の盾（防御力2）で10ダメージを減算し、40 - (10 - 2) = 32 HPになること
+    # 革の服（防御力2）で10ダメージを減算し、40 - (10 - 2) = 32 HPになること
     assert runner.state.get_hp(0) == 32

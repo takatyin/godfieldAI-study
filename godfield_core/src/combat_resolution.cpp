@@ -80,7 +80,7 @@ void confirm_card(InternalState &state, int player_id, int slot_idx) {
 void clear_all_status_effects(InternalState &state, int player_id) {
     state.sickness[player_id] = SICKNESS_NONE;
     for (int j = 0; j < 4; ++j) {
-        state.curses[player_id][j] = false;
+        clear_curse_state(state, player_id, static_cast<CurseType>(j));
     }
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         if (state.true_hand[player_id][i] != CARD_EMPTY) {
@@ -628,21 +628,45 @@ std::vector<int> get_staged_card_ids(const InternalState &state, int player) {
 }
 
 void apply_sickness(InternalState &state, int player_id, SicknessType new_sick) {
-    if (new_sick > SICKNESS_NONE) {
-        SicknessType cur_sick = state.sickness[player_id];
-        if (cur_sick == SICKNESS_NONE) {
-            state.sickness[player_id] = new_sick;
+    if (new_sick <= SICKNESS_NONE) return;
+    SicknessType cur_sick = state.sickness[player_id];
+    if (cur_sick == SICKNESS_NONE) {
+        state.sickness[player_id] = new_sick;
+        push_event(state, player_id, EventType::EFFECT_SICKNESS, -1, player_id,
+                   static_cast<float>(static_cast<int>(new_sick) | SicknessEvent::FLAG_WORSENED));
+    } else {
+        SicknessType target_sick;
+        if (new_sick > cur_sick) {
+            target_sick = new_sick;
         } else {
-            if (new_sick > cur_sick) {
-                state.sickness[player_id] = new_sick;
+            if (cur_sick == SICKNESS_HEAVEN) {
+                state.hp[player_id] = 0;
+                push_event(state, player_id, EventType::EFFECT_SICKNESS, -1, player_id,
+                           static_cast<float>(SicknessEvent::TYPE_HEAVEN | SicknessEvent::FLAG_SEIZURE));
+                return;
             } else {
-                if (cur_sick == SICKNESS_HEAVEN) {
-                    state.hp[player_id] = 0;
-                } else {
-                    state.sickness[player_id] = static_cast<SicknessType>(cur_sick + 1);
-                }
+                target_sick = static_cast<SicknessType>(cur_sick + 1);
             }
         }
+        state.sickness[player_id] = target_sick;
+        push_event(state, player_id, EventType::EFFECT_SICKNESS, -1, player_id,
+                   static_cast<float>(static_cast<int>(target_sick) | SicknessEvent::FLAG_WORSENED));
+    }
+}
+
+void apply_curse_state(InternalState &state, int player_id, CurseType type) {
+    if (!state.curses[player_id][type]) {
+        state.curses[player_id][type] = true;
+        push_event(state, player_id, EventType::EFFECT_CURSE, -1, player_id,
+                   static_cast<float>((static_cast<int>(type) + 1) | CurseEvent::FLAG_APPLIED));
+    }
+}
+
+void clear_curse_state(InternalState &state, int player_id, CurseType type) {
+    if (state.curses[player_id][type]) {
+        state.curses[player_id][type] = false;
+        push_event(state, player_id, EventType::EFFECT_CURSE, -1, player_id,
+                   static_cast<float>((static_cast<int>(type) + 1) | CurseEvent::FLAG_CLEARED));
     }
 }
 
@@ -658,13 +682,13 @@ void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse) 
         apply_sickness(state, player_id, new_sick);
     } else {
         if (curse == CURSE_FOG) {
-            state.curses[player_id][CURSE_TYPE_FOG] = true;
+            apply_curse_state(state, player_id, CURSE_TYPE_FOG);
         } else if (curse == CURSE_FLASH) {
-            state.curses[player_id][CURSE_TYPE_FLASH] = true;
+            apply_curse_state(state, player_id, CURSE_TYPE_FLASH);
         } else if (curse == CURSE_DARK_CLOUD) {
-            state.curses[player_id][CURSE_TYPE_DARK_CLOUD] = true;
+            apply_curse_state(state, player_id, CURSE_TYPE_DARK_CLOUD);
         } else if (curse == CURSE_DREAM) {
-            state.curses[player_id][CURSE_TYPE_DREAM] = true;
+            apply_curse_state(state, player_id, CURSE_TYPE_DREAM);
         }
     }
 }
@@ -697,13 +721,19 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
 
         if (card_id == ID_TONE || card_id == ID_SMILE_SHELL) {
             state.sickness[target_id] = (state.sickness[target_id] == SICKNESS_COLD || state.sickness[target_id] == SICKNESS_FEVER) ? SICKNESS_NONE : state.sickness[target_id];
-            state.curses[target_id][CURSE_TYPE_FOG] = false;
-            state.curses[target_id][CURSE_TYPE_FLASH] = false;
+            clear_curse_state(state, target_id, CURSE_TYPE_FOG);
+            clear_curse_state(state, target_id, CURSE_TYPE_FLASH);
         } else if (card_id == ID_SONG || card_id == ID_HEART_SHELL) {
             clear_all_status_effects(state, target_id);
         }
         
         if (card_id == ID_RELEASE) {
+            if (state.guardian[0] > GUARDIAN_NONE) {
+                push_event(state, 0, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(state.guardian[0]));
+            }
+            if (state.guardian[1] > GUARDIAN_NONE) {
+                push_event(state, 1, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(state.guardian[1]));
+            }
             state.guardian[0] = GUARDIAN_NONE;
             state.guardian[1] = GUARDIAN_NONE;
         }
@@ -716,7 +746,12 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
 
         if (card_id == ID_GUARDIAN_POT) {
             std::uniform_int_distribution<int> dist(1, 10);
-            state.guardian[target_id] = static_cast<GuardianType>(dist(state.rng));
+            int g_new = dist(state.rng);
+            if (state.guardian[target_id] > GUARDIAN_NONE) {
+                push_event(state, target_id, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(state.guardian[target_id]));
+            }
+            state.guardian[target_id] = static_cast<GuardianType>(g_new);
+            push_event(state, target_id, EventType::GUARDIAN_ENTER, -1, -1, static_cast<float>(g_new));
         }
         if (card_id == ID_THUMP_THUMP_TEAR) {
             std::uniform_int_distribution<int> dist(0, 1);
@@ -757,26 +792,26 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
 
         if (card_id == ID_STRING_OF_FATE) {
             std::uniform_int_distribution<int> dist(0, 9);
-            int phenomenon = dist(state.rng);
+            PhenomenonType phenomenon = static_cast<PhenomenonType>(dist(state.rng));
             int opp = 1 - target_id;
             push_event(state, target_id, EventType::TRIGGER_PHENOMENON, ID_STRING_OF_FATE, -1, static_cast<float>(phenomenon));
 
-            if (phenomenon == 0) { // 夕焼け: 全員熱病
+            if (phenomenon == PHENOMENON_SUNSET) { // 夕焼け: 全員熱病
                 state.sickness[0] = SICKNESS_FEVER;
                 state.sickness[1] = SICKNESS_FEVER;
             }
-            else if (phenomenon == 1) { // 濃霧: 全員霧
-                state.curses[0][CURSE_TYPE_FOG] = true;
-                state.curses[1][CURSE_TYPE_FOG] = true;
+            else if (phenomenon == PHENOMENON_DENSE_FOG) { // 濃霧: 全員霧
+                apply_curse_state(state, 0, CURSE_TYPE_FOG);
+                apply_curse_state(state, 1, CURSE_TYPE_FOG);
             }
-            else if (phenomenon == 2) { // きのこ大発生
+            else if (phenomenon == PHENOMENON_MUSHROOM) { // きのこ大発生
                 state.mushroom_turns += 6;
             }
-            else if (phenomenon == 3) { // 竜巻: 全員HP ➡ 1
+            else if (phenomenon == PHENOMENON_TORNADO) { // 竜巻: 全員HP ➡ 1
                 state.hp[0] = 1;
                 state.hp[1] = 1;
             }
-            else if (phenomenon == 4) { // 巨大なタライ: 自分か相手に光属性攻50
+            else if (phenomenon == PHENOMENON_GIGANTIC_TUB) { // 巨大なタライ: 自分か相手に光属性攻50
                 int target_player = std::uniform_int_distribution<int>(0, 1)(state.rng);
                 if (target_player == target_id) { // 自分自身: 防御不可で50ダメ
                     state.hp[target_id] = std::max(0, state.hp[target_id] - 50);
@@ -798,7 +833,7 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
                     state.turn_end_state = 5;
                 }
             }
-            else if (phenomenon == 5) { // ブラックホール: 自分が撃った全体攻撃
+            else if (phenomenon == PHENOMENON_BLACK_HOLE) { // ブラックホール: 自分が撃った全体攻撃
                 state.attacker_id = target_id;
                 state.defender_id = opp;
                 state.current_actor_id = opp;
@@ -812,16 +847,16 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
                 state.pending_attack_curse = CURSE_NONE;
                 state.turn_end_state = 5;
             }
-            else if (phenomenon == 6) { // 暖流: 自身HP+50
+            else if (phenomenon == PHENOMENON_WARM_CURRENT) { // 暖流: 自身HP+50
                 hp_diff += 50;
             }
-            else if (phenomenon == 7) { // 金山: お金集約
+            else if (phenomenon == PHENOMENON_GOLD_MINE) { // 金山: お金集約
                 int total_money = state.money[0] + state.money[1];
                 int lucky = std::uniform_int_distribution<int>(0, 1)(state.rng);
                 state.money[lucky] = std::clamp(total_money, 0, 99);
                 state.money[1 - lucky] = 0;
             }
-            else if (phenomenon == 8) { // 磁気嵐: 手札相互交換 & known_to_opp 追跡
+            else if (phenomenon == PHENOMENON_MAGNETIC_STORM) { // 磁気嵐: 手札相互交換 & known_to_opp 追跡
                 struct ShuffledCard {
                     int card_id;
                     int original_owner;
@@ -885,14 +920,22 @@ void apply_card_effects_to_target(InternalState &state, int target_id, const std
                     }
                 }
             }
-            else if (phenomenon == 9) { // 日食: 重複しない守護神割り当て
+            else if (phenomenon == PHENOMENON_ECLIPSE) { // 日食: 重複しない守護神割り当て
                 int g0 = std::uniform_int_distribution<int>(1, 10)(state.rng);
                 int g1 = std::uniform_int_distribution<int>(1, 9)(state.rng);
                 if (g1 >= g0) {
                     g1 += 1;
                 }
+                if (state.guardian[0] > GUARDIAN_NONE) {
+                    push_event(state, 0, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(state.guardian[0]));
+                }
+                if (state.guardian[1] > GUARDIAN_NONE) {
+                    push_event(state, 1, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(state.guardian[1]));
+                }
                 state.guardian[0] = static_cast<GuardianType>(g0);
                 state.guardian[1] = static_cast<GuardianType>(g1);
+                push_event(state, 0, EventType::GUARDIAN_ENTER, -1, -1, static_cast<float>(g0));
+                push_event(state, 1, EventType::GUARDIAN_ENTER, -1, -1, static_cast<float>(g1));
             }
         }
     }
@@ -1022,7 +1065,7 @@ bool try_execute_super_mirror_reflection(InternalState &state, ActionType action
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
             state.is_known_to_opp[me][idx] = true;
-            push_event(state, me, EventType::REFLECT_DAMAGE, ID_SUPER_MIRROR, opp, 0.0f);
+            push_event(state, me, EventType::REFLECT_MIRROR, ID_SUPER_MIRROR, opp, 0.0f);
             
             std::swap(state.attacker_id, state.defender_id);
             state.current_actor_id = opp;
@@ -1090,7 +1133,7 @@ void apply_defense_gear_effects(InternalState &state, int player_id) {
     }
 
     if (has_dreaming_hat) {
-        state.curses[player_id][CURSE_TYPE_DREAM] = true;
+        apply_curse_state(state, player_id, CURSE_TYPE_DREAM);
         bool is_staged[MAX_HAND_SIZE] = {false};
         for (int k = 0; k < state.num_staged_cards[player_id]; ++k) {
             is_staged[state.staged_cards[player_id][k]] = true;
@@ -1171,8 +1214,9 @@ bool run_death_check(InternalState &state) {
                 state.pending_is_group_attack = false;
                 state.pending_attack_source_id = ID_ASCENSION_BOW;
                 return true; // 防御フェイズへ移行するため一時中断
+            } else {
+                push_event(state, p, EventType::ATTACK_MISS, ID_ASCENSION_BOW, 1 - p, 0.0f);
             }
-            // 命中しなかった場合はwhileにより次の保留中の弓を処理
         }
     }
 
@@ -1212,6 +1256,7 @@ bool run_death_check(InternalState &state) {
                     clear_hand_slot(state, p, slot);
                     state.is_used[p][slot] = true;
                     state.is_known_to_opp[p][slot] = true;
+                    push_event(state, p, EventType::CONFIRM_ATTACK, ID_ASCENSION_BOW, 1 - p, 0.0f);
                 }
                 // キューイング完了したので、最初の1発を撃つために再帰呼び出し
                 return run_death_check(state);
@@ -1285,6 +1330,7 @@ static bool setup_guardian_attack_defense(InternalState &state, int attacker, in
     state.pending_deal_same_damage = false;
     state.pending_is_group_attack = feat.is_group_attack;
     state.turn_end_state = 5;
+    push_event(state, attacker, EventType::EFFECT_GUARDIAN, source_id, defender, static_cast<float>(state.guardian[attacker]));
     return true;
 }
 
@@ -1461,23 +1507,20 @@ bool resolve_turn_end_steps(InternalState &state) {
                 break;
             }
             case 1: { // 病気悪化判定
-                int me = state.current_actor_id;
+                int me = state.current_turn % 2;
                 if (state.hp[me] > 0 && state.sickness[me] != SICKNESS_NONE) {
                     int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
                     if (roll < 5) {
                         if (state.sickness[me] == SICKNESS_HEAVEN) { // 天国病悪化 -> 死亡 (発作)
                             state.hp[me] = 0;
                             state.heaven_seizure_occurred[me] = true;
-                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, 4.0f);
+                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, static_cast<float>(SicknessEvent::TYPE_HEAVEN | SicknessEvent::FLAG_SEIZURE));
                         } else if (state.sickness[me] == SICKNESS_COLD) { // 風邪 -> 熱病
-                            state.sickness[me] = SICKNESS_FEVER;
-                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, 2.0f);
+                            apply_sickness(state, me, SICKNESS_FEVER);
                         } else if (state.sickness[me] == SICKNESS_FEVER) { // 熱病 -> 地獄病
-                            state.sickness[me] = SICKNESS_HELL;
-                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, 3.0f);
+                            apply_sickness(state, me, SICKNESS_HELL);
                         } else if (state.sickness[me] == SICKNESS_HELL) { // 地獄病 -> 天国病
-                            state.sickness[me] = SICKNESS_HEAVEN;
-                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, 4.0f);
+                            apply_sickness(state, me, SICKNESS_HEAVEN);
                         }
                     }
                 }
@@ -1492,22 +1535,22 @@ bool resolve_turn_end_steps(InternalState &state) {
                 break;
             }
             case 2: { // 病気ダメージ・回復処理
-                int me = state.current_actor_id;
+                int me = state.current_turn % 2;
                 int hp_before = state.hp[me];
                 if (state.hp[me] > 0) {
                     if (state.sickness[me] == SICKNESS_COLD) { // 風邪: 1ダメ
                         state.hp[me] = std::max(0, state.hp[me] - 1);
-                        push_event(state, me, EventType::TAKE_DAMAGE, -1, me, 1.0f);
+                        push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, static_cast<float>(SicknessEvent::TYPE_COLD | SicknessEvent::FLAG_DAMAGE));
                     } else if (state.sickness[me] == SICKNESS_FEVER) { // 熱病: 2ダメ
                         state.hp[me] = std::max(0, state.hp[me] - 2);
-                        push_event(state, me, EventType::TAKE_DAMAGE, -1, me, 2.0f);
+                        push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, static_cast<float>(SicknessEvent::TYPE_FEVER | SicknessEvent::FLAG_DAMAGE));
                     } else if (state.sickness[me] == SICKNESS_HELL) { // 地獄病: 5ダメ
                         state.hp[me] = std::max(0, state.hp[me] - 5);
-                        push_event(state, me, EventType::TAKE_DAMAGE, -1, me, 5.0f);
+                        push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, static_cast<float>(SicknessEvent::TYPE_HELL | SicknessEvent::FLAG_DAMAGE));
                     } else if (state.sickness[me] == SICKNESS_HEAVEN) { // 天国病: 5回復
                         if (!state.heaven_seizure_occurred[me]) {
                             state.hp[me] = std::min(99, state.hp[me] + 5);
-                            push_event(state, me, EventType::HEAL_HP, -1, me, 5.0f);
+                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, static_cast<float>(SicknessEvent::TYPE_HEAVEN | SicknessEvent::FLAG_HEAL));
                         }
                     }
                 }
@@ -1515,6 +1558,7 @@ bool resolve_turn_end_steps(InternalState &state) {
                 if (state.hp[me] < hp_before && state.guardian[me] > GUARDIAN_NONE) {
                     int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
                     if (roll < 10) {
+                        push_event(state, me, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(state.guardian[me]));
                         state.guardian[me] = GUARDIAN_NONE;
                     }
                 }
@@ -1539,8 +1583,8 @@ bool resolve_turn_end_steps(InternalState &state) {
                 break;
             }
             case 4: { // 相手の守護神の行動
-                int opp = 1 - state.current_actor_id; // 次にターンが回る相手
-                int me = state.current_actor_id;     // 現在手番が終了した側
+                int me = state.current_turn % 2;     // 現在手番が終了した側
+                int opp = 1 - me;                    // 次にターンが回る相手
                 state.num_staged_cards[me] = 0;      // 被攻撃に備えて仮置き場をクリア
                 
                 if (state.hp[opp] > 0 && state.guardian[opp] > GUARDIAN_NONE) {
@@ -1600,15 +1644,28 @@ bool resolve_turn_end_steps(InternalState &state) {
                         }
                         else if (g_id == GUARDIAN_NEPTUNE) { // 海王神
                             int source_id = CARD_EMPTY;
-                            if (act_idx == 1) { state.hp[opp] = std::min(99, state.hp[opp] + 10); source_id = ID_HEALTHY_SEAFOOD_SOUP; }
-                            else if (act_idx == 2) { state.hp[opp] = std::min(99, state.hp[opp] + 5); source_id = ID_SEAFOOD_SOUP; }
-                            else if (act_idx == 3) { state.mp[opp] = std::min(99, state.mp[opp] + 10); source_id = ID_FRESH_BEACH_AROMA; }
-                            else if (act_idx == 4) { state.mp[opp] = std::min(99, state.mp[opp] + 5); source_id = ID_BEACH_AROMA; }
+                            if (act_idx == 1) {
+                                state.hp[opp] = std::min(99, state.hp[opp] + 10);
+                                source_id = ID_HEALTHY_SEAFOOD_SOUP;
+                            }
+                            else if (act_idx == 2) {
+                                state.hp[opp] = std::min(99, state.hp[opp] + 5);
+                                source_id = ID_SEAFOOD_SOUP;
+                            }
+                            else if (act_idx == 3) {
+                                state.mp[opp] = std::min(99, state.mp[opp] + 10);
+                                source_id = ID_FRESH_BEACH_AROMA;
+                            }
+                            else if (act_idx == 4) {
+                                state.mp[opp] = std::min(99, state.mp[opp] + 5);
+                                source_id = ID_BEACH_AROMA;
+                            }
                             else {
                                 clear_all_status_effects(state, opp);
                                 source_id = ID_SOUND_OF_RIPPLES;
                             }
                             state.pending_attack_source_id = source_id;
+                            push_event(state, opp, EventType::EFFECT_GUARDIAN, source_id, opp, static_cast<float>(g_id));
                         }
                         else if (g_id == GUARDIAN_VENUS) { // 金星神
                             int source_id = CARD_EMPTY;
@@ -1617,11 +1674,13 @@ bool resolve_turn_end_steps(InternalState &state) {
                                 state.money[0] = std::min(99, state.money[0] + 1);
                                 state.money[1] = std::min(99, state.money[1] + 1);
                                 source_id = ID_COIN_SCATTERING; 
+                                push_event(state, opp, EventType::EFFECT_GUARDIAN, source_id, -1, static_cast<float>(g_id));
                             }
                             else if (act_idx == 2) { 
                                 // 自分(opp)にお金+20
                                 state.money[opp] = std::min(99, state.money[opp] + 20);
                                 source_id = ID_LUXURY_ACCESSORY; 
+                                push_event(state, opp, EventType::EFFECT_GUARDIAN, source_id, opp, static_cast<float>(g_id));
                             }
                             else if (act_idx == 3) { 
                                 // わいろ (相手にお金+5、反射可能)
@@ -1631,6 +1690,7 @@ bool resolve_turn_end_steps(InternalState &state) {
                                 // 自分(opp)にお金+8
                                 state.money[opp] = std::min(99, state.money[opp] + 8);
                                 source_id = ID_LITTLE_SOMETHING; 
+                                push_event(state, opp, EventType::EFFECT_GUARDIAN, source_id, opp, static_cast<float>(g_id));
                             }
                             else { 
                                 // 罰金 (没収3、反射可能)
@@ -1739,16 +1799,19 @@ bool resolve_turn_end_steps(InternalState &state) {
                                 }
                                 // 6. 夜空のホウキ (ID_NOCTURNAL_BROOM) ➡ 対戦相手に使う
                                 else if (drawn_card_id == ID_NOCTURNAL_BROOM) {
+                                    push_event(state, opp, EventType::EFFECT_GUARDIAN, drawn_card_id, me, static_cast<float>(GUARDIAN_EARTH));
                                     apply_card_effects_to_target(state, me, {drawn_card_id});
                                     state.turn_end_state = 5;
                                 }
                                 // 7. 女神の石けん (ID_GODDESS_S_SOAP) ➡ 対戦相手に使う
                                 else if (drawn_card_id == ID_GODDESS_S_SOAP) {
+                                    push_event(state, opp, EventType::EFFECT_GUARDIAN, drawn_card_id, me, static_cast<float>(GUARDIAN_EARTH));
                                     apply_card_effects_to_target(state, me, {drawn_card_id});
                                     state.turn_end_state = 5;
                                 }
                                 // 8. その他の雑貨 ➡ 自分に使う
                                 else {
+                                    push_event(state, opp, EventType::EFFECT_GUARDIAN, drawn_card_id, opp, static_cast<float>(GUARDIAN_EARTH));
                                     apply_card_effects_to_target(state, opp, {drawn_card_id});
                                     if (state.current_phase == GamePhase::PHASE_DEFENSE || state.current_phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
                                         state.turn_end_state = 5;
@@ -1782,6 +1845,7 @@ bool resolve_turn_end_steps(InternalState &state) {
                             else if (chosen_miracle == ID_TONE || chosen_miracle == ID_SONG ||
                                      chosen_miracle == ID_RELEASE || chosen_miracle == ID_SPRING ||
                                      chosen_miracle == ID_TREASURE) {
+                                push_event(state, opp, EventType::EFFECT_GUARDIAN, chosen_miracle, opp, static_cast<float>(GUARDIAN_MOON));
                                 apply_card_effects_to_target(state, opp, {chosen_miracle});
                                 state.turn_end_state = 5;
                             }

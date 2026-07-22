@@ -236,26 +236,26 @@ def test_miracle_darkness_defense_by_any_armor():
     """
     runner = SimulationRunner()
     darkness_id = find_card_by_name("＜闇＞")
-    wood_shield_id = find_card_by_name("木の盾")
+    leather_clothes_id = find_card_by_name("armor/leather-clothes")
     dress_id = find_card_by_name("きらきらドレス")
 
     runner.set_status(0, hp=40, mp=20)
     runner.set_status(1, hp=40, mp=20)
 
     runner.state.set_true_hand(0, 0, darkness_id)
-    runner.state.set_true_hand(1, 0, wood_shield_id)
+    runner.state.set_true_hand(1, 0, leather_clothes_id)
     runner.state.set_true_hand(1, 1, dress_id)
 
-    # 1. P0が＜闇＞(ATK 5)でP1に奇跡攻撃
+    # 1. P0 Magiが＜闇＞(ATK 5)でP1に奇跡攻撃
     runner.step(ActionType.ACTION_SELECT_HAND_0)
     runner.step(ActionType.ACTION_TARGET_OPP)
 
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
     assert runner.state.current_actor_id == 1
 
-    # 2. P1の合法手に「木の盾」(0) も「きらきらドレス」(1) も含まれていること！
+    # 2. P1の合法手に「革の服」(0) も「きらきらドレス」(1) も含まれていること！
     actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True, "無属性防具(木の盾)が選択可能であること"
+    assert actions[ActionType.ACTION_SELECT_HAND_0] is True, "無属性防具(革の服)が選択可能であること"
     assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "光属性防具(きらきらドレス)が選択可能であること"
 
     # 3. きらきらドレス(DEF10)を出して計DEF10で完全防御

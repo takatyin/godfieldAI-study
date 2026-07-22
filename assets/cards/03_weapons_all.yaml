@@ -124,7 +124,7 @@
   type: weapon
   usage_timing:
   - main_atk_phase
-  price: 10
+  price: 4
   element: 土
   attack_power: 6
   drop_rate: 1

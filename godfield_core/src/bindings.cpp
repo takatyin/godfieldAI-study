@@ -75,6 +75,19 @@ PYBIND11_MODULE(godfield_core, m) {
         .value("MOON", GUARDIAN_MOON)
         .export_values();
 
+    py::enum_<PhenomenonType>(m, "PhenomenonType")
+        .value("SUNSET", PHENOMENON_SUNSET)
+        .value("DENSE_FOG", PHENOMENON_DENSE_FOG)
+        .value("MUSHROOM", PHENOMENON_MUSHROOM)
+        .value("TORNADO", PHENOMENON_TORNADO)
+        .value("GIGANTIC_TUB", PHENOMENON_GIGANTIC_TUB)
+        .value("BLACK_HOLE", PHENOMENON_BLACK_HOLE)
+        .value("WARM_CURRENT", PHENOMENON_WARM_CURRENT)
+        .value("GOLD_MINE", PHENOMENON_GOLD_MINE)
+        .value("MAGNETIC_STORM", PHENOMENON_MAGNETIC_STORM)
+        .value("ECLIPSE", PHENOMENON_ECLIPSE)
+        .export_values();
+
 
     // Export Timing bitmasks
     m.attr("TIMING_MAIN_ATK") = TIMING_MAIN_ATK;
@@ -327,7 +340,33 @@ PYBIND11_MODULE(godfield_core, m) {
         .value("BLOCK_ATTACK", EventType::BLOCK_ATTACK)
         .value("BOUNCE_ATTACK", EventType::BOUNCE_ATTACK)
         .value("TRIGGER_PHENOMENON", EventType::TRIGGER_PHENOMENON)
+        .value("REFLECT_MIRROR", EventType::REFLECT_MIRROR)
+        .value("RING_EFFECT", EventType::RING_EFFECT)
+        .value("GUARDIAN_ENTER", EventType::GUARDIAN_ENTER)
+        .value("GUARDIAN_LEAVE", EventType::GUARDIAN_LEAVE)
+        .value("EFFECT_CURSE", EventType::EFFECT_CURSE)
         .export_values();
+
+    py::module_ se = m.def_submodule("SicknessEvent", "Sickness Event Bitmask Constants");
+    se.attr("MASK_TYPE") = SicknessEvent::MASK_TYPE;
+    se.attr("TYPE_NONE") = SicknessEvent::TYPE_NONE;
+    se.attr("TYPE_COLD") = SicknessEvent::TYPE_COLD;
+    se.attr("TYPE_FEVER") = SicknessEvent::TYPE_FEVER;
+    se.attr("TYPE_HELL") = SicknessEvent::TYPE_HELL;
+    se.attr("TYPE_HEAVEN") = SicknessEvent::TYPE_HEAVEN;
+    se.attr("FLAG_DAMAGE") = SicknessEvent::FLAG_DAMAGE;
+    se.attr("FLAG_HEAL") = SicknessEvent::FLAG_HEAL;
+    se.attr("FLAG_WORSENED") = SicknessEvent::FLAG_WORSENED;
+    se.attr("FLAG_SEIZURE") = SicknessEvent::FLAG_SEIZURE;
+
+    py::module_ ce = m.def_submodule("CurseEvent", "Curse Event Bitmask Constants");
+    ce.attr("MASK_TYPE") = CurseEvent::MASK_TYPE;
+    ce.attr("TYPE_FOG") = CurseEvent::TYPE_FOG;
+    ce.attr("TYPE_FLASH") = CurseEvent::TYPE_FLASH;
+    ce.attr("TYPE_DARK_CLOUD") = CurseEvent::TYPE_DARK_CLOUD;
+    ce.attr("TYPE_DREAM") = CurseEvent::TYPE_DREAM;
+    ce.attr("FLAG_APPLIED") = CurseEvent::FLAG_APPLIED;
+    ce.attr("FLAG_CLEARED") = CurseEvent::FLAG_CLEARED;
 
     py::class_<GameEvent>(m, "GameEvent")
         .def(py::init<>())

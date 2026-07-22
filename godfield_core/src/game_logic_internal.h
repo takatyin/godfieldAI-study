@@ -221,6 +221,8 @@ std::vector<int> get_staged_card_ids(const InternalState &state, int player);
 void apply_card_effects_to_target(InternalState &state, int target_id, const std::vector<int>& used_card_ids);
 
 void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse);
+void apply_curse_state(InternalState &state, int player_id, CurseType type);
+void clear_curse_state(InternalState &state, int player_id, CurseType type);
 
 /**
  * @brief プレイヤーに病気を適用・悪化させます。

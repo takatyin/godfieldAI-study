@@ -244,10 +244,10 @@ function App() {
         {isGameOver && isMe && (
           <div className="game-over-overlay">
             <div className="game-over-title">
-              {obs.hp_me <= 0 ? '敗 北' : (obs.hp_opp <= 0 ? '勝 利' : '引き分け')}
+              {(obs.hp_me <= 0 && obs.hp_opp <= 0) ? '引き分け' : (obs.hp_me <= 0 ? '敗 北' : (obs.hp_opp <= 0 ? '勝 利' : '引き分け'))}
             </div>
             <div className="game-over-desc">
-              HPが 0 になりました。
+              対戦が終了しました。
             </div>
             <button className="control-btn primary" onClick={resetGame}>もう一度遊ぶ</button>
           </div>

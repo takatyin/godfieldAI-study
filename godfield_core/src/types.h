@@ -45,6 +45,19 @@ enum GuardianType {
     GUARDIAN_MOON = 10
 };
 
+enum PhenomenonType {
+    PHENOMENON_SUNSET = 0,          // 夕焼け: 全員熱病
+    PHENOMENON_DENSE_FOG = 1,       // 濃霧: 全員霧
+    PHENOMENON_MUSHROOM = 2,        // きのこ大発生: ご乱心ターン増加
+    PHENOMENON_TORNADO = 3,         // 竜巻: 全員HP 1
+    PHENOMENON_GIGANTIC_TUB = 4,    // 巨大なタライ: 自分か相手に光属性攻50
+    PHENOMENON_BLACK_HOLE = 5,      // ブラックホール: 全員に闇属性全体攻30
+    PHENOMENON_WARM_CURRENT = 6,    // 暖流: 自身HP+50
+    PHENOMENON_GOLD_MINE = 7,       // 金山: お金集約
+    PHENOMENON_MAGNETIC_STORM = 8,  // 磁気嵐: 手札相互交換
+    PHENOMENON_ECLIPSE = 9          // 日食: 守護神割り当て
+};
+
 
 enum class DreamGroup {
     NONE = 0,                       // 常に確定するグループ（夢の影響を受けない）
@@ -159,8 +172,44 @@ enum class EventType : uint8_t {
     REFUSE_DEAL = 19,     // 取引見送り・購入拒否
     BLOCK_ATTACK = 20,    // 阻止発動 (BLOCK)
     BOUNCE_ATTACK = 21,   // 弾く発動 (BOUNCE: value=1.0で成功, 0.0で失敗)
-    TRIGGER_PHENOMENON = 22 // 超常現象発動 (運命のひも等: value=phenomenon_id)
+    TRIGGER_PHENOMENON = 22, // 超常現象発動 (運命のひも等: value=phenomenon_id)
+    REFLECT_MIRROR = 23,  // スーパーミラーによる対象反転発動 (売る/買う/雑貨等の跳ね返し)
+    RING_EFFECT = 24,     // 指輪の効果・反撃発動
+    GUARDIAN_ENTER = 25,  // 守護神降臨
+    GUARDIAN_LEAVE = 26,  // 守護神退散
+    EFFECT_CURSE = 27     // 呪い状態変化
 };
+
+// ============================================================================
+// イベント用ビットマスク定数 (GameEvent.value 形式)
+// ============================================================================
+
+// EventType::EFFECT_SICKNESS (8) の GameEvent.value 用ビットマスク定義
+namespace SicknessEvent {
+    constexpr int MASK_TYPE       = 0x0F; // 下位4ビット: 病気種別
+    constexpr int TYPE_NONE       = 0;
+    constexpr int TYPE_COLD       = 1;    // 風邪
+    constexpr int TYPE_FEVER      = 2;    // 熱病
+    constexpr int TYPE_HELL       = 3;    // 地獄病
+    constexpr int TYPE_HEAVEN     = 4;    // 天国病
+
+    constexpr int FLAG_DAMAGE     = 1 << 4; // 16 (病気ダメージ発生)
+    constexpr int FLAG_HEAL       = 1 << 5; // 32 (病気回復発生)
+    constexpr int FLAG_WORSENED   = 1 << 6; // 64 (病気の悪化・進行)
+    constexpr int FLAG_SEIZURE    = 1 << 7; // 128 (発作・死亡)
+}
+
+// EventType::EFFECT_CURSE (27) の GameEvent.value 用ビットマスク定義
+namespace CurseEvent {
+    constexpr int MASK_TYPE       = 0x0F;
+    constexpr int TYPE_FOG        = 1;    // 霧
+    constexpr int TYPE_FLASH      = 2;    // 閃光
+    constexpr int TYPE_DARK_CLOUD = 3;    // 暗雲
+    constexpr int TYPE_DREAM      = 4;    // 夢
+
+    constexpr int FLAG_APPLIED    = 1 << 4; // 16 (付与)
+    constexpr int FLAG_CLEARED    = 1 << 5; // 32 (解除)
+}
 
 struct GameEvent {
     int actor;       // 0: 自分(観測者), 1: 相手 (視点正規化時に XOR で反転する)

@@ -1300,3 +1300,45 @@ def test_little_something_targets_self():
     # P1のお金が増えており(18 または 30)、P0は変化なし(10)であることを確認
     assert runner.state.get_money(1) in (18, 30)
     assert runner.state.get_money(0) == 10
+
+def test_sickness_turn_end_after_combat():
+    """
+    検証内容: 戦闘解決後にターン終了した際、病気ダメージが「ターンプレイヤー（攻撃側）」に正しく適用されること。
+    - P0が風邪（COLD）状態。
+    - P0がP1へ武器攻撃し、P1が防御を完了する。
+    - 戦闘終了（PHASE_END）時に、風邪の1ダメージがP0（攻撃側）に適用されることを確認。
+    - P1（防御側）には適用されないことを確認。
+    """
+    runner = SimulationRunner()
+    weapon_id = find_card_by_name("weapons/bronze-club")
+    shield_id = find_card_by_name("armor/leather-cap")
+    
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_hp(0, 40)
+    runner.state.set_hp(1, 40)
+    runner.state.set_sickness(0, SicknessType.SICKNESS_COLD)  # P0が風邪
+    runner.state.set_sickness(1, SicknessType.SICKNESS_NONE)
+    
+    runner.set_hand(0, [weapon_id])
+    runner.set_hand(1, [shield_id])
+    
+    # P0が攻撃
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_TARGET_OPP)
+    
+    # P1の防御ターン
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.current_actor_id == 1
+    
+    # P1が木の盾で防御
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_CONFIRM)
+    
+    # ターン終了処理が完了し、P1のメインフェイズへ移行していること
+    assert runner.state.current_phase == GamePhase.PHASE_MAIN
+    assert runner.state.current_actor_id == 1
+    
+    # 病気ダメージがP0（ターンプレイヤー）に適用され、HPが39になっていること
+    assert runner.state.get_hp(0) == 39
+    assert runner.state.get_hp(1) == 40

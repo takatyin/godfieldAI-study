@@ -148,7 +148,7 @@
   usage_timing:
   - atk_plus_phase
   - main_atk_phase
-  price: 3
+  price: 6
   element: 木
   attack_power: 3
   drop_rate: 1

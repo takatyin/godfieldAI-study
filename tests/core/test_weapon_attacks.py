@@ -753,8 +753,8 @@ def test_fever_mask_and_dreaming_hat():
 
     # ダメージ解決され、ターン終了処理を経て PHASE_MAIN に戻る
     assert runner_fever.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-    # 被ダメージは 0 だが、熱病にかかったためターン終了時に2ダメージ受けて HP は 38 になる
-    assert runner_fever.state.get_hp(1) == 38
+    # 被ダメージは 0。熱病にかかったが、ターン終了判定はターンプレイヤー(P0)に対して行われるため、P1のHPは40のまま
+    assert runner_fever.state.get_hp(1) == 40
     # 熱病状態になっていること (SicknessType.SICKNESS_FEVER = 2)
     assert runner_fever.state.get_sickness(1) == godfield_core.SicknessType.SICKNESS_FEVER
 
@@ -822,7 +822,7 @@ def test_saw_bunbun_multiple_attacks():
     saw_bunbun_id = find_card_by_name("weapons/saw-boom-boom")
     mirage_id = find_card_by_name("＜蜃気楼＞")
     meteor_id = find_card_by_name("＜流星＞")
-    wood_shield_id = find_card_by_name("armor/wood-shield")
+    leather_clothes_id = find_card_by_name("armor/leather-clothes")
 
     # 1. のこぶんぶん単体のテスト
     runner1 = SimulationRunner()
@@ -833,7 +833,7 @@ def test_saw_bunbun_multiple_attacks():
     runner1.set_status(1, hp=40, mp=10)
 
     runner1.state.set_true_hand(0, 0, saw_bunbun_id)
-    runner1.state.set_true_hand(1, 0, wood_shield_id)
+    runner1.state.set_true_hand(1, 0, leather_clothes_id)
 
     # 攻撃選択 -> ターゲット
     runner1.step(ActionType.ACTION_SELECT_HAND_0)
@@ -844,7 +844,7 @@ def test_saw_bunbun_multiple_attacks():
     assert runner1.state.current_actor_id == 1
     assert runner1.state.remaining_attacks == 2
 
-    # 1回目の防御：木の盾を選択して確定
+    # 1回目の防御：革の服を選択して確定
     runner1.step(ActionType.ACTION_SELECT_HAND_0)
     runner1.step(ActionType.ACTION_CONFIRM)
 
@@ -1300,12 +1300,12 @@ def test_ring_multiple_attacks_delay():
     検証内容: 連撃終了後の指輪一括解決。
     - Aが「のこぶんぶん」（2回攻撃）でBを攻撃。
     - 1回目：Bが「土星の指輪」で防御し確定（ダメージ3、土6反撃予約）。連撃中なので反撃はまだ起動しない。
-    - 2回目：Bが「木の盾」で防御し確定（ダメージ1）。
+    - 2回目：Bが「革の服」で防御し確定（ダメージ1）。
     - 2回目の解決で連撃が終わり、予約されていた土星の指輪の反撃がここで初めて起動することを確認。
     """
     saw_bunbun_id = find_card_by_name("weapons/saw-boom-boom")
     saturn_ring_id = find_card_by_name("armor/saturn-ring")
-    wood_shield_id = find_card_by_name("armor/wood-shield")
+    leather_clothes_id = find_card_by_name("armor/leather-clothes")
 
     runner = SimulationRunner()
     runner.state.seed_rng(42)
@@ -1316,7 +1316,7 @@ def test_ring_multiple_attacks_delay():
 
     runner.state.set_true_hand(0, 0, saw_bunbun_id)
     runner.state.set_true_hand(1, 0, saturn_ring_id)
-    runner.state.set_true_hand(1, 1, wood_shield_id)
+    runner.state.set_true_hand(1, 1, leather_clothes_id)
 
     # A のこぶんぶん攻撃
     runner.step(ActionType.ACTION_SELECT_HAND_0)
@@ -1332,7 +1332,7 @@ def test_ring_multiple_attacks_delay():
     assert runner.state.remaining_attacks == 1
     assert runner.state.get_hp(1) == 37
 
-    # B 2回目を木の盾で防御し確定
+    # B 2回目を革の服で防御し確定
     runner.step(ActionType.ACTION_SELECT_HAND_1)
     runner.step(ActionType.ACTION_CONFIRM)
 
@@ -1467,7 +1467,7 @@ def test_attack_on_dead_player():
     - 2回の攻撃とも confirm を押して消化され、最後まで攻撃が継続し、その後にターン終了（Aの勝利）となること。
     """
     saw_id = find_card_by_name("weapons/saw-boom-boom")
-    shield_id = find_card_by_name("木の盾")
+    leather_clothes_id = find_card_by_name("armor/leather-clothes")
 
     runner = SimulationRunner()
     runner.state.seed_rng(42)
@@ -1475,7 +1475,7 @@ def test_attack_on_dead_player():
     runner.set_status(1, hp=0, mp=10) # すでに死亡
 
     runner.state.set_true_hand(0, 0, saw_id)
-    runner.state.set_true_hand(1, 0, shield_id)
+    runner.state.set_true_hand(1, 0, leather_clothes_id)
 
     # A 攻撃
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
@@ -1489,7 +1489,7 @@ def test_attack_on_dead_player():
 
     # B（HP0）の合法手を検証
     actions = godfield_core.get_legal_actions(runner.state)
-    # 木の盾（スロット0）は選択不可（非合法手）であること
+    # 革の服（スロット0）は選択不可（非合法手）であること
     assert actions[ActionType.ACTION_SELECT_HAND_0] is False
     # confirm（受諾）のみが合法手であること
     assert actions[ActionType.ACTION_CONFIRM] is True

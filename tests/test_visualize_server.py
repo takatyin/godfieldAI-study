@@ -223,7 +223,7 @@ def test_visualize_smart_action_labels():
     runner = SimulationRunner()
     visualize_server.state = runner.state
 
-    # 1. 買戻しフェイズ PHASE_BUY
+    # 1. 購入フェイズ PHASE_BUY
     runner.state.current_phase = godfield_core.GamePhase.PHASE_BUY
     label = compute_smart_action_label(18, [], runner.state)
     assert label == "買う"
@@ -236,6 +236,30 @@ def test_visualize_smart_action_labels():
     # 3. 捨てるアクション
     label = compute_smart_action_label(21, [], runner.state)
     assert label == "捨てる"
+
+    # 4. 取引可否・受諾/拒否アクション (アクション19)
+    # PHASE_BUY では「買わない」
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_BUY
+    label = compute_smart_action_label(19, [], runner.state)
+    assert label == "買わない"
+
+    # PHASE_BUY_SELECT_MIRROR
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_BUY_SELECT_MIRROR
+    # 手札をステージしていない（受け入れる）
+    assert compute_smart_action_label(19, [], runner.state) == "受け入れる"
+    # ミラーをステージしている（はね返す）
+    dummy_mirror = [{"name": "スーパーミラー", "id": 1}]
+    assert compute_smart_action_label(19, dummy_mirror, runner.state) == "はね返す"
+
+    # PHASE_SELL_SELECT_MIRROR
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_SELL_SELECT_MIRROR
+    assert compute_smart_action_label(19, [], runner.state) == "受け入れる"
+    assert compute_smart_action_label(19, dummy_mirror, runner.state) == "はね返す"
+
+    # PHASE_SUNDRY_SELECT_MIRROR
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    assert compute_smart_action_label(19, [], runner.state) == "受け入れる"
+    assert compute_smart_action_label(19, dummy_mirror, runner.state) == "はね返す"
 
 
 def test_visualize_ogre_helm_phase_labels():
@@ -274,3 +298,119 @@ def test_visualize_ogre_helm_phase_labels():
 
     ogre_card_plus = next(c for c in data2["hand"] if c["id"] == ogre_helm_id)
     assert ogre_card_plus["power_label"] == "+攻10"
+
+def test_visualize_main_phase_weapon_plus():
+    """
+    検証内容: メインフェイズ中の武器カードのラベル。
+    - 吹き矢（weapons/blowgun）は武器であり武器プラスでもあるので、メインフェイズ中に '+攻6' と表示されることを確認。
+    - 木刀（weapons/wooden-sword）は通常の武器（武器プラスではない）なので、メインフェイズ中に '攻1' と表示されることを確認。
+    """
+    runner = SimulationRunner()
+    visualize_server.state = runner.state
+
+    blowgun_id = find_card_by_name("weapons/blowgun")
+    wooden_sword_id = find_card_by_name("weapons/wooden-sword")
+
+    runner.set_status(0, hp=40, mp=20)
+    runner.set_status(1, hp=40, mp=20)
+
+    runner.state.set_true_hand(0, 0, blowgun_id)
+    runner.state.set_true_hand(0, 1, wooden_sword_id)
+
+    # 1. PHASE_MAIN フェイズ（手番開始時）
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
+    obs = godfield_core.get_observation(runner.state, 0)
+    data = serialize_observation(obs, player_id=0)
+
+    # 吹き矢は '+攻1'
+    blowgun_card = next(c for c in data["hand"] if c["id"] == blowgun_id)
+    assert blowgun_card["power_label"] == "+攻1"
+
+    # 木刀は '攻1'
+    wooden_sword_card = next(c for c in data["hand"] if c["id"] == wooden_sword_id)
+    assert wooden_sword_card["power_label"] == "攻1"
+
+
+def test_visualize_sell_multiple_sell_cards():
+    """
+    検証内容: 手札に複数枚の「売る」カードがある場合、売却フェイズ(PHASE_SELL_SELECT)において、
+    売却対象となる「売る」カードの売却価格（¥2）が正しくラベルに表示されることを確認。
+    """
+    runner = SimulationRunner()
+    visualize_server.state = runner.state
+
+    sell_card_id = find_card_by_name("売る")
+
+    runner.set_status(0, hp=40, mp=20)
+    runner.set_status(1, hp=40, mp=20)
+
+    # プレイヤー0の手札に「売る」を2枚セット
+    runner.state.set_true_hand(0, 0, sell_card_id)
+    runner.state.set_true_hand(0, 1, sell_card_id)
+
+    # 1. PHASE_MAIN フェイズ（売るカード使用前）：価格ラベルは表示されない（""）
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    obs = godfield_core.get_observation(runner.state, 0)
+    data = serialize_observation(obs, player_id=0)
+
+    sell_card_0 = data["hand"][0]
+    sell_card_1 = data["hand"][1]
+    assert sell_card_0["power_label"] == ""
+    assert sell_card_1["power_label"] == ""
+
+    # 2. PHASE_SELL_SELECT フェイズ（売るカード選択中）：価格ラベルが表示される（"¥5"）
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_SELL_SELECT
+    obs_sell = godfield_core.get_observation(runner.state, 0)
+    data_sell = serialize_observation(obs_sell, player_id=0)
+
+    sell_card_0_sell = data_sell["hand"][0]
+    sell_card_1_sell = data_sell["hand"][1]
+    assert sell_card_0_sell["power_label"] == "¥5"
+    assert sell_card_1_sell["power_label"] == "¥5"
+
+    # 3. 1枚目の「売る」カードが選択状態（使用中）の場合：そのカードの価格ラベルは非表示になり、もう1枚の「売る」には価格が表示されること
+    runner.state.set_is_used(0, 0, True) # 1枚目をステージング（使用中）にする
+    runner.state.set_num_staged_cards(0, 1)
+    runner.state.set_staged_card(0, 0, 0) # 0番目の手札スロットがステージングされている
+    obs_used = godfield_core.get_observation(runner.state, 0)
+    data_used = serialize_observation(obs_used, player_id=0)
+
+    sell_card_0_used = data_used["hand"][0]
+    sell_card_1_used = data_used["hand"][1]
+    assert sell_card_0_used["power_label"] == ""  # 使用中の「売る」は非表示
+    assert sell_card_1_used["power_label"] == "¥5" # 未使用の「売る」は ¥5 と表示される
+
+    # 4. 2枚ともステージング（使用中）された場合：
+    # - 手札のカードのラベルは両方とも ""
+    # - ステージリストの1枚目（トリガー）は ""、2枚目（商品）は "¥5"
+    # - pending_badge（合計売値）は "¥5"
+    runner.state.set_is_used(0, 1, True)
+    runner.state.set_num_staged_cards(0, 2)
+    runner.state.set_staged_card(0, 1, 1) # 1番目の手札スロットがステージングされている
+    obs_both = godfield_core.get_observation(runner.state, 0)
+    data_both = serialize_observation(obs_both, player_id=0)
+
+    assert data_both["hand"][0]["power_label"] == ""
+    assert data_both["hand"][1]["power_label"] == ""
+
+    assert len(data_both["staged"]) == 2
+    assert data_both["staged"][0]["power_label"] == ""   # トリガー
+    assert data_both["staged"][1]["power_label"] == "¥5"  # 商品
+
+    assert data_both["staged_total_badge"] is not None
+    assert data_both["staged_total_badge"]["label"] == "¥5"
+
+    # 5. 手札の2枚目（スロット1）の「売る」のみがトリガーとしてステージングされた場合：
+    # - 手札のスロット1（使用中）は ""、スロット0（未使用の「売る」）は "¥5" と表示されること
+    # - ステージリストの1枚目（トリガー）は "" と表示されること
+    runner.state.set_is_used(0, 0, False)
+    runner.state.set_is_used(0, 1, True)
+    runner.state.set_num_staged_cards(0, 1)
+    runner.state.set_staged_card(0, 0, 1) # スロット1が最初にステージング（トリガー）されている
+    obs_slot1 = godfield_core.get_observation(runner.state, 0)
+    data_slot1 = serialize_observation(obs_slot1, player_id=0)
+
+    assert data_slot1["hand"][0]["power_label"] == "¥5" # 未使用の「売る」は ¥5
+    assert data_slot1["hand"][1]["power_label"] == ""   # 使用中の「売る」は非表示
+    assert len(data_slot1["staged"]) == 1
+    assert data_slot1["staged"][0]["power_label"] == ""  # トリガーの「売る」は非表示

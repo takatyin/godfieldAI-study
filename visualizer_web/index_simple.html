@@ -56,6 +56,27 @@
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(148, 163, 184, 0.5);
         }
+        /* Game Over Delayed Fade-in */
+        @keyframes gameOverFadeIn {
+            0% {
+                opacity: 0;
+                backdrop-filter: blur(0px);
+                pointer-events: none;
+            }
+            99% {
+                pointer-events: none;
+            }
+            100% {
+                opacity: 1;
+                backdrop-filter: blur(8px);
+                pointer-events: auto;
+            }
+        }
+        .game-over-overlay {
+            animation: gameOverFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.2s forwards;
+            opacity: 0;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="text-slate-100 h-screen max-h-screen overflow-hidden flex flex-col p-4 gap-3 bg-slate-950">
@@ -145,9 +166,9 @@
             <!-- Player 0 (You) -->
             <div :class="['flex flex-col glass rounded-2xl p-4 min-h-0 relative', currentActorId === 0 ? 'ring-2 ring-blue-500/30 border-blue-500/30' : '']">
                 <!-- Game Over overlay -->
-                <div v-if="data.p0_obs.is_done || data.p1_obs.is_done" class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-content-center justify-center p-6 text-center z-40">
+                <div v-if="data.p0_obs.is_done || data.p1_obs.is_done" class="absolute inset-0 bg-slate-950/85 rounded-2xl flex flex-col items-center justify-content-center justify-center p-6 text-center z-40 game-over-overlay">
                     <h2 class="text-3xl font-extrabold mb-2 bg-gradient-to-r from-yellow-400 to-red-500 bg-clip-text text-transparent">
-                        {{ data.p0_obs.hp_me <= 0 ? '敗 北' : (data.p0_obs.hp_opp <= 0 ? '勝 利' : '引き分け') }}
+                        {{ (data.p0_obs.hp_me <= 0 && data.p0_obs.hp_opp <= 0) ? '引き分け' : (data.p0_obs.hp_me <= 0 ? '敗 北' : (data.p0_obs.hp_opp <= 0 ? '勝 利' : '引き分け')) }}
                     </h2>
                     <p class="text-slate-400 mb-6">対戦が終了しました。</p>
                     <button @click="resetGame" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 font-bold rounded-lg transition shadow-lg shadow-blue-500/30">
@@ -217,7 +238,7 @@
                                         <span class="text-xs font-black" :style="getPowerLabelStyle(card)">
                                             {{ card.power_label }}
                                         </span>
-                                        <span v-if="card.price" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-300/80 text-amber-950 border border-amber-500/40">
+                                        <span v-if="card.price && !((card.name === '売る' || card.name === '買う') && !card.power_label)" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-300/80 text-amber-950 border border-amber-500/40">
                                             ¥{{ card.price }}
                                         </span>
                                     </div>
@@ -360,9 +381,9 @@
             <!-- Player 1 (Opponent) -->
             <div :class="['flex flex-col glass rounded-2xl p-4 min-h-0 relative', currentActorId === 1 ? 'ring-2 ring-purple-500/30 border-purple-500/30' : '']">
                 <!-- Game Over overlay -->
-                <div v-if="data.p0_obs.is_done || data.p1_obs.is_done" class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-content-center justify-center p-6 text-center z-40">
+                <div v-if="data.p0_obs.is_done || data.p1_obs.is_done" class="absolute inset-0 bg-slate-950/85 rounded-2xl flex flex-col items-center justify-content-center justify-center p-6 text-center z-40 game-over-overlay">
                     <h2 class="text-3xl font-extrabold mb-2 bg-gradient-to-r from-yellow-400 to-red-500 bg-clip-text text-transparent">
-                        {{ data.p1_obs.hp_me <= 0 ? '敗 北' : (data.p1_obs.hp_opp <= 0 ? '勝 利' : '引き分け') }}
+                        {{ (data.p1_obs.hp_me <= 0 && data.p1_obs.hp_opp <= 0) ? '引き分け' : (data.p1_obs.hp_me <= 0 ? '敗 北' : (data.p1_obs.hp_opp <= 0 ? '勝 利' : '引き分け')) }}
                     </h2>
                     <p class="text-slate-400 mb-6">対戦が終了しました。</p>
                     <button @click="resetGame" class="px-6 py-2 bg-purple-600 hover:bg-purple-500 font-bold rounded-lg transition shadow-lg shadow-purple-500/30">
@@ -432,7 +453,7 @@
                                         <span class="text-xs font-black" :style="getPowerLabelStyle(card, data.p1_obs.current_phase, 1)">
                                             {{ card.power_label }}
                                         </span>
-                                        <span v-if="card.price" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-300/80 text-amber-950 border border-amber-500/40">
+                                        <span v-if="card.price && !((card.name === '売る' || card.name === '買う') && !card.power_label)" class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-300/80 text-amber-950 border border-amber-500/40">
                                             ¥{{ card.price }}
                                         </span>
                                     </div>
@@ -549,7 +570,6 @@
             },
             hasPowerLabel(card, phase, playerId) {
                 if (!card || card.hidden) return false;
-                if (card.name === '売る' || card.name === '買戻し') return false;
                 return Boolean(card.power_label);
             },
             getPowerLabelStyle(card) {

@@ -512,21 +512,21 @@ def test_attack_observability():
     防御側から攻撃内容（どのカードをどの順番で使ったか）が完全に観測できること。
     """
     runner = SimulationRunner()
-    wood_sword_id = find_card_by_name("木刀")
-    blowgun_id = find_card_by_name("吹き矢")
-    wood_shield_id = find_card_by_name("木の盾")
+    bronze_club_id = find_card_by_name("weapons/bronze-club")
+    blowgun_id = find_card_by_name("weapons/blowgun")
+    leather_cap_id = find_card_by_name("armor/leather-cap")
 
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
 
-    # P0の手札: [木刀, 吹き矢, ...]
-    runner.state.set_true_hand(0, 0, wood_sword_id)
+    # P0の手札: [銅のこん棒, 吹き矢, ...]
+    runner.state.set_true_hand(0, 0, bronze_club_id)
     runner.state.set_true_hand(0, 1, blowgun_id)
 
-    # P1の手札: [木の盾, ...]
-    runner.state.set_true_hand(1, 0, wood_shield_id)
+    # P1の手札: [革の帽子, ...]
+    runner.state.set_true_hand(1, 0, leather_cap_id)
 
-    # 1. P0が攻撃（木刀）を選択
+    # 1. P0が攻撃（銅のこん棒）を選択
     runner.step(action=ActionType.ACTION_SELECT_HAND_0)
     assert runner.state.get_is_known_to_opp(0, 0) is False  # 選択中（ステージング中）は非公開
 
@@ -548,10 +548,10 @@ def test_attack_observability():
 
     # 【重要】防御中も、攻撃者（P0）の staged_cards がクリアされずに維持されていること
     assert runner.state.get_num_staged_cards(0) == 2
-    assert runner.state.get_staged_card(0, 0) == 0  # 1枚目に木刀 (手札スロット0)
+    assert runner.state.get_staged_card(0, 0) == 0  # 1枚目に銅のこん棒 (手札スロット0)
     assert runner.state.get_staged_card(0, 1) == 1  # 2枚目に吹き矢 (手札スロット1)
 
-    # 4. P1が防御（木の盾）を選択して確定
+    # 4. P1が防御（革の帽子）を選択して確定
     runner.step(action=ActionType.ACTION_SELECT_HAND_0)
     assert runner.state.get_is_known_to_opp(1, 0) is False  # 防具選択中も非公開
     runner.step(action=ActionType.ACTION_CONFIRM)

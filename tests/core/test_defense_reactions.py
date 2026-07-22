@@ -93,11 +93,11 @@ def test_rainbow_curtain_wall_and_reflection_sword_synergy():
     # 2. 虹のカーテン ＋ 反射剣 -> 相手に反射して攻守交代
     runner.reset_state()
     reflection_sword_id = find_card_by_name("weapons/reflection-sword")
-    wood_shield_id = find_card_by_name("armor/wood-shield")
+    leather_clothes_id = find_card_by_name("armor/leather-clothes")
     runner.set_status(0, hp=40, mp=10)
     runner.set_status(1, hp=40, mp=10)
     runner.state.set_true_hand(0, 0, fire_sword_id)
-    runner.state.set_true_hand(0, 1, wood_shield_id)  # 反射後の防御用
+    runner.state.set_true_hand(0, 1, leather_clothes_id)  # 反射後の防御用
     runner.state.set_true_hand(1, 0, curtain_id)
     runner.state.set_true_hand(1, 1, reflection_sword_id)
 
@@ -446,7 +446,7 @@ def test_bouncing_sword_flow():
     """
     boomerang_id = find_card_by_name("weapons/boomerang")
     bouncing_sword_id = find_card_by_name("weapons/bouncing-sword")
-    wood_shield_id = find_card_by_name("armor/wood-shield")
+    leather_clothes_id = find_card_by_name("armor/leather-clothes")
 
     # 弾きが成功するRNGシードを探索
     success_seed = None
@@ -475,7 +475,7 @@ def test_bouncing_sword_flow():
     runner.set_status(0, hp=40, mp=10)
     runner.set_status(1, hp=40, mp=10)
     runner.state.set_true_hand(0, 0, boomerang_id)
-    runner.state.set_true_hand(0, 1, wood_shield_id)  # 反射されたとき用の盾
+    runner.state.set_true_hand(0, 1, leather_clothes_id)  # 反射されたとき用の盾
     runner.state.set_true_hand(1, 0, bouncing_sword_id)
 
     # 1. P0 がブーメランで攻撃
@@ -494,15 +494,15 @@ def test_bouncing_sword_flow():
     assert runner.state.current_actor_id == 0
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
 
-    # 3. P0 が防御カードとして木盾（ウッドシールド、守2）を使用可能か検証
+    # 3. P0 が防御カードとして革の服（守2）を使用可能か検証
     actions = godfield_core.get_legal_actions(runner.state)
     assert actions[ActionType.ACTION_SELECT_HAND_1] is True  # 盾が選択可能
 
-    # 4. P0 が木盾を使用して防御確定
+    # 4. P0 が革の服を使用して防御確定
     runner.step(ActionType.ACTION_SELECT_HAND_1)
     runner.step(ActionType.ACTION_CONFIRM)
 
-    # ブーメランの攻撃力3 - 木盾の守備力2 = 1ダメージ。
+    # ブーメランの攻撃力3 - 革の服の守備力2 = 1ダメージ。
     # P0のHPは 40 - 1 = 39 になるはずです。
     assert runner.state.get_hp(0) == 39
     # ターンが終了してメインフェイズに戻ることを確認
@@ -587,7 +587,7 @@ def test_special_weapons_reflection():
     """
     curtain_id = find_card_by_name("armor/rainbow-curtain")
     ref_sword_id = find_card_by_name("weapons/reflection-sword")
-    wood_shield_id = find_card_by_name("armor/wood-shield")
+    leather_clothes_id = find_card_by_name("armor/leather-clothes")
 
     # 1. 巨大なタライ (光50) -> カーテン+反射剣
     runner = SimulationRunner()
@@ -595,7 +595,7 @@ def test_special_weapons_reflection():
     runner.set_status(1, hp=40, mp=10)
     runner.state.set_true_hand(1, 0, curtain_id)
     runner.state.set_true_hand(1, 1, ref_sword_id)
-    runner.state.set_true_hand(0, 0, wood_shield_id) # 反射後の受防用
+    runner.state.set_true_hand(0, 0, leather_clothes_id) # 反射後の受防用
 
     runner.state.pending_attack_source_id = find_card_by_name("phenomena/gigantic-tub")
     runner.state.pending_attack_power = 50
@@ -626,7 +626,7 @@ def test_special_weapons_reflection():
     runner2.set_status(1, hp=40, mp=10)
     runner2.state.set_true_hand(1, 0, curtain_id)
     runner2.state.set_true_hand(1, 1, ref_sword_id)
-    runner2.state.set_true_hand(0, 0, wood_shield_id)
+    runner2.state.set_true_hand(0, 0, leather_clothes_id)
 
     runner2.state.pending_attack_source_id = find_card_by_name("gurdians/diamond-axe")
     runner2.state.pending_attack_power = 15
@@ -655,7 +655,7 @@ def test_special_weapons_reflection():
     runner3.set_status(0, hp=40, mp=10)
     runner3.set_status(1, hp=40, mp=10)
     runner3.state.set_true_hand(1, 0, ref_sword_id)
-    runner3.state.set_true_hand(0, 0, wood_shield_id)
+    runner3.state.set_true_hand(0, 0, leather_clothes_id)
 
     runner3.state.pending_attack_source_id = find_card_by_name("gurdians/full-moon-blade")
     runner3.state.pending_attack_power = 10
