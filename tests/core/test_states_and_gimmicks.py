@@ -1,14 +1,11 @@
-import godfield_core
-from godfield_core import ActionType, GamePhase, SicknessType, CurseType
-from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards
-import pytest
-
-
 # ==========================================
 # Merged from: tests/core/test_special_gimmicks.py
 # ==========================================
-
 import numpy as np
+import pytest
+
+import godfield_core
+from tests.core.test_utils import SimulationRunner, find_card_by_name
 
 # Observation オフセット定数 (Observation struct)
 # float hp_me, hp_opp (0, 1)
@@ -46,12 +43,12 @@ def parse_obs(obs_flat):
     obs["guardian_me"] = obs_flat[24:35]
     obs["guardian_opp"] = obs_flat[35:46]
 
-    obs["hand_cards"] = obs_flat[67:85].astype(np.int32)
-    obs["staged_cards"] = obs_flat[85:103].astype(np.int32)
-    obs["opponent_hand_cards"] = obs_flat[103:121].astype(np.int32)
-    obs["opponent_staged_cards"] = obs_flat[121:139].astype(np.int32)
+    obs["hand_cards"] = obs_flat[69:87].astype(np.int32)
+    obs["staged_cards"] = obs_flat[87:105].astype(np.int32)
+    obs["opponent_hand_cards"] = obs_flat[105:123].astype(np.int32)
+    obs["opponent_staged_cards"] = obs_flat[123:141].astype(np.int32)
 
-    obs["action_mask"] = obs_flat[460 : 460 + 122]
+    obs["action_mask"] = obs_flat[462 : 462 + 122]
     return obs
 
 
@@ -407,7 +404,7 @@ def test_verify_fever_mask_transition():
         runner = SimulationRunner()
         runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
         runner.state.current_actor_id = 1
-        
+
         # P0のHPを99にしてダメージで死なないようにする（ただし発作では死ぬ）
         runner.state.set_hp(0, 99)
         runner.state.set_hp(1, 40)
@@ -415,31 +412,31 @@ def test_verify_fever_mask_transition():
         runner.state.set_mp(1, 50)
         runner.state.set_money(0, 10)
         runner.state.set_money(1, 10)
-        
+
         # P1の手札を設定 (激烈疾風剣, ＜オーラ＞, ＜オーラ＞)
         runner.state.set_true_hand(1, 0, gale_id)
         runner.state.set_true_hand(1, 1, aura_id)
         runner.state.set_true_hand(1, 2, aura_id)
         for j in range(3, 18):
             runner.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
-            
+
         # P0の手札を設定 (熱狂仮面 x num_masks)
         for i in range(num_masks):
             runner.state.set_true_hand(0, i, mask_id)
         for j in range(num_masks, 18):
             runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
-            
+
         # P1が激烈疾風剣 + ＜オーラ＞ + ＜オーラ＞ を選択して攻撃
         runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)  # 激烈疾風剣
         runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_1)  # ＜オーラ＞
         runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_2)  # ＜オーラ＞
         runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)     # 相手をターゲット
-        
+
         # P0が熱狂仮面をすべて選択してConfirm
         for i in range(num_masks):
             runner.step(godfield_core.ActionType(int(godfield_core.ActionType.ACTION_SELECT_HAND_0) + i))
         runner.step(godfield_core.ActionType.ACTION_CONFIRM)
-        
+
         results[num_masks] = (runner.state.get_hp(0), runner.state.get_sickness(0))
 
     # 4つ + お守り
@@ -452,24 +449,24 @@ def test_verify_fever_mask_transition():
     runner_amulet.state.set_mp(1, 50)
     runner_amulet.state.set_money(0, 10)
     runner_amulet.state.set_money(1, 10)
-    
+
     runner_amulet.state.set_true_hand(1, 0, gale_id)
     runner_amulet.state.set_true_hand(1, 1, aura_id)
     runner_amulet.state.set_true_hand(1, 2, aura_id)
     for j in range(3, 18):
         runner_amulet.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
-        
+
     for i in range(4):
         runner_amulet.state.set_true_hand(0, i, mask_id)
     runner_amulet.state.set_true_hand(0, 4, amulet_id)
     for j in range(5, 18):
         runner_amulet.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
-        
+
     runner_amulet.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
     runner_amulet.step(godfield_core.ActionType.ACTION_SELECT_HAND_1)
     runner_amulet.step(godfield_core.ActionType.ACTION_SELECT_HAND_2)
     runner_amulet.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-    
+
     for i in range(4):
         runner_amulet.step(godfield_core.ActionType(int(godfield_core.ActionType.ACTION_SELECT_HAND_0) + i))
     runner_amulet.step(godfield_core.ActionType.ACTION_CONFIRM)

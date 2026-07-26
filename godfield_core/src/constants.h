@@ -20,7 +20,12 @@ constexpr int HISTORY_LENGTH = 64;    // イベント履歴の長さ（リング
 
 // ゲームの進行と終末の時（Apocalypse）用パラメータ
 constexpr int APOCALYPSE_TURN = 150;   // 終末の時が発動するターン数
-constexpr int MAX_EPISODE_TURNS = 600; // 無限ループ防止用の最大ターン数（到達で引き分け）
+// 観測 turn_progress の正規化に使う基準「ターン」数（ステップ数ではない）。
+// ゲームの打ち切りには使わない（膠着から終末の時に入る展開も学習させるため、
+// 決着はゲームルールにのみ委ねる）。current_turn はこの値を超えうるので turn_progress 側で飽和させる。
+// 実測では決着の中央値が17ターン、最長でも109ターンで、300を超える対戦は観測されていない。
+// 学習させたい膠着局面（150ターン以降）が 0.5〜0.83 に散る値として300を採用している。
+constexpr int TURN_PROGRESS_SCALE_TURNS = 300;
 
 enum ActionType {
     ACTION_SELECT_HAND_0 = 0,

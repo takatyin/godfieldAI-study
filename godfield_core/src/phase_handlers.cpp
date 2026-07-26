@@ -6,6 +6,11 @@
 #include <vector>
 #include <random>
 #include <iostream>
+void confirm_all_staged_cards(InternalState &state, int player) {
+    for (int i = 0; i < state.num_staged_cards[player]; ++i) {
+        confirm_card(state, player, state.staged_cards[player][i]);
+    }
+}
 
 /**
  * @brief 仮置きされているカード群を評価し、消費MP、攻撃力、属性、吸収フラグ、および命中結果を判定します。
@@ -81,7 +86,7 @@ StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
             }
         }
 
-        if (card_id == ID_ABSORPTION || card_id == ID_VINE_SHOOT || card_id == ID_GHOST_SWORD || card_id == ID_REAL_GHOST_SWORD) {
+        if (is_absorption_source(card_id)) {
             info.absorption = true;
         }
         if (card_id == ID_EVIL_BROADSWORD) {
@@ -408,9 +413,7 @@ void step_phase_main_target_select(InternalState &state, ActionType action, int 
         int target = (action == ACTION_TARGET_SELF) ? me : opp;
         if (state.num_staged_cards[me] > 0) {
             // 仮置きされているカードを確定（公開）状態にする
-            for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-                confirm_card(state, me, state.staged_cards[me][i]);
-            }
+            confirm_all_staged_cards(state, me);
 
             int card_id = state.true_hand[me][state.staged_cards[me][0]];
             if (card_id == ID_SELL) {
@@ -446,9 +449,7 @@ void step_phase_main_target_select(InternalState &state, ActionType action, int 
                 return;
             }
             
-            for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-                confirm_card(state, me, state.staged_cards[me][i]);
-            }
+            confirm_all_staged_cards(state, me);
 
             if (target == me) {
                 StagedAttackInfo info = evaluate_staged_attack(state, me);
@@ -508,9 +509,7 @@ void step_phase_attack_plus(InternalState &state, ActionType action, int me, int
         }
     } else if (action == ACTION_TARGET_OPP || action == ACTION_TARGET_SELF) {
         int target = (action == ACTION_TARGET_SELF) ? me : opp;
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            confirm_card(state, me, state.staged_cards[me][i]);
-        }
+        confirm_all_staged_cards(state, me);
         int first_card = -1;
         if (state.num_staged_cards[me] > 0) {
             int h_idx = state.staged_cards[me][0];
@@ -522,22 +521,35 @@ void step_phase_attack_plus(InternalState &state, ActionType action, int me, int
     }
 }
 
-void step_phase_group_weapon(InternalState &state, ActionType action, int me, int opp) {
+/**
+ * @brief 全体攻撃フェイズ（武器＝PHASE_GROUP_WEAPON / 奇跡＝PHASE_GROUP_MIRACLE）の共通処理。
+ *
+ * 武器と奇跡で異なるのは以下の3点のみで、それ以外の仮置き・確定・命中判定は共通です。
+ *   - 仮置き時に非公開カード（夢状態など）を真の手札から解決するか
+ *   - 仮置き時に攻撃情報（update_staged_pending_info）を更新するか
+ *   - 蜃気楼による複数回攻撃（setup_multiple_attacks）を展開するか
+ *
+ * @param defense_phase 命中時に遷移する防御フェイズ。武器なら PHASE_DEFENSE、奇跡なら PHASE_MIRACLE_DEFENSE。
+ */
+static void step_phase_group_attack(InternalState &state, ActionType action, int me, int opp,
+                                    GamePhase defense_phase) {
+    const bool is_weapon = (defense_phase == GamePhase::PHASE_DEFENSE);
+
     if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
         if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
             int idx = action - ACTION_SELECT_HAND_0;
             int card_id = state.apparent_hand[me][idx];
-            if (card_id < 0) card_id = state.true_hand[me][idx];
+            if (is_weapon && card_id < 0) card_id = state.true_hand[me][idx];
             state.staged_cards[me][state.num_staged_cards[me]++] = idx;
             state.is_used[me][idx] = true;
-            update_staged_pending_info(state, me);
+            if (is_weapon) {
+                update_staged_pending_info(state, me);
+            }
             push_event(state, me, EventType::STAGE_CARD, card_id, -1, 0.0f);
         }
     } else if (action == ACTION_TARGET_OPP) {
         int target = opp;
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            confirm_card(state, me, state.staged_cards[me][i]);
-        }
+        confirm_all_staged_cards(state, me);
         int first_card = (state.num_staged_cards[me] > 0) ? state.true_hand[me][state.staged_cards[me][0]] : -1;
         push_event(state, me, EventType::CONFIRM_ATTACK, first_card, target, 0.0f);
 
@@ -549,82 +561,123 @@ void step_phase_group_weapon(InternalState &state, ActionType action, int me, in
             state.current_phase = GamePhase::PHASE_END;
         } else {
             push_event(state, me, EventType::ATTACK_HIT, first_card, target, info.attack_power);
-            setup_multiple_attacks(state, me, target, info);
+            if (is_weapon) {
+                setup_multiple_attacks(state, me, target, info);
+            }
 
             state.pending_attack_power = info.attack_power;
             state.pending_attack_element = info.element;
             state.pending_absorption = info.absorption;
+            // 奇跡に相打ち（邪神の大剣）はないが、前の攻撃の値を持ち越さないよう常に上書きする
             state.pending_deal_same_damage = info.deal_same_damage;
             state.defender_id = target;
             state.pending_attack_source_id = (state.num_staged_cards[me] > 0) ? state.true_hand[me][state.staged_cards[me][0]] : CARD_EMPTY;
             state.current_actor_id = target;
-            state.current_phase = GamePhase::PHASE_DEFENSE;
+            state.current_phase = defense_phase;
         }
     }
+}
+
+void step_phase_group_weapon(InternalState &state, ActionType action, int me, int opp) {
+    step_phase_group_attack(state, action, me, opp, GamePhase::PHASE_DEFENSE);
 }
 
 void step_phase_group_miracle(InternalState &state, ActionType action, int me, int opp) {
-    if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
-        if (state.num_staged_cards[me] < MAX_HAND_SIZE) {
-            int idx = action - ACTION_SELECT_HAND_0;
-            int card_id = state.apparent_hand[me][idx];
-            state.staged_cards[me][state.num_staged_cards[me]++] = idx;
-            state.is_used[me][idx] = true;
-            push_event(state, me, EventType::STAGE_CARD, card_id, -1, 0.0f);
-        }
-    } else if (action == ACTION_TARGET_OPP) {
-        int target = opp;
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            confirm_card(state, me, state.staged_cards[me][i]);
-        }
-        int first_card = (state.num_staged_cards[me] > 0) ? state.true_hand[me][state.staged_cards[me][0]] : -1;
-        push_event(state, me, EventType::CONFIRM_ATTACK, first_card, target, 0.0f);
-
-        StagedAttackInfo info = evaluate_staged_attack(state, me);
-        state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
-
-        if (!info.hit) {
-            push_event(state, me, EventType::ATTACK_MISS, first_card, target, 0.0f);
-            state.current_phase = GamePhase::PHASE_END;
-        } else {
-            push_event(state, me, EventType::ATTACK_HIT, first_card, target, info.attack_power);
-            state.pending_attack_power = info.attack_power;
-            state.pending_attack_element = info.element;
-            state.pending_absorption = info.absorption;
-            state.defender_id = target;
-            state.pending_attack_source_id = (state.num_staged_cards[me] > 0) ? state.true_hand[me][state.staged_cards[me][0]] : CARD_EMPTY;
-            state.current_actor_id = target;
-            state.current_phase = GamePhase::PHASE_MIRACLE_DEFENSE;
-        }
-    }
+    step_phase_group_attack(state, action, me, opp, GamePhase::PHASE_MIRACLE_DEFENSE);
 }
 
-static void resolve_defense_step(InternalState &state, ActionType action, int me, int opp, GamePhase phase) {
+static void execute_standard_defense(InternalState &state, int me, int opp, GamePhase phase, int total_def, bool rainbow, bool is_darkness_attack, int damage, bool is_bounce_failure) {
     auto apply_combat_damage = [](InternalState &st, int player, int dmg) {
         if (dmg <= 0) return;
         int hp_before = st.hp[player];
         st.hp[player] = std::clamp(st.hp[player] - dmg, 0, 99);
-        if (st.hp[player] < hp_before && st.guardian[player] > GUARDIAN_NONE) {
-            int roll = std::uniform_int_distribution<int>(0, 99)(st.rng);
-            if (roll < GUARDIAN_LEAVE_RATE) {
-                push_event(st, player, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(st.guardian[player]));
-                st.guardian[player] = GUARDIAN_NONE;
-            }
-        }
+        try_guardian_leave(st, player, st.hp[player] < hp_before);
     };
 
     auto apply_instant_death = [](InternalState &st, int player) {
         int hp_before = st.hp[player];
         st.hp[player] = 0;
-        if (st.hp[player] < hp_before && st.guardian[player] > GUARDIAN_NONE) {
-            int roll = std::uniform_int_distribution<int>(0, 99)(st.rng);
-            if (roll < GUARDIAN_LEAVE_RATE) {
-                push_event(st, player, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(st.guardian[player]));
-                st.guardian[player] = GUARDIAN_NONE;
-            }
-        }
+        try_guardian_leave(st, player, st.hp[player] < hp_before);
     };
 
+    if (phase == GamePhase::PHASE_DEFENSE) {
+        process_ring_defense_effects(state, me, opp, damage);
+    }
+
+    if (damage > 0 && is_darkness_attack && !rainbow) {
+        apply_instant_death(state, me);
+    } else {
+        apply_combat_damage(state, me, damage);
+        if (damage > 0) {
+            push_event(state, me, EventType::TAKE_DAMAGE, -1, me, static_cast<float>(damage));
+        }
+    }
+    if (state.pending_absorption) {
+        if (is_bounce_failure) {
+            state.hp[me] = std::clamp(state.hp[me] + damage, 0, 99);
+        } else {
+            state.hp[opp] = std::clamp(state.hp[opp] + damage, 0, 99);
+        }
+    }
+    run_immediate_revive(state);
+    if (state.pending_deal_same_damage && damage > 0) {
+        if (is_bounce_failure) {
+            apply_combat_damage(state, me, damage);
+        } else {
+            apply_combat_damage(state, opp, damage);
+        }
+        run_immediate_revive(state);
+    }
+
+    if (state.hp[me] == 0) {
+        run_immediate_revive(state);
+    }
+    if (state.hp[me] == 0) {
+        if (phase == GamePhase::PHASE_DEFENSE) {
+            if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
+                state.current_phase = GamePhase::PHASE_END;
+                return;
+            }
+        } else {
+            state.current_phase = GamePhase::PHASE_END;
+            return;
+        }
+    }
+
+    if (phase == GamePhase::PHASE_DEFENSE || phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
+        bool is_hit = (state.pending_attack_power > 0) ? (damage > 0) : (total_def == 0);
+        if (is_hit) {
+            if (state.pending_attack_curse != CURSE_NONE) {
+                apply_curse_to_player(state, me, state.pending_attack_curse);
+            }
+            if (state.pending_take_cp) {
+                int steal = std::min(state.money[me], damage);
+                state.money[me] -= steal;
+                state.money[opp] = std::min(99, state.money[opp] + steal);
+            }
+        }
+    }
+
+    auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
+    apply_card_effects_to_target(state, me, attacker_used_cards);
+
+    if (phase == GamePhase::PHASE_DEFENSE) {
+        apply_defense_gear_effects(state, me);
+        if (state.hp[me] == 0) {
+            run_immediate_revive(state);
+        }
+        if (state.hp[me] == 0) {
+            if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
+                state.current_phase = GamePhase::PHASE_END;
+                return;
+            }
+        }
+    }
+
+    handle_remaining_attacks_transition(state, me, phase);
+}
+
+static void resolve_defense_step(InternalState &state, ActionType action, int me, int opp, GamePhase phase) {
     int total_def = 0;
     bool rainbow = false;
 
@@ -698,71 +751,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
             } else {
                 push_event(state, me, EventType::BOUNCE_ATTACK, react_card_id, opp, 0.0f);
                 int damage = std::max(0, state.pending_attack_power - total_def);
-                if (phase == GamePhase::PHASE_DEFENSE) {
-                    process_ring_defense_effects(state, me, opp, damage);
-                }
-
-                if (damage > 0 && state.pending_attack_element == ELEM_DARKNESS && !rainbow) {
-                    apply_instant_death(state, me);
-                } else {
-                    apply_combat_damage(state, me, damage);
-                    if (damage > 0) {
-                        push_event(state, me, EventType::TAKE_DAMAGE, -1, me, static_cast<float>(damage));
-                    }
-                }
-                if (state.pending_absorption) {
-                    state.hp[me] = std::clamp(state.hp[me] + damage, 0, 99);
-                }
-                if (state.pending_deal_same_damage) {
-                    apply_combat_damage(state, me, damage);
-                }
-
-                if (state.hp[me] == 0) {
-                    run_immediate_revive(state);
-                }
-                if (state.hp[me] == 0) {
-                    if (phase == GamePhase::PHASE_DEFENSE) {
-                        if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
-                            state.current_phase = GamePhase::PHASE_END;
-                            return;
-                        }
-                    } else {
-                        state.current_phase = GamePhase::PHASE_END;
-                        return;
-                    }
-                }
-
-                if (phase == GamePhase::PHASE_DEFENSE || phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
-                    bool is_hit = (state.pending_attack_power > 0) ? (damage > 0) : (total_def == 0);
-                    if (is_hit) {
-                        if (state.pending_attack_curse != CURSE_NONE) {
-                            apply_curse_to_player(state, me, state.pending_attack_curse);
-                        }
-                        if (state.pending_take_cp) {
-                            int steal = std::min(state.money[me], damage);
-                            state.money[me] -= steal;
-                            state.money[opp] = std::min(99, state.money[opp] + steal);
-                        }
-                    }
-                }
-
-                auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
-                apply_card_effects_to_target(state, me, attacker_used_cards);
-
-                if (phase == GamePhase::PHASE_DEFENSE) {
-                    apply_defense_gear_effects(state, me);
-                    if (state.hp[me] == 0) {
-                        run_immediate_revive(state);
-                    }
-                    if (state.hp[me] == 0) {
-                        if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
-                            state.current_phase = GamePhase::PHASE_END;
-                            return;
-                        }
-                    }
-                }
-
-                handle_remaining_attacks_transition(state, me, phase);
+                execute_standard_defense(state, me, opp, phase, total_def, rainbow, is_darkness_attack, damage, true);
                 return;
             }
         }
@@ -770,70 +759,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
         // REACTION_NONE
         state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
         int damage = std::max(0, state.pending_attack_power - total_def);
-        if (phase == GamePhase::PHASE_DEFENSE) {
-            process_ring_defense_effects(state, me, opp, damage);
-        }
-
-        if (damage > 0 && is_darkness_attack && !rainbow) {
-            apply_instant_death(state, me);
-        } else {
-            apply_combat_damage(state, me, damage);
-        }
-        if (state.pending_absorption) {
-            state.hp[opp] = std::clamp(state.hp[opp] + damage, 0, 99);
-        }
-        run_immediate_revive(state);
-        if (state.pending_deal_same_damage && damage > 0) {
-            apply_combat_damage(state, opp, damage);
-            run_immediate_revive(state);
-        }
-
-        if (state.hp[me] == 0) {
-            run_immediate_revive(state);
-        }
-        if (state.hp[me] == 0) {
-            if (phase == GamePhase::PHASE_DEFENSE) {
-                if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
-                    state.current_phase = GamePhase::PHASE_END;
-                    return;
-                }
-            } else {
-                state.current_phase = GamePhase::PHASE_END;
-                return;
-            }
-        }
-
-        if (phase == GamePhase::PHASE_DEFENSE || phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
-            bool is_hit = (state.pending_attack_power > 0) ? (damage > 0) : (total_def == 0);
-            if (is_hit) {
-                if (state.pending_attack_curse != CURSE_NONE) {
-                    apply_curse_to_player(state, me, state.pending_attack_curse);
-                }
-                if (state.pending_take_cp) {
-                    int steal = std::min(state.money[me], damage);
-                    state.money[me] -= steal;
-                    state.money[opp] = std::min(99, state.money[opp] + steal);
-                }
-            }
-        }
-
-        auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
-        apply_card_effects_to_target(state, me, attacker_used_cards);
-
-        if (phase == GamePhase::PHASE_DEFENSE) {
-            apply_defense_gear_effects(state, me);
-            if (state.hp[me] == 0) {
-                run_immediate_revive(state);
-            }
-            if (state.hp[me] == 0) {
-                if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
-                    state.current_phase = GamePhase::PHASE_END;
-                    return;
-                }
-            }
-        }
-
-        handle_remaining_attacks_transition(state, me, phase);
+        execute_standard_defense(state, me, opp, phase, total_def, rainbow, is_darkness_attack, damage, false);
     }
 }
 
@@ -856,9 +782,7 @@ void step_phase_miracle_plus(InternalState &state, ActionType action, int me, in
     } else if (action == ACTION_TARGET_OPP || action == ACTION_TARGET_SELF) {
         int target = (action == ACTION_TARGET_SELF) ? me : opp;
 
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            confirm_card(state, me, state.staged_cards[me][i]);
-        }
+        confirm_all_staged_cards(state, me);
 
         int first_card = (state.num_staged_cards[me] > 0) ? state.true_hand[me][state.staged_cards[me][0]] : -1;
         push_event(state, me, EventType::CONFIRM_ATTACK, first_card, target, 0.0f);
@@ -878,18 +802,7 @@ void step_phase_miracle_plus(InternalState &state, ActionType action, int me, in
             state.pending_attack_curse = (state.pending_attack_source_id != CARD_EMPTY) ? g_card_registry[state.pending_attack_source_id].hit_curse : CURSE_NONE;
 
             if (target == me) {
-                if (info.attack_power > 0) {
-                    int intended_damage = info.attack_power;
-                    state.hp[me] = std::clamp(state.hp[me] - info.attack_power, 0, 99);
-                    if (state.pending_absorption) {
-                        state.hp[me] = std::clamp(state.hp[me] + intended_damage, 0, 99);
-                    }
-                    run_immediate_revive(state);
-                    if (state.pending_deal_same_damage) {
-                        state.hp[me] = std::clamp(state.hp[me] - intended_damage, 0, 99);
-                        run_immediate_revive(state);
-                    }
-                }
+                    apply_damage(state, me, info.attack_power, state.pending_absorption, state.pending_deal_same_damage);
                 auto used_cards = get_staged_card_ids(state, me);
                 apply_card_effects_to_target(state, me, used_cards);
                 if (state.pending_attack_curse != CURSE_NONE) {
@@ -1000,26 +913,21 @@ void step_phase_sundry_select_mirror(InternalState &state, ActionType action, in
         auto used_cards = get_staged_card_ids(state, original_caster);
         apply_card_effects_to_target(state, state.defender_id, used_cards);
         
-        // 守護神の状態異常技が承諾された場合の解決
+        // 仮置き場を経由しないカード（守護神の行動・指輪のカウンター）の効果解決
         if (state.pending_attack_source_id != CARD_EMPTY) {
             int source_id = state.pending_attack_source_id;
-            if (source_id == ID_COLORED_LEAVES) {
-                apply_curse_state(state, state.defender_id, CURSE_TYPE_DREAM);
-            } else if (source_id == ID_OMINOUS_PREMONITION) {
-                apply_curse_state(state, state.defender_id, CURSE_TYPE_DARK_CLOUD);
-            } else if (source_id == ID_HALO) {
-                apply_curse_state(state, state.defender_id, CURSE_TYPE_FLASH);
-            } else if (source_id == ID_BRIBE) {
+            if (source_id == ID_BRIBE) { // 金星神のわいろ: 相手にお金を渡す
                 state.money[state.defender_id] = std::min(99, state.money[state.defender_id] + state.pending_attack_power);
-            } else if (source_id == ID_FINE) {
+            } else if (source_id == ID_FINE || source_id == ID_VENUS_RING) { // 罰金・金星の指輪: 相手からお金を徴収
                 int damage = state.pending_attack_power;
                 execute_money_deduction(state, state.defender_id, damage);
                 state.money[state.attacker_id] = std::min(99, state.money[state.attacker_id] + damage);
-            } else if (source_id == ID_VENUS_RING) {
-                int damage = state.pending_attack_power;
-                execute_money_deduction(state, state.defender_id, damage);
-                state.money[state.attacker_id] = std::min(99, state.money[state.attacker_id] + damage);
+            } else if (source_id == ID_NOCTURNAL_BROOM || source_id == ID_GODDESS_S_SOAP) {
+                // 地球神が引いた雑貨を相手に使ったケース。効果本体はカード効果チェーンが持つ
+                apply_card_effect_to_target(state, state.defender_id, source_id);
             }
+            // 状態異常の付与は hit_curse を持つカードに共通の処理でまとめて行う。
+            // 木星神の紅葉・天王神の後光・冥王神の不吉な予感もここで解決される。
             if (state.pending_attack_curse != CURSE_NONE) {
                 apply_curse_to_player(state, state.defender_id, state.pending_attack_curse);
             }

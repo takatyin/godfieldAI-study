@@ -4,6 +4,7 @@ import os
 import pytest
 
 import godfield_core
+from tests.core.test_utils import SimulationRunner
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -16,3 +17,7 @@ def setup_card_registry():
         cards = json.load(f)
 
     godfield_core.init_game_logic(cards)
+
+@pytest.fixture
+def sim():
+    return SimulationRunner()

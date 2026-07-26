@@ -20,11 +20,35 @@ public:
 
     void reset(int seed);
     void step_all(pybind11::array_t<int> actions);
+
+    /**
+     * @brief 指定した環境のみを1手進めます（相手の手番だけを消化する用途）。
+     * @param env_ids 進める環境ID。
+     * @param actions env_ids と同じ長さの行動列。
+     */
+    void step_subset(pybind11::array_t<int> env_ids, pybind11::array_t<int> actions);
+
     pybind11::array_t<float> get_observations();
-    pybind11::array_t<float> get_rewards();
     pybind11::array_t<float> get_dones();
-    pybind11::array_t<int> get_ready_env_ids();
-    
+
+    /** @brief 各環境で現在行動権を持つプレイヤーID。 */
+    pybind11::array_t<int> get_current_actors();
+
+    /** @brief 直前のステップで行動したプレイヤー視点の報酬（従来互換）。 */
+    pybind11::array_t<float> get_rewards();
+
+    /**
+     * @brief 終局時の報酬を指定プレイヤー視点で返します。
+     *        相手の手番で決着した場合、行動者視点の報酬は学習者の報酬と符号が逆になるため、
+     *        単一エージェントとして学習する側はこちらを使います。
+     */
+    pybind11::array_t<float> get_rewards_for(int player_id);
+
+    /**
+     * @brief 終局時の観測を指定プレイヤー視点で返します（自動リセット前にキャッシュしたもの）。
+     */
+    pybind11::array_t<float> get_terminal_observations_for(int player_id);
+
     InternalState get_state(int env_id) const { return states_[env_id]; }
     void set_state(int env_id, const InternalState &state) {
         states_[env_id] = state;
@@ -37,9 +61,13 @@ private:
     std::vector<int> reset_counts_;
     std::vector<InternalState> states_;
     std::vector<Observation> obs_buffers_;
+    // 終局時の観測をプレイヤーごとにキャッシュする。自動リセットで真の終端が失われるため、
+    // かつ相手の手番で決着した場合は学習者視点の終端が必要になるため、両者分を持つ。
+    std::vector<Observation> terminal_obs_buffers_[2];
     std::vector<float> rewards_;
+    std::vector<float> rewards_per_player_[2];
     std::vector<float> dones_;
-    std::vector<int> ready_env_ids_;
+    std::vector<int> current_actors_;
 
     // Internal helper functions for game logic
     void reset_env(int env_id, int seed);

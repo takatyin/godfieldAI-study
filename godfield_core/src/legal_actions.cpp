@@ -2,6 +2,31 @@
 #include "game_logic_internal.h"
 #include "generated_card_ids.h"
 
+template <typename Func>
+void get_legal_hand_actions(const InternalState &state, int me, Func&& func) {
+    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+        if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
+            int card_id = state.apparent_hand[me][i];
+            if (card_id >= 0 && card_id < get_registry_size()) {
+                func(i, card_id, g_card_registry[card_id]);
+            }
+        }
+    }
+}
+
+/**
+ * @brief 仮置き中のカードの合計消費MPが現在のMPを上回っているか（＝MPを「借りている」状態か）。
+ *
+ * can_afford_staged_plus_card() は「後から精霊系カードを重ねて奇跡のコストを0にできる」見込みが
+ * あればMP不足でも仮置きを許可します。しかしその借りを返すには「仮置きの最後が奇跡」である必要が
+ * あるため（is_last_staged_card_miracle）、間に別のカードを挟むと返済手段が永久に失われ、
+ * 確定もできず追加もできない詰み状態になります。
+ * 借りが残っている間は精霊系カードしか置けないよう制限するために使います。
+ */
+static bool owes_staged_mp(const InternalState &state, int player_id) {
+    return state.mp[player_id] < calculate_staged_mp_cost(state, player_id);
+}
+
 /**
  * @brief メインフェイズ（PHASE_MAIN）における合法アクション（祈る/捨てる/使用可能な手札）を計算します。
  */
@@ -49,27 +74,26 @@ void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTI
         if (f.accuracy < 100) has_unstable_accuracy = true;
     }
 
-    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
-            int card_id = state.apparent_hand[me][i];
-            CardFeatures &f = g_card_registry[card_id];
-            
-            if (!can_afford_staged_plus_card(state, me, i)) continue;
+    const bool owes_mp = owes_staged_mp(state, me);
 
-            bool is_legal_timing = false;
-            if (f.usage_timing & TIMING_ATK_PLUS) {
+    get_legal_hand_actions(state, me, [&](int i, int card_id, const CardFeatures &f) {
+        if (!can_afford_staged_plus_card(state, me, i)) return;
+        // MPを借りている間は、返済手段である精霊系カードしか置けない
+        if (owes_mp && !is_spiritual_zero_mp_card(card_id)) return;
+
+        bool is_legal_timing = false;
+        if (f.usage_timing & TIMING_ATK_PLUS) {
+            is_legal_timing = true;
+        } else if ((f.usage_timing & TIMING_MIRACLE_PLUS) && is_spiritual_zero_mp_card(card_id)) {
+            if (is_last_staged_card_miracle(state, me)) {
                 is_legal_timing = true;
-            } else if ((f.usage_timing & TIMING_MIRACLE_PLUS) && is_spiritual_zero_mp_card(card_id)) {
-                if (is_last_staged_card_miracle(state, me)) {
-                    is_legal_timing = true;
-                }
-            }
-
-            if (is_legal_timing) {
-                legal_actions[ACTION_SELECT_HAND_0 + i] = true;
             }
         }
-    }
+
+        if (is_legal_timing) {
+            legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+        }
+    });
 
     if (state.num_staged_cards[me] > 0) {
         int first_card = state.apparent_hand[me][state.staged_cards[me][0]];
@@ -100,10 +124,13 @@ void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACT
     }
 
     if (has_mirage) {
+        const bool owes_mp = owes_staged_mp(state, me);
         for (int i = 0; i < MAX_HAND_SIZE; ++i) {
             if (!state.is_used[me][i]) {
                 int card_id = state.apparent_hand[me][i];
                 if (card_id < 0) card_id = state.true_hand[me][i];
+                // MPを借りている間は、返済手段である精霊系カードしか置けない
+                if (owes_mp && !is_spiritual_zero_mp_card(card_id)) continue;
                 if (card_id > 0 && card_id < 300) {
                     if (card_id == ID_MIRAGE || card_id == ID_AURA || is_spiritual_zero_mp_card(card_id) || card_id == ID_WAND_OF_IGNITION || card_id == ID_WAND_OF_MYSTIC_WATER) {
                         if (can_afford_staged_plus_card(state, me, i)) {
@@ -170,34 +197,153 @@ static bool is_element_counter(Element atk_elem, Element def_elem) {
 }
 
 
-static void legal_defense_common(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp, GamePhase defense_phase) {
+struct DefenseStagedState {
     bool rainbow = false;
-    Element effective_atk_element = state.pending_attack_element;
+    Element effective_atk_element = ELEM_NONE;
+    bool has_staged_reaction = false;
+    bool reaction_is_miracle = false;
+    bool has_staged_spirit = false;
+    bool has_non_element = false;
+    bool has_multiple_different_elements = false;
+    bool has_light = false;
+    Element base_def_element = ELEM_NONE;
+    Element current_def_element = ELEM_NONE;
+};
+
+static DefenseStagedState evaluate_defense_staged_state(const InternalState &state, int me, GamePhase defense_phase) {
+    DefenseStagedState dst = {};
+    dst.effective_atk_element = state.pending_attack_element;
 
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
         int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
         if (card_id == ID_RAINBOW_CURTAIN) {
-            rainbow = true;
-            effective_atk_element = ELEM_NONE;
+            dst.rainbow = true;
+            dst.effective_atk_element = ELEM_NONE;
         }
     }
-
-    bool has_staged_reaction = false;
-    bool reaction_is_miracle = false;
-    bool has_staged_spirit = false;
 
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
         int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
         if (card_id == CARD_EMPTY) continue;
         const CardFeatures &f = g_card_registry[card_id];
         if (card_id == ID_RAINBOW_CURTAIN) continue;
-        if (is_active_reaction_card(state, card_id, defense_phase, effective_atk_element)) {
-            has_staged_reaction = true;
-            if (f.is_miracle()) reaction_is_miracle = true;
+        if (is_active_reaction_card(state, card_id, defense_phase, dst.effective_atk_element)) {
+            dst.has_staged_reaction = true;
+            if (f.is_miracle()) dst.reaction_is_miracle = true;
         } else if (is_spiritual_zero_mp_card(card_id)) {
-            has_staged_spirit = true;
+            dst.has_staged_spirit = true;
         }
     }
+
+    for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
+        if (card_id == CARD_EMPTY) continue;
+        if (card_id == ID_RAINBOW_CURTAIN) continue;
+        const CardFeatures &f = g_card_registry[card_id];
+        if (is_active_reaction_card(state, card_id, defense_phase, dst.effective_atk_element)) continue;
+        if (is_spiritual_zero_mp_card(card_id)) continue;
+
+        Element e = f.element;
+        if (e == ELEM_NONE) dst.has_non_element = true;
+        else if (e == ELEM_LIGHT) dst.has_light = true;
+        else {
+            if (dst.base_def_element == ELEM_NONE) dst.base_def_element = e;
+            else if (dst.base_def_element != e) dst.has_multiple_different_elements = true;
+        }
+    }
+
+    if (dst.has_non_element || dst.has_multiple_different_elements) dst.current_def_element = ELEM_NONE;
+    else if (dst.base_def_element != ELEM_NONE) dst.current_def_element = dst.base_def_element;
+    else if (dst.has_light) dst.current_def_element = ELEM_LIGHT;
+
+    return dst;
+}
+
+static bool is_legal_defense_card(const InternalState &state, int me, int card_id, const CardFeatures &f, int i,
+                                  const DefenseStagedState &dst, GamePhase defense_phase) {
+    if (!can_afford_staged_plus_card(state, me, i)) return false;
+
+    // 1. 虹のカーテンは1枚目のみ (かつ攻撃力 > 0 のときのみ)
+    if (card_id == ID_RAINBOW_CURTAIN) {
+        return (state.num_staged_cards[me] == 0 && state.pending_attack_power > 0);
+    }
+
+    // 2. すでにリアクションカードがある場合
+    if (dst.has_staged_reaction) {
+        return (dst.reaction_is_miracle && !dst.has_staged_spirit && is_spiritual_zero_mp_card(card_id));
+    }
+
+    // 3. リアクションカードの重ねがけ排他チェック
+    bool is_react = is_active_reaction_card(state, card_id, defense_phase, dst.effective_atk_element);
+    if (is_react) {
+        bool allowed_as_first = false;
+        if (defense_phase == GamePhase::PHASE_DEFENSE) {
+            allowed_as_first = (state.num_staged_cards[me] == 0) || 
+                               (state.num_staged_cards[me] == 1 && state.apparent_hand[me][state.staged_cards[me][0]] == ID_RAINBOW_CURTAIN);
+        } else {
+            allowed_as_first = (state.num_staged_cards[me] == 0);
+        }
+        if (allowed_as_first) {
+            return true;
+        }
+    }
+
+    // 4. 一般防具の判定
+    if (f.reaction_type != REACTION_NONE && f.defense_power <= 0) {
+        return false;
+    }
+    bool is_weapon_atk = false;
+    if (state.pending_attack_source_id != CARD_EMPTY) {
+        is_weapon_atk = g_card_registry[state.pending_attack_source_id].is_weapon();
+    }
+    if (state.pending_attack_power > 0 || is_weapon_atk) {
+        uint32_t allowed_timings = (defense_phase == GamePhase::PHASE_DEFENSE) ? TIMING_ATK_DEFENCE : TIMING_MIRACLE_DEFENCE;
+        bool counters_element = is_element_counter(dst.effective_atk_element, f.element);
+        if (defense_phase == GamePhase::PHASE_MIRACLE_DEFENSE && (dst.rainbow || counters_element)) {
+            allowed_timings |= TIMING_ATK_DEFENCE;
+        }
+        if (f.usage_timing & allowed_timings) {
+            Element cand_e = f.element;
+            Element next_def_element = dst.current_def_element;
+            if (cand_e == ELEM_NONE) next_def_element = ELEM_NONE;
+            else if (cand_e == ELEM_LIGHT) {
+                if (dst.current_def_element == ELEM_NONE && !dst.has_non_element && !dst.has_multiple_different_elements && !dst.has_light && dst.base_def_element == ELEM_NONE)
+                    next_def_element = ELEM_LIGHT;
+                else if (dst.current_def_element != ELEM_NONE && dst.current_def_element != ELEM_LIGHT && !dst.has_non_element && !dst.has_multiple_different_elements)
+                    next_def_element = dst.current_def_element;
+            } else {
+                if (dst.current_def_element == ELEM_NONE) {
+                    if (!dst.has_non_element && !dst.has_multiple_different_elements && !dst.has_light && dst.base_def_element == ELEM_NONE)
+                        next_def_element = cand_e;
+                    else if (dst.has_light && !dst.has_non_element && !dst.has_multiple_different_elements && dst.base_def_element == ELEM_NONE)
+                        next_def_element = cand_e;
+                    else next_def_element = ELEM_NONE;
+                } else if (dst.current_def_element != cand_e) {
+                    if (dst.current_def_element == ELEM_LIGHT && !dst.has_non_element && !dst.has_multiple_different_elements) {
+                        next_def_element = cand_e;
+                    } else {
+                        next_def_element = ELEM_NONE;
+                    }
+                }
+            }
+
+            bool can_defend = false;
+            if (dst.effective_atk_element == ELEM_LIGHT) {
+                can_defend = dst.rainbow;
+            } else {
+                can_defend = dst.rainbow || is_element_counter(dst.effective_atk_element, next_def_element);
+            }
+
+            if (can_defend) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static void legal_defense_common(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp, GamePhase defense_phase) {
+    DefenseStagedState dst = evaluate_defense_staged_state(state, me, defense_phase);
 
     bool has_flash = state.curses[me][CURSE_TYPE_FLASH];
     if (has_flash && state.num_staged_cards[me] >= 1) {
@@ -205,126 +351,12 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
         return;
     }
 
-    // Element evaluation for staged normal armor
-    bool has_non_element = false, has_multiple_different_elements = false;
-    Element base_def_element = ELEM_NONE;
-    bool has_light = false;
-
-    for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
-        if (card_id == CARD_EMPTY) continue;
-        if (card_id == ID_RAINBOW_CURTAIN) continue;
-        const CardFeatures &f = g_card_registry[card_id];
-        if (is_active_reaction_card(state, card_id, defense_phase, effective_atk_element)) continue;
-        if (is_spiritual_zero_mp_card(card_id)) continue;
-
-        Element e = f.element;
-        if (e == ELEM_NONE) has_non_element = true;
-        else if (e == ELEM_LIGHT) has_light = true;
-        else {
-            if (base_def_element == ELEM_NONE) base_def_element = e;
-            else if (base_def_element != e) has_multiple_different_elements = true;
-        }
-    }
-
-    Element current_def_element = ELEM_NONE;
-    if (has_non_element || has_multiple_different_elements) current_def_element = ELEM_NONE;
-    else if (base_def_element != ELEM_NONE) current_def_element = base_def_element;
-    else if (has_light) current_def_element = ELEM_LIGHT;
-
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
             int card_id = state.apparent_hand[me][i];
             const CardFeatures &f = g_card_registry[card_id];
-
-            if (!can_afford_staged_plus_card(state, me, i)) continue;
-
-            // 1. 虹のカーテンは1枚目のみ (かつ攻撃力 > 0 のときのみ)
-            if (card_id == ID_RAINBOW_CURTAIN) {
-                if (state.num_staged_cards[me] == 0 && state.pending_attack_power > 0) {
-                    legal_actions[ACTION_SELECT_HAND_0 + i] = true;
-                }
-                continue;
-            }
-
-            // 2. すでにリアクションカードがある場合
-            if (has_staged_reaction) {
-                if (reaction_is_miracle && !has_staged_spirit && is_spiritual_zero_mp_card(card_id)) {
-                    legal_actions[ACTION_SELECT_HAND_0 + i] = true;
-                }
-                continue;
-            }
-
-            // 3. リアクションカードの重ねがけ排他チェック
-            bool is_react = is_active_reaction_card(state, card_id, defense_phase, effective_atk_element);
-            if (is_react) {
-                bool allowed_as_first = false;
-                if (defense_phase == GamePhase::PHASE_DEFENSE) {
-                    // 物理防御：リアクションは「1枚目」または「虹のカーテンの直後」のみ
-                    allowed_as_first = (state.num_staged_cards[me] == 0) || 
-                                       (state.num_staged_cards[me] == 1 && state.apparent_hand[me][state.staged_cards[me][0]] == ID_RAINBOW_CURTAIN);
-                } else {
-                    // 奇跡防御：リアクションは1枚目のみ
-                    allowed_as_first = (state.num_staged_cards[me] == 0);
-                }
-                if (allowed_as_first) {
-                    legal_actions[ACTION_SELECT_HAND_0 + i] = true;
-                    continue;
-                }
-                // リアクションとして許可されない場合（例: 虹のカーテンの後の2枚目）でも、
-                // 防御力(defense_power > 0)を持つカードであれば通常の防具判定(Step 4)へ進む
-            }
-
-            // 4. 一般防具の判定（通常の防具、指輪防具、またはリアクション不発時に防御力を持つ防具）
-            if (f.reaction_type != REACTION_NONE && f.defense_power <= 0) {
-                continue;
-            }
-            bool is_weapon_atk = false;
-            if (state.pending_attack_source_id != CARD_EMPTY) {
-                is_weapon_atk = g_card_registry[state.pending_attack_source_id].is_weapon();
-            }
-            if (state.pending_attack_power > 0 || is_weapon_atk) {
-                uint32_t allowed_timings = (defense_phase == GamePhase::PHASE_DEFENSE) ? TIMING_ATK_DEFENCE : TIMING_MIRACLE_DEFENCE;
-                bool counters_element = is_element_counter(effective_atk_element, f.element);
-                if (defense_phase == GamePhase::PHASE_MIRACLE_DEFENSE && (rainbow || counters_element)) {
-                    allowed_timings |= TIMING_ATK_DEFENCE;
-                }
-                if (f.usage_timing & allowed_timings) {
-                    Element cand_e = f.element;
-                    Element next_def_element = current_def_element;
-                    if (cand_e == ELEM_NONE) next_def_element = ELEM_NONE;
-                    else if (cand_e == ELEM_LIGHT) {
-                        if (current_def_element == ELEM_NONE && !has_non_element && !has_multiple_different_elements && !has_light && base_def_element == ELEM_NONE)
-                            next_def_element = ELEM_LIGHT;
-                        else if (current_def_element != ELEM_NONE && current_def_element != ELEM_LIGHT && !has_non_element && !has_multiple_different_elements)
-                            next_def_element = current_def_element;
-                    } else {
-                        if (current_def_element == ELEM_NONE) {
-                            if (!has_non_element && !has_multiple_different_elements && !has_light && base_def_element == ELEM_NONE)
-                                next_def_element = cand_e;
-                            else if (has_light && !has_non_element && !has_multiple_different_elements && base_def_element == ELEM_NONE)
-                                next_def_element = cand_e;
-                            else next_def_element = ELEM_NONE;
-                        } else if (current_def_element != cand_e) {
-                            if (current_def_element == ELEM_LIGHT && !has_non_element && !has_multiple_different_elements) {
-                                next_def_element = cand_e;
-                            } else {
-                                next_def_element = ELEM_NONE;
-                            }
-                        }
-                    }
-
-                    bool can_defend = false;
-                    if (effective_atk_element == ELEM_LIGHT) {
-                        can_defend = rainbow;
-                    } else {
-                        can_defend = rainbow || is_element_counter(effective_atk_element, next_def_element);
-                    }
-
-                    if (can_defend) {
-                        legal_actions[ACTION_SELECT_HAND_0 + i] = true;
-                    }
-                }
+            if (is_legal_defense_card(state, me, card_id, f, i, dst, defense_phase)) {
+                legal_actions[ACTION_SELECT_HAND_0 + i] = true;
             }
         }
     }
@@ -350,25 +382,20 @@ void legal_phase_miracle_plus(const InternalState &state, bool legal_actions[ACT
         if (f.accuracy < 100) has_unstable_accuracy = true;
     }
 
-    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
-            int card_id = state.apparent_hand[me][i];
-            CardFeatures &f = g_card_registry[card_id];
-            
-            if (!can_afford_staged_plus_card(state, me, i)) continue;
+    get_legal_hand_actions(state, me, [&](int i, int card_id, const CardFeatures &f) {
+        if (!can_afford_staged_plus_card(state, me, i)) return;
 
-            bool is_legal_timing = false;
-            if ((f.usage_timing & TIMING_MIRACLE_PLUS) && is_spiritual_zero_mp_card(card_id)) {
-                if (is_last_staged_card_miracle(state, me)) {
-                    is_legal_timing = true;
-                }
-            }
-
-            if (is_legal_timing) {
-                legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+        bool is_legal_timing = false;
+        if ((f.usage_timing & TIMING_MIRACLE_PLUS) && is_spiritual_zero_mp_card(card_id)) {
+            if (is_last_staged_card_miracle(state, me)) {
+                is_legal_timing = true;
             }
         }
-    }
+
+        if (is_legal_timing) {
+            legal_actions[ACTION_SELECT_HAND_0 + i] = true;
+        }
+    });
 
     if (state.num_staged_cards[me] > 0) {
         int first_card = state.apparent_hand[me][state.staged_cards[me][0]];

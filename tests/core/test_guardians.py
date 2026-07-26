@@ -1,8 +1,6 @@
-import godfield_core
-from godfield_core import ActionType, GamePhase
-from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards
-import pytest
 
+import godfield_core
+from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards
 
 # ==========================================
 # Merged from: tests/core/test_earth_guardian.py
@@ -10,17 +8,21 @@ import pytest
 
 
 
+def card_by_id(card_id: int) -> dict:
+    """カードIDからカード定義を引きます（見つからなければ空辞書）。"""
+    for c in get_all_cards():
+        if c["id"] == card_id:
+            return c
+    return {}
+
+
 def find_seed_for_earth_action(target_category: str) -> int:
     """
     地球神が特定のアクション (両替/売る/買う/武器/防具/ホウキ/石けん/その他)
     を引き起こすシード値を探索します。
     """
-    exchange_id = find_card_by_name("deals/exchange")
-    sell_id = find_card_by_name("deals/sell")
-    buy_id = find_card_by_name("deals/buy")
     broom_id = find_card_by_name("sundries/nocturnal-broom")
     soap_id = find_card_by_name("sundries/goddess-s-soap")
-    first_aid_id = find_card_by_name("sundries/smile-dew")
     bronze_shield_id = find_card_by_name("armor/wood-shield")
 
     for seed in range(20000):
@@ -69,15 +71,24 @@ def find_seed_for_earth_action(target_category: str) -> int:
         elif target_category == "weapon":
             if sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE:
                 source = sim.state.pending_attack_source_id
-                if source != -1 and source != find_card_by_name("gurdians/full-moon-blade"):
+                # 防御フェイズは超常現象（巨大なタライ等）でも起動するため、
+                # 攻撃元が実際に武器であることまで確認する
+                if (
+                    source != -1
+                    and source != find_card_by_name("gurdians/full-moon-blade")
+                    and card_by_id(source).get("type") == "weapon"
+                ):
                     return seed
         elif target_category == "armor":
             h1 = [sim.state.get_true_hand(1, idx) for idx in range(18) if sim.state.get_true_hand(1, idx) != -1]
             if len(h1) == 2 and h1[1] != bronze_shield_id:
                 return seed
         elif target_category == "broom":
-            h0 = [sim.state.get_true_hand(0, idx) for idx in range(18) if sim.state.get_true_hand(0, idx) != -1]
-            if len(h0) == 0 and sim.state.current_phase == godfield_core.GamePhase.PHASE_MAIN:
+            # 相手に使う雑貨は雑貨ミラーフェイズで一旦停止するため、そこで判別する
+            if (
+                sim.state.current_phase == godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+                and sim.state.pending_attack_source_id == broom_id
+            ):
                 return seed
         elif target_category == "soap":
             pass
@@ -98,9 +109,11 @@ def find_seed_for_earth_action(target_category: str) -> int:
 
         sim.step(godfield_core.ActionType.ACTION_PRAY)
         if target_category == "soap":
-            if not sim.state.get_is_deployed(0, 0) and sim.state.get_true_hand(0, 0) == -1:
-                if sim.state.current_phase == godfield_core.GamePhase.PHASE_MAIN:
-                    return seed
+            if (
+                sim.state.current_phase == godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+                and sim.state.pending_attack_source_id == soap_id
+            ):
+                return seed
 
     # その他雑貨
     for seed in range(5000):
@@ -160,6 +173,80 @@ def test_earth_sell():
     assert sim.state.get_money(0) == 96  # 100 - 4 = 96
     assert sim.state.get_money(1) == 14  # 10 + 4 = 14
     assert sim.state.get_true_hand(1, 0) == -1
+
+
+def _find_seed_for_earth_sell_with_offer_slot(offer_slot: int) -> int:
+    """地球神が「売る」を仕掛け、かつ出品カードが指定スロットにある盤面のシードを探します。"""
+    mirror_id = find_card_by_name("armor/super-mirror")
+    shield_id = find_card_by_name("armor/wood-shield")
+
+    for seed in range(20000):
+        sim = _setup_earth_sell_reflection(seed, offer_slot, shield_id, mirror_id)
+        sim.step(godfield_core.ActionType.ACTION_PRAY)
+        if sim.state.current_phase == godfield_core.GamePhase.PHASE_SELL_SELECT_MIRROR:
+            return seed
+
+    raise ValueError("Could not find a seed where the Earth guardian offers a sell")
+
+
+def _setup_earth_sell_reflection(seed: int, offer_slot: int, shield_id: int, mirror_id: int) -> SimulationRunner:
+    sim = SimulationRunner()
+    sim.state.seed_rng(seed)
+    sim.state.set_guardian(1, 9)
+    sim.set_status(player=0, hp=99, money=50)
+    sim.set_status(player=1, hp=40, money=50)
+
+    for i in range(18):
+        sim.state.set_true_hand(0, i, -1)
+        sim.state.set_true_hand(1, i, -1)
+    # P1(地球神の持ち主)の出品カード。スロット1は ID_SELL(=1) と数値が一致してしまうため避ける
+    sim.state.set_true_hand(1, offer_slot, shield_id)
+    sim.state.set_apparent_hand(1, offer_slot, shield_id)
+    # P0 は反射用のスーパーミラーのみ
+    sim.state.set_true_hand(0, 0, mirror_id)
+    sim.state.set_apparent_hand(0, 0, mirror_id)
+    return sim
+
+
+def test_earth_sell_reflected_resolves_the_offered_item():
+    """地球神: 「売る」をスーパーミラーで反射された場合、出品されたカードが決済対象になること。
+
+    地球神の「売る」は売るカード自体を手札に持たないため、staged_cards[p][0] に -1 の番兵を置き、
+    [1] に出品カードの手札インデックスを入れています。以前 execute_sell_resolution はこの番兵を
+    staged_cards[p][1] == ID_SELL で判定しており、[1] は手札インデックスなので ID_SELL(=1) と
+    偶然一致する場合しか成立しませんでした。その結果、反射で attacker/defender が入れ替わると
+    出品者を取り違え、反射側のスーパーミラー自身が売られてしまっていました。
+    """
+    offer_slot = 5
+    mirror_id = find_card_by_name("armor/super-mirror")
+    shield_id = find_card_by_name("armor/wood-shield")
+    shield_price = card_by_id(shield_id)["price"]
+
+    seed = _find_seed_for_earth_sell_with_offer_slot(offer_slot)
+    sim = _setup_earth_sell_reflection(seed, offer_slot, shield_id, mirror_id)
+    sim.step(godfield_core.ActionType.ACTION_PRAY)
+
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_SELL_SELECT_MIRROR
+    assert sim.state.attacker_id == 1  # 地球神の持ち主が売り手
+    assert sim.state.get_staged_card(1, 0) == -1  # 地球神の番兵
+    assert sim.state.get_staged_card(1, 1) == offer_slot
+
+    # P0 がスーパーミラーで反射 → 売り手と買い手が入れ替わり、P1 が自分の商品を買い戻す
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    assert sim.state.attacker_id == 0
+    assert sim.state.defender_id == 1
+
+    sim.step(godfield_core.ActionType.ACTION_CONFIRM)
+
+    # 出品されたカードが元のスロットから取り除かれている
+    assert sim.state.get_true_hand(1, offer_slot) == -1
+    # 決済されたのは出品カード（木の盾）であり、反射側のスーパーミラーではない
+    p1_hand = [sim.state.get_true_hand(1, i) for i in range(18)]
+    assert mirror_id not in p1_hand
+    assert shield_id in p1_hand  # 買い戻しでP1の手札に戻る
+    # 代金は木の盾の価格。スーパーミラーが売られていた場合はその価格になってしまう
+    assert sim.state.get_money(0) == 50 + shield_price
+    assert sim.state.get_money(1) == 50 - shield_price
 
 
 def test_earth_buy():
@@ -234,7 +321,13 @@ def test_earth_buy_super_mirror_reflection():
 
 
 def test_earth_weapon():
-    """地球神: 武器 (物理防御フェイズ)"""
+    """地球神: 武器 (物理防御フェイズ)
+
+    引いた武器そのものの攻撃力・属性で攻撃が組まれることを確認します。
+    以前は引いたカードIDを staged_cards（本来は手札スロット番号を入れる配列）へ
+    書き込んでいたため、下流がスロット番号として解釈し、攻撃元が失われて
+    威力0の攻撃になっていました。
+    """
     seed = find_seed_for_earth_action("weapon")
     sim = SimulationRunner()
     sim.state.seed_rng(seed)
@@ -247,6 +340,11 @@ def test_earth_weapon():
     assert sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
     assert sim.state.defender_id == 0
     assert sim.state.attacker_id == 1
+
+    # 攻撃元が実際に武器であり、威力と属性がそのカードの定義通りであること
+    source_card = card_by_id(sim.state.pending_attack_source_id)
+    assert source_card.get("type") == "weapon"
+    assert sim.state.pending_attack_power == source_card["attack_power"]
     assert sim.state.pending_attack_power > 0
     assert sim.state.pending_attack_source_id >= 0
 
@@ -303,12 +401,59 @@ def test_earth_broom():
 
     sim.step(godfield_core.ActionType.ACTION_PRAY)
 
+    # 相手に使う雑貨なので、まず反射するかどうかの選択が回ってくる
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    assert sim.state.current_actor_id == 0
+    sim.step(godfield_core.ActionType.ACTION_CONFIRM)  # 反射せず受け入れる
+
     h0 = [sim.state.get_true_hand(0, idx) for idx in range(18) if sim.state.get_true_hand(0, idx) != -1]
 
     # 手札枚数は 4枚になっていること (奇跡はdeployされても手札に残るが、補充ドローが1枚増えるため)
     assert len(h0) == 4
     # 木の盾は4枚から3枚破棄されて、ちょうど1枚だけ残っていること (is_usedだった奇跡スロットは破棄から守られた)
     assert h0.count(shield_id) == 1
+
+
+def test_earth_broom_can_be_reflected_by_super_mirror():
+    """地球神: 夜のホウキをスーパーミラーで跳ね返すと、地球神の持ち主の手札が削られること。
+
+    地球神が引いた雑貨を相手に使う場合も、通常プレイと同様に相手へ反射の機会が与えられます。
+    以前は仮置き場を経由せず即座に効果を適用していたため、跳ね返せませんでした。
+    """
+    seed = find_seed_for_earth_action("broom")
+    shield_id = find_card_by_name("armor/wood-shield")
+    mirror_id = find_card_by_name("armor/super-mirror")
+
+    sim = SimulationRunner()
+    sim.state.seed_rng(seed)
+    sim.state.set_guardian(1, 9)
+    sim.set_status(player=0, hp=99)
+    sim.set_status(player=1, hp=99)
+
+    # P0(仕掛けられる側)はスーパーミラーのみ
+    sim.state.set_true_hand(0, 0, mirror_id)
+    sim.state.set_apparent_hand(0, 0, mirror_id)
+    for i in range(1, 18):
+        sim.state.set_true_hand(0, i, -1)
+
+    # P1(地球神の持ち主)は破棄されうる木の盾を4枚持つ
+    for i in range(4):
+        sim.state.set_true_hand(1, i, shield_id)
+        sim.state.set_is_used(1, i, False)
+    for i in range(4, 18):
+        sim.state.set_true_hand(1, i, -1)
+
+    sim.step(godfield_core.ActionType.ACTION_PRAY)
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+
+    # P0 がスーパーミラーで反射 → 効果は地球神の持ち主(P1)へ向かう
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    assert sim.state.defender_id == 1
+    sim.step(godfield_core.ActionType.ACTION_CONFIRM)
+
+    # 反射されたので P1 の木の盾が3枚破棄されている
+    p1_shields = [sim.state.get_true_hand(1, i) for i in range(18)].count(shield_id)
+    assert p1_shields == 1
 
 
 def test_earth_soap():
@@ -325,6 +470,11 @@ def test_earth_soap():
     sim.state.set_is_deployed(0, 0, True)
 
     sim.step(godfield_core.ActionType.ACTION_PRAY)
+
+    # 相手に使う雑貨なので、まず反射するかどうかの選択が回ってくる
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
+    assert sim.state.current_actor_id == 0
+    sim.step(godfield_core.ActionType.ACTION_CONFIRM)  # 反射せず受け入れる
 
     assert not sim.state.get_is_deployed(0, 0)
     assert sim.state.get_true_hand(0, 0) == -1

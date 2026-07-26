@@ -1,35 +1,34 @@
-# -*- coding: utf-8 -*-
-import pytest
 import godfield_core
-from godfield_core import GamePhase, ActionType, EventType
+from godfield_core import ActionType, EventType, GamePhase
 from tests.core.test_utils import SimulationRunner, find_card_by_name
-from visualize_server import format_event_log
+from visualizer.event_formatter import format_event_log
+
 
 def test_saturn_ring_counter_attack_event():
     runner = SimulationRunner()
     sword_id = find_card_by_name('weapons/gale-sword')
     saturn_id = find_card_by_name('armor/saturn-ring')
-    
+
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    
+
     runner.set_hand(0, [sword_id])
     runner.set_hand(1, [saturn_id])
-    
+
     runner.perform_attack([0])
-    
+
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
     assert runner.state.current_actor_id == 1
-    
+
     runner.perform_defense([0])
-    
+
     obs = godfield_core.get_observation(runner.state, 1)
     ring_events = [ev for ev in obs.get_history() if ev.event_type == int(EventType.RING_EFFECT)]
-    
+
     assert len(ring_events) > 0
     last_ring_event = ring_events[-1]
     assert last_ring_event.card_id == saturn_id
-    
+
     fmt = format_event_log(last_ring_event, 1)
     assert '反撃が発動！' in fmt['text']
 
@@ -39,24 +38,24 @@ def test_neptune_ring_mp_increase_event():
     # 疾風剣 (10ダメ) で攻撃。海王の指輪(防御1)で防御すると貫通ダメ9発生 -> 自分のMPが 9*2 = 18増加
     sword_id = find_card_by_name('weapons/gale-sword')
     neptune_id = find_card_by_name('armor/neptune-ring')
-    
+
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
     runner.state.set_mp(1, 10)
-    
+
     runner.set_hand(0, [sword_id])
     runner.set_hand(1, [neptune_id])
-    
+
     runner.perform_attack([0])
     runner.perform_defense([0])
-    
+
     # 貫通ダメージ9の2倍(=18)のMPが自分のMPに加算され、10 -> 28 になる
     assert runner.state.get_mp(1) == 28
 
 
 def test_venus_ring_counter_defense_restrictions():
     runner = SimulationRunner()
-    
+
     # プレイヤー0がプレイヤー1 of 金星の指輪による反撃を受けている状況を作る
     runner.state.current_phase = GamePhase.PHASE_SUNDRY_SELECT_MIRROR
     runner.state.current_actor_id = 0
@@ -64,18 +63,18 @@ def test_venus_ring_counter_defense_restrictions():
     runner.state.defender_id = 0
     runner.state.pending_attack_source_id = find_card_by_name('armor/venus-ring')
     runner.state.pending_attack_power = 10
-    
+
     # プレイヤー0の手札: 木盾 と スーパーミラー
     wood_shield = find_card_by_name('armor/wood-shield')
     super_mirror = find_card_by_name('armor/super-mirror')
     runner.set_hand(0, [wood_shield, super_mirror])
-    
+
     # 合法アクションを取得
     legal = godfield_core.get_legal_actions(runner.state)
-    
+
     # 木盾(スロット0)は使用不可（通常防具のため）
     assert not legal[int(ActionType.ACTION_SELECT_HAND_0)]
-    
+
     # スーパーミラー(スロット1)は使用可能
     assert legal[int(ActionType.ACTION_SELECT_HAND_1)]
 
@@ -84,19 +83,19 @@ def test_venus_ring_counter_phases():
     runner = SimulationRunner()
     sword_id = find_card_by_name('weapons/gale-sword')
     venus_id = find_card_by_name('armor/venus-ring')
-    
+
     runner.state.current_phase = GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    
+
     runner.set_hand(0, [sword_id])
     runner.set_hand(1, [venus_id])
-    
+
     # プレイヤー0が攻撃
     runner.perform_attack([0])
-    
+
     # プレイヤー1が金星の指輪で防御
     runner.perform_defense([0])
-    
+
     # 金星の指輪による反撃がトリガーされる。
     # 特殊指輪なので、フェイズは PHASE_SUNDRY_SELECT_MIRROR になるはず！
     assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
@@ -320,12 +319,12 @@ def test_special_rings_defense_restrictions():
     uranus_ring = find_card_by_name("armor/uranus-ring")
     pluto_ring = find_card_by_name("armor/pluto-ring")
     mercury_ring = find_card_by_name("armor/mercury-ring")
-    
+
     wood_shield = find_card_by_name('armor/wood-shield')
     super_mirror = find_card_by_name('armor/super-mirror')
-    
+
     rings = [jupiter_ring, uranus_ring, pluto_ring, mercury_ring]
-    
+
     for ring_id in rings:
         runner = SimulationRunner()
         runner.state.current_phase = GamePhase.PHASE_SUNDRY_SELECT_MIRROR
@@ -334,9 +333,9 @@ def test_special_rings_defense_restrictions():
         runner.state.defender_id = 0
         runner.state.pending_attack_source_id = ring_id
         runner.state.pending_attack_power = 0
-        
+
         runner.set_hand(0, [wood_shield, super_mirror])
-        
+
         legal = godfield_core.get_legal_actions(runner.state)
         assert not legal[int(ActionType.ACTION_SELECT_HAND_0)]
         assert legal[int(ActionType.ACTION_SELECT_HAND_1)]
@@ -347,7 +346,7 @@ def test_ring_curse_effects():
     uranus_ring = find_card_by_name("armor/uranus-ring")
     pluto_ring = find_card_by_name("armor/pluto-ring")
     mercury_ring = find_card_by_name("armor/mercury-ring")
-    
+
     # 1. 天王の指輪 -> 閃光 (CURSE_FLASH)
     runner = SimulationRunner()
     runner.state.seed_rng(42)
@@ -357,13 +356,13 @@ def test_ring_curse_effects():
     runner.set_status(1, hp=40, mp=10)
     runner.state.set_true_hand(0, 0, punch_id)
     runner.state.set_true_hand(1, 0, uranus_ring)
-    
+
     runner.perform_attack([0])
     runner.perform_defense([0])
     runner.perform_defense([], confirm=True)
-    
+
     assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_FLASH) == True
-    
+
     # 2. 冥王の指輪 -> 暗雲 (CURSE_DARK_CLOUD)
     runner = SimulationRunner()
     runner.state.seed_rng(42)
@@ -373,13 +372,13 @@ def test_ring_curse_effects():
     runner.set_status(1, hp=40, mp=10)
     runner.state.set_true_hand(0, 0, punch_id)
     runner.state.set_true_hand(1, 0, pluto_ring)
-    
+
     runner.perform_attack([0])
     runner.perform_defense([0])
     runner.perform_defense([], confirm=True)
-    
+
     assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_DARK_CLOUD) == True
-    
+
     # 3. 水星の指輪 -> 霧 (CURSE_FOG)
     runner = SimulationRunner()
     runner.state.seed_rng(42)
@@ -389,9 +388,9 @@ def test_ring_curse_effects():
     runner.set_status(1, hp=40, mp=10)
     runner.state.set_true_hand(0, 0, punch_id)
     runner.state.set_true_hand(1, 0, mercury_ring)
-    
+
     runner.perform_attack([0])
     runner.perform_defense([0])
     runner.perform_defense([], confirm=True)
-    
+
     assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_FOG) == True

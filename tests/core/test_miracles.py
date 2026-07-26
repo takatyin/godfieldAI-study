@@ -1,5 +1,5 @@
 import godfield_core
-from godfield_core import ActionType, GamePhase
+from godfield_core import ActionType
 from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards
 
 
@@ -564,7 +564,7 @@ def test_apocalypse_draw_death_defer():
 
         # プレイヤー0がクロスボウを使用
         runner.perform_attack([0])
-        
+
         # プレイヤー1の防御フェイズ ➡ confirmしか押せない
         runner.step(ActionType.ACTION_CONFIRM)
 
@@ -709,7 +709,6 @@ def find_seed_for_phenomenon(target_phenomenon: int) -> int:
         sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
         sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
         if target_phenomenon == 8:  # 磁気嵐
-            h0 = [sim.state.get_true_hand(0, idx) for idx in range(18) if sim.state.get_true_hand(0, idx) != -1]
             h1 = [sim.state.get_true_hand(1, idx) for idx in range(18) if sim.state.get_true_hand(1, idx) != -1]
             if len(h1) > 0 and h1[0] in [10, 11] and int(sim.state.get_sickness(0)) == 0:
                 if sim.state.get_hp(0) == 99 and sim.state.get_guardian(0) == 0:

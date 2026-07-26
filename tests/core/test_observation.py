@@ -1,6 +1,8 @@
 import copy
-import pytest
+
 import numpy as np
+import pytest
+
 import godfield_core
 from tests.core.test_utils import SimulationRunner
 

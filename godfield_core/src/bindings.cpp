@@ -9,11 +9,25 @@
 
 namespace py = pybind11;
 
+template <typename T, size_t N>
+py::list get_array_as_list(const T(&arr)[N]) {
+    py::list res;
+    for (size_t i = 0; i < N; ++i) {
+        res.append(arr[i]);
+    }
+    return res;
+}
+
 PYBIND11_MODULE(godfield_core, m) {
     m.doc() = "GodField core engine and RL environment pool";
 
     m.attr("OBSERVATION_SIZE") = sizeof(Observation) / sizeof(float);
     m.attr("OBSERVATION_FEATURE_SIZE") = (offsetof(Observation, action_mask) + sizeof(decltype(Observation::action_mask))) / sizeof(float);
+    // 観測配列のどこから合法手マスクが始まるかを決めるため、Python 側はこの値を参照すること。
+    // 定数をコピーすると行動空間の拡張時に黙ってズレる。
+    m.attr("ACTION_SPACE_SIZE") = ACTION_SPACE_SIZE;
+    m.attr("MAX_HAND_SIZE") = MAX_HAND_SIZE;
+    m.attr("HISTORY_LENGTH") = HISTORY_LENGTH;
 
     // Bind initialization function
     m.def("init_game_logic", &init_game_logic, "Initialize the global card registry from JSON");
@@ -479,72 +493,22 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("incoming_damage", &Observation::incoming_damage)
         .def_readwrite("current_staged_defense", &Observation::current_staged_defense)
         .def_readwrite("is_apocalypse", &Observation::is_apocalypse)
+        .def_readwrite("turn_progress", &Observation::turn_progress)
+        .def_readwrite("turns_to_apocalypse", &Observation::turns_to_apocalypse)
         .def_readwrite("history_head", &Observation::history_head)
-        .def("get_history", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < HISTORY_LENGTH; ++i) res.append(obs.history[i]);
-            return res;
-        })
-        .def("get_sickness_me", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < 5; ++i) res.append(obs.sickness_me[i]);
-            return res;
-        })
-        .def("get_sickness_opp", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < 5; ++i) res.append(obs.sickness_opp[i]);
-            return res;
-        })
-        .def("get_curses_me", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < 4; ++i) res.append(obs.curses_me[i]);
-            return res;
-        })
-        .def("get_curses_opp", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < 4; ++i) res.append(obs.curses_opp[i]);
-            return res;
-        })
-        .def("get_guardian_me", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < 11; ++i) res.append(obs.guardian_me[i]);
-            return res;
-        })
-        .def("get_guardian_opp", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < 11; ++i) res.append(obs.guardian_opp[i]);
-            return res;
-        })
-        .def("get_phase_one_hot", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < NUM_PHASES; ++i) res.append(obs.phase_one_hot[i]);
-            return res;
-        })
-        .def("get_hand_cards", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < MAX_HAND_SIZE; ++i) res.append(obs.hand_cards[i]);
-            return res;
-        })
-        .def("get_staged_cards", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < MAX_HAND_SIZE; ++i) res.append(obs.staged_cards[i]);
-            return res;
-        })
-        .def("get_opponent_hand_cards", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < MAX_HAND_SIZE; ++i) res.append(obs.opponent_hand_cards[i]);
-            return res;
-        })
-        .def("get_opponent_staged_cards", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < MAX_HAND_SIZE; ++i) res.append(obs.opponent_staged_cards[i]);
-            return res;
-        })
-        .def("get_action_mask", [](const Observation& obs) {
-            py::list res;
-            for (int i = 0; i < ACTION_SPACE_SIZE; ++i) res.append(obs.action_mask[i]);
-            return res;
-        })
+        .def("get_history", [](const Observation& obs) { return get_array_as_list(obs.history); })
+        .def("get_sickness_me", [](const Observation& obs) { return get_array_as_list(obs.sickness_me); })
+        .def("get_sickness_opp", [](const Observation& obs) { return get_array_as_list(obs.sickness_opp); })
+        .def("get_curses_me", [](const Observation& obs) { return get_array_as_list(obs.curses_me); })
+        .def("get_curses_opp", [](const Observation& obs) { return get_array_as_list(obs.curses_opp); })
+        .def("get_guardian_me", [](const Observation& obs) { return get_array_as_list(obs.guardian_me); })
+        .def("get_guardian_opp", [](const Observation& obs) { return get_array_as_list(obs.guardian_opp); })
+        .def("get_phase_one_hot", [](const Observation& obs) { return get_array_as_list(obs.phase_one_hot); })
+        .def("get_hand_cards", [](const Observation& obs) { return get_array_as_list(obs.hand_cards); })
+        .def("get_staged_cards", [](const Observation& obs) { return get_array_as_list(obs.staged_cards); })
+        .def("get_opponent_hand_cards", [](const Observation& obs) { return get_array_as_list(obs.opponent_hand_cards); })
+        .def("get_opponent_staged_cards", [](const Observation& obs) { return get_array_as_list(obs.opponent_staged_cards); })
+        .def("get_action_mask", [](const Observation& obs) { return get_array_as_list(obs.action_mask); })
         .def("to_numpy", [](const Observation& obs) {
             size_t total_floats = sizeof(Observation) / sizeof(float);
             return py::array_t<float>(
@@ -560,9 +524,12 @@ PYBIND11_MODULE(godfield_core, m) {
         .def("reset", &EnvPool::reset, py::arg("seed"))
         .def("step_all", &EnvPool::step_all, py::arg("actions"))
         .def("get_observations", &EnvPool::get_observations)
+        .def("step_subset", &EnvPool::step_subset, py::arg("env_ids"), py::arg("actions"))
+        .def("get_current_actors", &EnvPool::get_current_actors)
+        .def("get_rewards_for", &EnvPool::get_rewards_for, py::arg("player_id"))
+        .def("get_terminal_observations_for", &EnvPool::get_terminal_observations_for, py::arg("player_id"))
         .def("get_rewards", &EnvPool::get_rewards)
         .def("get_dones", &EnvPool::get_dones)
-        .def("get_ready_env_ids", &EnvPool::get_ready_env_ids)
         .def("get_state", &EnvPool::get_state, py::arg("env_id"))
         .def("set_state", &EnvPool::set_state, py::arg("env_id"), py::arg("state"));
 }

@@ -258,6 +258,8 @@ struct alignas(64) Observation {
     float incoming_damage;        // 飛んできている総ダメージ
     float current_staged_defense; // 現在仮置きしている防具の合計
     float is_apocalypse;          // 終末の時フラグ (通常=0.0, 150ターン以降=1.0)
+    float turn_progress;          // current_turn / TURN_PROGRESS_SCALE_TURNS (0.0 ~ 1.0 で飽和)
+    float turns_to_apocalypse;    // max(0, APOCALYPSE_TURN - current_turn) / APOCALYPSE_TURN (1.0 ~ 0.0)
 
     // フェイズ情報
     float phase_one_hot[NUM_PHASES]; // 現在のフェイズ (State1 ~ State6, StateM)

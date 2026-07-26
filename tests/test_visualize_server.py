@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
-import pytest
 import godfield_core
-import visualize_server
 from tests.core.test_utils import SimulationRunner, find_card_by_name
-from visualize_server import serialize_observation, compute_staged_total_badge, compute_smart_action_label
+from visualizer.constants import CARDS_BY_ID
+from visualizer.presenter import compute_smart_action_label, compute_staged_total_badge, serialize_observation
 
 
 def test_visualize_card_power_label_sell_mode():
@@ -12,7 +10,6 @@ def test_visualize_card_power_label_sell_mode():
     power_label に価格（例: '¥4'）が正しく付与されることをテスト。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     wood_shield_id = find_card_by_name("armor/wood-shield") # price=4
     ogre_gauntlet_id = find_card_by_name("armor/ogre-s-gauntlet") # price=15
@@ -28,7 +25,7 @@ def test_visualize_card_power_label_sell_mode():
     runner.state.current_actor_id = 0
 
     obs = godfield_core.get_observation(runner.state, 0)
-    data = serialize_observation(obs, player_id=0)
+    data = serialize_observation(obs, player_id=0, state=runner.state)
 
     hand = data["hand"]
     # 木の盾 (price=4) -> '¥4'
@@ -44,7 +41,6 @@ def test_visualize_reaction_shields_1st_vs_2nd_card():
     - 2枚目に重ね出し、または他防具の後に出すと '守3' (防御力) にフォールバックされること。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     fire_miracle_id = find_card_by_name("miracles/flame")
     sky_gauntlet_id = find_card_by_name("armor/sky-gauntlet") # reaction: bounce, def: 3
@@ -63,7 +59,7 @@ def test_visualize_reaction_shields_1st_vs_2nd_card():
 
     # 1. まだ何も仮置きしていない状態：スカイガントレット(手札0)は '弾く'
     obs1 = godfield_core.get_observation(runner.state, 1)
-    data1 = serialize_observation(obs1, player_id=1)
+    data1 = serialize_observation(obs1, player_id=1, state=runner.state)
     assert data1["hand"][0]["power_label"] == "弾く"
 
     # P1が先にスカイガントレット(スロット0)を選択・仮置き
@@ -71,7 +67,7 @@ def test_visualize_reaction_shields_1st_vs_2nd_card():
 
     # 2. スカイガントレットが1枚目に置かれた状態：2枚目となるスカイブーツ(手札に残るスロット1)は '守1'
     obs2 = godfield_core.get_observation(runner.state, 1)
-    data2 = serialize_observation(obs2, player_id=1)
+    data2 = serialize_observation(obs2, player_id=1, state=runner.state)
 
     sky_boots_in_hand = next(c for c in data2["hand"] if c["id"] == sky_boots_id)
     assert sky_boots_in_hand["power_label"] == "守1"
@@ -84,7 +80,6 @@ def test_visualize_reaction_shield_physical_vs_miracle_defense():
     - 奇跡防御フェイズ (PHASE_MIRACLE_DEFENSE) でのみ '弾く' と表示されること。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     sword_id = find_card_by_name("weapons/plate-of-strike") # 物理攻撃
     sky_gauntlet_id = find_card_by_name("armor/sky-gauntlet") # reaction: bounce, def: 3
@@ -103,7 +98,7 @@ def test_visualize_reaction_shield_physical_vs_miracle_defense():
 
     # 物理防御フェイズ：スカイガントレットは物理を弾けないため '守3' と表示！
     obs = godfield_core.get_observation(runner.state, 1)
-    data = serialize_observation(obs, player_id=1)
+    data = serialize_observation(obs, player_id=1, state=runner.state)
     assert data["hand"][0]["power_label"] == "守3"
 
 
@@ -114,7 +109,6 @@ def test_visualize_spiritual_zero_mp_label():
     - 仮置き場の最後のカードが奇跡（＜炎＞等）である時（奇跡プラスフェイズ）にのみ '消費0' のラベルが表示されること。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     fire_miracle_id = find_card_by_name("miracles/flame")
     spirit_staff_id = find_card_by_name("weapons/spiritual-staff")
@@ -127,7 +121,7 @@ def test_visualize_spiritual_zero_mp_label():
 
     # 1. 仮置き場が空の状態（PHASE_MAIN）：精霊の杖は '攻12' と表示！
     obs1 = godfield_core.get_observation(runner.state, 0)
-    data1 = serialize_observation(obs1, player_id=0)
+    data1 = serialize_observation(obs1, player_id=0, state=runner.state)
     staff_card_main = next(c for c in data1["hand"] if c["id"] == spirit_staff_id)
     assert staff_card_main["power_label"] == "攻12"
 
@@ -136,7 +130,7 @@ def test_visualize_spiritual_zero_mp_label():
 
     # 3. 仮置き場の最後が奇跡＜炎＞となった状態：精霊の杖が '消費0' に変化！
     obs2 = godfield_core.get_observation(runner.state, 0)
-    data2 = serialize_observation(obs2, player_id=0)
+    data2 = serialize_observation(obs2, player_id=0, state=runner.state)
     staff_card_plus = next(c for c in data2["hand"] if c["id"] == spirit_staff_id)
     assert staff_card_plus["power_label"] == "消費0"
 
@@ -148,7 +142,6 @@ def test_visualize_attack_plus_labels():
     power_label が正確に算出されるかをテスト。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     sword_id = find_card_by_name("weapons/plate-of-strike") # 物理攻撃
     powder_id = find_card_by_name("sundries/strength-powder") # +攻10
@@ -168,7 +161,7 @@ def test_visualize_attack_plus_labels():
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
 
     obs = godfield_core.get_observation(runner.state, 0)
-    data = serialize_observation(obs, player_id=0)
+    data = serialize_observation(obs, player_id=0, state=runner.state)
 
     # 手札の各プラスアイテムの表示ラベルを確認
     powder_card = next(c for c in data["hand"] if c["id"] == powder_id)
@@ -187,7 +180,6 @@ def test_visualize_dual_use_cards_defense_badge():
     防御力が正しく合算されて表示されるかをテスト。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     sword_id = find_card_by_name("weapons/plate-of-strike") # ATK 5
     sword_shield_id = find_card_by_name("weapons/sword-shield") # Def 10, Atk 5
@@ -208,7 +200,7 @@ def test_visualize_dual_use_cards_defense_badge():
     # 仮置き合計バッジの算出結果を確認
     obs = godfield_core.get_observation(runner.state, 1)
     staged_cids = [cid for cid in obs.get_staged_cards() if cid != -1]
-    staged_info = [visualize_server.cards_by_id.get(cid) for cid in staged_cids]
+    staged_info = [CARDS_BY_ID.get(cid) for cid in staged_cids]
 
     badge = compute_staged_total_badge(staged_info, player_id=1, game_state=runner.state)
     assert badge is not None
@@ -221,7 +213,6 @@ def test_visualize_smart_action_labels():
     コンテキスト対応スマートラベル (compute_smart_action_label) をテスト。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     # 1. 購入フェイズ PHASE_BUY
     runner.state.current_phase = godfield_core.GamePhase.PHASE_BUY
@@ -269,7 +260,6 @@ def test_visualize_ogre_helm_phase_labels():
     - PHASE_ATTACK_PLUS（攻撃プラスフェイズ）に遷移したタイミングで初めて '+攻10' に切り替わること。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     sword_id = find_card_by_name("weapons/plate-of-strike") # 物理攻撃
     ogre_helm_id = find_card_by_name("armor/ogre-s-helm") # Def 7, Atk 10 (+攻10)
@@ -283,7 +273,7 @@ def test_visualize_ogre_helm_phase_labels():
     # 1. PHASE_MAIN フェイズ（手番開始時）：鬼のかぶとは単体攻撃としては使えないため '守7' と表示！
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
     obs1 = godfield_core.get_observation(runner.state, 0)
-    data1 = serialize_observation(obs1, player_id=0)
+    data1 = serialize_observation(obs1, player_id=0, state=runner.state)
 
     ogre_card_main = next(c for c in data1["hand"] if c["id"] == ogre_helm_id)
     assert ogre_card_main["power_label"] == "守7"
@@ -294,7 +284,7 @@ def test_visualize_ogre_helm_phase_labels():
 
     # PHASE_ATTACK_PLUS フェイズ：鬼のかぶとが '+攻10' に表示変化！
     obs2 = godfield_core.get_observation(runner.state, 0)
-    data2 = serialize_observation(obs2, player_id=0)
+    data2 = serialize_observation(obs2, player_id=0, state=runner.state)
 
     ogre_card_plus = next(c for c in data2["hand"] if c["id"] == ogre_helm_id)
     assert ogre_card_plus["power_label"] == "+攻10"
@@ -306,7 +296,6 @@ def test_visualize_main_phase_weapon_plus():
     - 木刀（weapons/wooden-sword）は通常の武器（武器プラスではない）なので、メインフェイズ中に '攻1' と表示されることを確認。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     blowgun_id = find_card_by_name("weapons/blowgun")
     wooden_sword_id = find_card_by_name("weapons/wooden-sword")
@@ -320,7 +309,7 @@ def test_visualize_main_phase_weapon_plus():
     # 1. PHASE_MAIN フェイズ（手番開始時）
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
     obs = godfield_core.get_observation(runner.state, 0)
-    data = serialize_observation(obs, player_id=0)
+    data = serialize_observation(obs, player_id=0, state=runner.state)
 
     # 吹き矢は '+攻1'
     blowgun_card = next(c for c in data["hand"] if c["id"] == blowgun_id)
@@ -337,7 +326,6 @@ def test_visualize_sell_multiple_sell_cards():
     売却対象となる「売る」カードの売却価格（¥2）が正しくラベルに表示されることを確認。
     """
     runner = SimulationRunner()
-    visualize_server.state = runner.state
 
     sell_card_id = find_card_by_name("売る")
 
@@ -351,7 +339,7 @@ def test_visualize_sell_multiple_sell_cards():
     # 1. PHASE_MAIN フェイズ（売るカード使用前）：価格ラベルは表示されない（""）
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     obs = godfield_core.get_observation(runner.state, 0)
-    data = serialize_observation(obs, player_id=0)
+    data = serialize_observation(obs, player_id=0, state=runner.state)
 
     sell_card_0 = data["hand"][0]
     sell_card_1 = data["hand"][1]
@@ -361,7 +349,7 @@ def test_visualize_sell_multiple_sell_cards():
     # 2. PHASE_SELL_SELECT フェイズ（売るカード選択中）：価格ラベルが表示される（"¥5"）
     runner.state.current_phase = godfield_core.GamePhase.PHASE_SELL_SELECT
     obs_sell = godfield_core.get_observation(runner.state, 0)
-    data_sell = serialize_observation(obs_sell, player_id=0)
+    data_sell = serialize_observation(obs_sell, player_id=0, state=runner.state)
 
     sell_card_0_sell = data_sell["hand"][0]
     sell_card_1_sell = data_sell["hand"][1]
@@ -373,7 +361,7 @@ def test_visualize_sell_multiple_sell_cards():
     runner.state.set_num_staged_cards(0, 1)
     runner.state.set_staged_card(0, 0, 0) # 0番目の手札スロットがステージングされている
     obs_used = godfield_core.get_observation(runner.state, 0)
-    data_used = serialize_observation(obs_used, player_id=0)
+    data_used = serialize_observation(obs_used, player_id=0, state=runner.state)
 
     sell_card_0_used = data_used["hand"][0]
     sell_card_1_used = data_used["hand"][1]
@@ -388,7 +376,7 @@ def test_visualize_sell_multiple_sell_cards():
     runner.state.set_num_staged_cards(0, 2)
     runner.state.set_staged_card(0, 1, 1) # 1番目の手札スロットがステージングされている
     obs_both = godfield_core.get_observation(runner.state, 0)
-    data_both = serialize_observation(obs_both, player_id=0)
+    data_both = serialize_observation(obs_both, player_id=0, state=runner.state)
 
     assert data_both["hand"][0]["power_label"] == ""
     assert data_both["hand"][1]["power_label"] == ""
@@ -408,7 +396,7 @@ def test_visualize_sell_multiple_sell_cards():
     runner.state.set_num_staged_cards(0, 1)
     runner.state.set_staged_card(0, 0, 1) # スロット1が最初にステージング（トリガー）されている
     obs_slot1 = godfield_core.get_observation(runner.state, 0)
-    data_slot1 = serialize_observation(obs_slot1, player_id=0)
+    data_slot1 = serialize_observation(obs_slot1, player_id=0, state=runner.state)
 
     assert data_slot1["hand"][0]["power_label"] == "¥5" # 未使用の「売る」は ¥5
     assert data_slot1["hand"][1]["power_label"] == ""   # 使用中の「売る」は非表示

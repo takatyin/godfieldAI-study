@@ -202,7 +202,7 @@ def validate_cards(file_path):
         is_group = card.get("is_group_attack", False)
         if not isinstance(is_group, bool):
             errors.append(f"[{name}] 'is_group_attack' must be a boolean")
-        
+
         accuracy = card.get("accuracy", 100)
         if is_group:
             if "accuracy" not in card:

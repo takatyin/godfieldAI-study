@@ -1,8 +1,7 @@
+
 import godfield_core
 from godfield_core import ActionType, GamePhase
-from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards, find_card_by_type
-import pytest
-
+from tests.core.test_utils import SimulationRunner, find_card_by_name, find_card_by_type, get_all_cards
 
 # ==========================================
 # Merged from: tests/core/test_basic.py
@@ -459,7 +458,6 @@ def test_magical_stick_damage_flow():
     magical_stick_id = find_card_by_name("weapons/magical-stick")
     meteor_id = find_card_by_name("miracles/meteor")
     doll_id = find_card_by_name("sundries/spiritual-doll")
-    punch_id = find_card_by_name("weapons/punch")
 
     # 1. マジカルステッキ単体 (所持MP 10)
     runner_1 = SimulationRunner()
@@ -1372,7 +1370,6 @@ def test_dangerous_pestle_targets_only_alive():
     """
     pestle_id = find_card_by_name("weapons/dangerous-pestle")
     mortar_id = find_card_by_name("sundries/dangerous-mortar")
-    super_mirror_id = find_card_by_name("armor/super-mirror")
 
     for idx in range(100):
         runner = SimulationRunner()

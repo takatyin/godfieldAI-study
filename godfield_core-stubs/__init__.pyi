@@ -7,7 +7,7 @@ import numpy.typing
 import typing
 from . import CurseEvent
 from . import SicknessEvent
-__all__: list[str] = ['ACTION_CONFIRM', 'ACTION_DEAL_NO', 'ACTION_DEAL_YES', 'ACTION_DISCARD', 'ACTION_NUM_0', 'ACTION_NUM_1', 'ACTION_NUM_10', 'ACTION_NUM_11', 'ACTION_NUM_12', 'ACTION_NUM_13', 'ACTION_NUM_14', 'ACTION_NUM_15', 'ACTION_NUM_16', 'ACTION_NUM_17', 'ACTION_NUM_18', 'ACTION_NUM_19', 'ACTION_NUM_2', 'ACTION_NUM_20', 'ACTION_NUM_21', 'ACTION_NUM_22', 'ACTION_NUM_23', 'ACTION_NUM_24', 'ACTION_NUM_25', 'ACTION_NUM_26', 'ACTION_NUM_27', 'ACTION_NUM_28', 'ACTION_NUM_29', 'ACTION_NUM_3', 'ACTION_NUM_30', 'ACTION_NUM_31', 'ACTION_NUM_32', 'ACTION_NUM_33', 'ACTION_NUM_34', 'ACTION_NUM_35', 'ACTION_NUM_36', 'ACTION_NUM_37', 'ACTION_NUM_38', 'ACTION_NUM_39', 'ACTION_NUM_4', 'ACTION_NUM_40', 'ACTION_NUM_41', 'ACTION_NUM_42', 'ACTION_NUM_43', 'ACTION_NUM_44', 'ACTION_NUM_45', 'ACTION_NUM_46', 'ACTION_NUM_47', 'ACTION_NUM_48', 'ACTION_NUM_49', 'ACTION_NUM_5', 'ACTION_NUM_50', 'ACTION_NUM_51', 'ACTION_NUM_52', 'ACTION_NUM_53', 'ACTION_NUM_54', 'ACTION_NUM_55', 'ACTION_NUM_56', 'ACTION_NUM_57', 'ACTION_NUM_58', 'ACTION_NUM_59', 'ACTION_NUM_6', 'ACTION_NUM_60', 'ACTION_NUM_61', 'ACTION_NUM_62', 'ACTION_NUM_63', 'ACTION_NUM_64', 'ACTION_NUM_65', 'ACTION_NUM_66', 'ACTION_NUM_67', 'ACTION_NUM_68', 'ACTION_NUM_69', 'ACTION_NUM_7', 'ACTION_NUM_70', 'ACTION_NUM_71', 'ACTION_NUM_72', 'ACTION_NUM_73', 'ACTION_NUM_74', 'ACTION_NUM_75', 'ACTION_NUM_76', 'ACTION_NUM_77', 'ACTION_NUM_78', 'ACTION_NUM_79', 'ACTION_NUM_8', 'ACTION_NUM_80', 'ACTION_NUM_81', 'ACTION_NUM_82', 'ACTION_NUM_83', 'ACTION_NUM_84', 'ACTION_NUM_85', 'ACTION_NUM_86', 'ACTION_NUM_87', 'ACTION_NUM_88', 'ACTION_NUM_89', 'ACTION_NUM_9', 'ACTION_NUM_90', 'ACTION_NUM_91', 'ACTION_NUM_92', 'ACTION_NUM_93', 'ACTION_NUM_94', 'ACTION_NUM_95', 'ACTION_NUM_96', 'ACTION_NUM_97', 'ACTION_NUM_98', 'ACTION_NUM_99', 'ACTION_PRAY', 'ACTION_SELECT_HAND_0', 'ACTION_SELECT_HAND_1', 'ACTION_SELECT_HAND_10', 'ACTION_SELECT_HAND_11', 'ACTION_SELECT_HAND_12', 'ACTION_SELECT_HAND_13', 'ACTION_SELECT_HAND_14', 'ACTION_SELECT_HAND_15', 'ACTION_SELECT_HAND_16', 'ACTION_SELECT_HAND_17', 'ACTION_SELECT_HAND_2', 'ACTION_SELECT_HAND_3', 'ACTION_SELECT_HAND_4', 'ACTION_SELECT_HAND_5', 'ACTION_SELECT_HAND_6', 'ACTION_SELECT_HAND_7', 'ACTION_SELECT_HAND_8', 'ACTION_SELECT_HAND_9', 'ACTION_TARGET_OPP', 'ACTION_TARGET_SELF', 'ATTACK_HIT', 'ATTACK_MISS', 'ActionType', 'BLACK_HOLE', 'BLOCK_ATTACK', 'BOUNCE_ATTACK', 'BUY_CARD', 'CARD_EMPTY', 'CLEANUP', 'CLEANUP_DEATH_CHECK', 'CONFIRM_ATTACK', 'CONFIRM_DEFENSE', 'CURSE_COLD', 'CURSE_DARK_CLOUD', 'CURSE_DREAM', 'CURSE_FEVER', 'CURSE_FLASH', 'CURSE_FOG', 'CURSE_HEAVEN', 'CURSE_HELL', 'CURSE_NONE', 'CurseEvent', 'CurseType', 'DEATH_CHECK_START', 'DENSE_FOG', 'DISCARD_CARD', 'DRAW_CARD', 'EARTH', 'ECLIPSE', 'EFFECT_CURSE', 'EFFECT_GUARDIAN', 'EFFECT_SICKNESS', 'ELEM_DARKNESS', 'ELEM_FIRE', 'ELEM_LIGHT', 'ELEM_NONE', 'ELEM_STONE', 'ELEM_WATER', 'ELEM_WOOD', 'EXCHANGE', 'Element', 'EnvPool', 'EventType', 'FINAL_DEATH_CHECK', 'GIGANTIC_TUB', 'GOLD_MINE', 'GUARDIAN_ACT', 'GUARDIAN_ENTER', 'GUARDIAN_LEAVE', 'GameEvent', 'GamePhase', 'GuardianType', 'HEAL_HP', 'HEAL_MP', 'HitCurse', 'InternalState', 'JUPITER', 'MAGNETIC_STORM', 'MARS', 'MERCURY', 'MOON', 'MUSHROOM', 'NEPTUNE', 'NONE', 'OBSERVATION_FEATURE_SIZE', 'OBSERVATION_SIZE', 'Observation', 'PASS_DEFENSE', 'PHASE_ATTACK_PLUS', 'PHASE_BUY', 'PHASE_BUY_SELECT_MIRROR', 'PHASE_DEFENSE', 'PHASE_DISCARD', 'PHASE_END', 'PHASE_EXCHANGE_HP', 'PHASE_EXCHANGE_MP', 'PHASE_GROUP_MIRACLE_PLUS', 'PHASE_GROUP_WEAPON', 'PHASE_GUARDIAN', 'PHASE_MAIN', 'PHASE_MAIN_TARGET_SELECT', 'PHASE_MIRACLE_DEFENSE', 'PHASE_MIRACLE_PLUS', 'PHASE_SELL_SELECT', 'PHASE_SELL_SELECT_MIRROR', 'PHASE_SUNDRY_SELECT_MIRROR', 'PLUTO', 'PhenomenonType', 'REACTION_BLOCK', 'REACTION_BOUNCE', 'REACTION_NONE', 'REACTION_REFLECT', 'REFLECT_DAMAGE', 'REFLECT_MIRROR', 'REFUSE_DEAL', 'RING_EFFECT', 'ReactionType', 'SATURN', 'SELL_CARD', 'SICKNESS_COLD', 'SICKNESS_DAMAGE', 'SICKNESS_FEVER', 'SICKNESS_HEAVEN', 'SICKNESS_HELL', 'SICKNESS_NONE', 'SICKNESS_WORSEN', 'STAGE_CARD', 'SUNSET', 'SicknessEvent', 'SicknessType', 'TAKE_DAMAGE', 'TIMING_ATK_DEFENCE', 'TIMING_ATK_PLUS', 'TIMING_MAIN_ATK', 'TIMING_MAIN_DEAL', 'TIMING_MAIN_MIRACLE', 'TIMING_MAIN_SUNDRY', 'TIMING_MIRACLE_DEFENCE', 'TIMING_MIRACLE_PLUS', 'TORNADO', 'TRIGGER_PHENOMENON', 'TURN_TRANSITION', 'TurnEndSubstep', 'UNSTAGE_CARD', 'URANUS', 'VENUS', 'WARM_CURRENT', 'clear_state', 'get_card_name', 'get_legal_actions', 'get_observation', 'get_opponent_staged_cards_for_obs', 'get_registry_size', 'get_single_legal_action', 'init_game_logic', 'step_game']
+__all__: list[str] = ['ACTION_CONFIRM', 'ACTION_DEAL_NO', 'ACTION_DEAL_YES', 'ACTION_DISCARD', 'ACTION_NUM_0', 'ACTION_NUM_1', 'ACTION_NUM_10', 'ACTION_NUM_11', 'ACTION_NUM_12', 'ACTION_NUM_13', 'ACTION_NUM_14', 'ACTION_NUM_15', 'ACTION_NUM_16', 'ACTION_NUM_17', 'ACTION_NUM_18', 'ACTION_NUM_19', 'ACTION_NUM_2', 'ACTION_NUM_20', 'ACTION_NUM_21', 'ACTION_NUM_22', 'ACTION_NUM_23', 'ACTION_NUM_24', 'ACTION_NUM_25', 'ACTION_NUM_26', 'ACTION_NUM_27', 'ACTION_NUM_28', 'ACTION_NUM_29', 'ACTION_NUM_3', 'ACTION_NUM_30', 'ACTION_NUM_31', 'ACTION_NUM_32', 'ACTION_NUM_33', 'ACTION_NUM_34', 'ACTION_NUM_35', 'ACTION_NUM_36', 'ACTION_NUM_37', 'ACTION_NUM_38', 'ACTION_NUM_39', 'ACTION_NUM_4', 'ACTION_NUM_40', 'ACTION_NUM_41', 'ACTION_NUM_42', 'ACTION_NUM_43', 'ACTION_NUM_44', 'ACTION_NUM_45', 'ACTION_NUM_46', 'ACTION_NUM_47', 'ACTION_NUM_48', 'ACTION_NUM_49', 'ACTION_NUM_5', 'ACTION_NUM_50', 'ACTION_NUM_51', 'ACTION_NUM_52', 'ACTION_NUM_53', 'ACTION_NUM_54', 'ACTION_NUM_55', 'ACTION_NUM_56', 'ACTION_NUM_57', 'ACTION_NUM_58', 'ACTION_NUM_59', 'ACTION_NUM_6', 'ACTION_NUM_60', 'ACTION_NUM_61', 'ACTION_NUM_62', 'ACTION_NUM_63', 'ACTION_NUM_64', 'ACTION_NUM_65', 'ACTION_NUM_66', 'ACTION_NUM_67', 'ACTION_NUM_68', 'ACTION_NUM_69', 'ACTION_NUM_7', 'ACTION_NUM_70', 'ACTION_NUM_71', 'ACTION_NUM_72', 'ACTION_NUM_73', 'ACTION_NUM_74', 'ACTION_NUM_75', 'ACTION_NUM_76', 'ACTION_NUM_77', 'ACTION_NUM_78', 'ACTION_NUM_79', 'ACTION_NUM_8', 'ACTION_NUM_80', 'ACTION_NUM_81', 'ACTION_NUM_82', 'ACTION_NUM_83', 'ACTION_NUM_84', 'ACTION_NUM_85', 'ACTION_NUM_86', 'ACTION_NUM_87', 'ACTION_NUM_88', 'ACTION_NUM_89', 'ACTION_NUM_9', 'ACTION_NUM_90', 'ACTION_NUM_91', 'ACTION_NUM_92', 'ACTION_NUM_93', 'ACTION_NUM_94', 'ACTION_NUM_95', 'ACTION_NUM_96', 'ACTION_NUM_97', 'ACTION_NUM_98', 'ACTION_NUM_99', 'ACTION_PRAY', 'ACTION_SELECT_HAND_0', 'ACTION_SELECT_HAND_1', 'ACTION_SELECT_HAND_10', 'ACTION_SELECT_HAND_11', 'ACTION_SELECT_HAND_12', 'ACTION_SELECT_HAND_13', 'ACTION_SELECT_HAND_14', 'ACTION_SELECT_HAND_15', 'ACTION_SELECT_HAND_16', 'ACTION_SELECT_HAND_17', 'ACTION_SELECT_HAND_2', 'ACTION_SELECT_HAND_3', 'ACTION_SELECT_HAND_4', 'ACTION_SELECT_HAND_5', 'ACTION_SELECT_HAND_6', 'ACTION_SELECT_HAND_7', 'ACTION_SELECT_HAND_8', 'ACTION_SELECT_HAND_9', 'ACTION_SPACE_SIZE', 'ACTION_TARGET_OPP', 'ACTION_TARGET_SELF', 'ATTACK_HIT', 'ATTACK_MISS', 'ActionType', 'BLACK_HOLE', 'BLOCK_ATTACK', 'BOUNCE_ATTACK', 'BUY_CARD', 'CARD_EMPTY', 'CLEANUP', 'CLEANUP_DEATH_CHECK', 'CONFIRM_ATTACK', 'CONFIRM_DEFENSE', 'CURSE_COLD', 'CURSE_DARK_CLOUD', 'CURSE_DREAM', 'CURSE_FEVER', 'CURSE_FLASH', 'CURSE_FOG', 'CURSE_HEAVEN', 'CURSE_HELL', 'CURSE_NONE', 'CurseEvent', 'CurseType', 'DEATH_CHECK_START', 'DENSE_FOG', 'DISCARD_CARD', 'DRAW_CARD', 'EARTH', 'ECLIPSE', 'EFFECT_CURSE', 'EFFECT_GUARDIAN', 'EFFECT_SICKNESS', 'ELEM_DARKNESS', 'ELEM_FIRE', 'ELEM_LIGHT', 'ELEM_NONE', 'ELEM_STONE', 'ELEM_WATER', 'ELEM_WOOD', 'EXCHANGE', 'Element', 'EnvPool', 'EventType', 'FINAL_DEATH_CHECK', 'GIGANTIC_TUB', 'GOLD_MINE', 'GUARDIAN_ACT', 'GUARDIAN_ENTER', 'GUARDIAN_LEAVE', 'GameEvent', 'GamePhase', 'GuardianType', 'HEAL_HP', 'HEAL_MP', 'HISTORY_LENGTH', 'HitCurse', 'InternalState', 'JUPITER', 'MAGNETIC_STORM', 'MARS', 'MAX_HAND_SIZE', 'MERCURY', 'MOON', 'MUSHROOM', 'NEPTUNE', 'NONE', 'OBSERVATION_FEATURE_SIZE', 'OBSERVATION_SIZE', 'Observation', 'PASS_DEFENSE', 'PHASE_ATTACK_PLUS', 'PHASE_BUY', 'PHASE_BUY_SELECT_MIRROR', 'PHASE_DEFENSE', 'PHASE_DISCARD', 'PHASE_END', 'PHASE_EXCHANGE_HP', 'PHASE_EXCHANGE_MP', 'PHASE_GROUP_MIRACLE_PLUS', 'PHASE_GROUP_WEAPON', 'PHASE_GUARDIAN', 'PHASE_MAIN', 'PHASE_MAIN_TARGET_SELECT', 'PHASE_MIRACLE_DEFENSE', 'PHASE_MIRACLE_PLUS', 'PHASE_SELL_SELECT', 'PHASE_SELL_SELECT_MIRROR', 'PHASE_SUNDRY_SELECT_MIRROR', 'PLUTO', 'PhenomenonType', 'REACTION_BLOCK', 'REACTION_BOUNCE', 'REACTION_NONE', 'REACTION_REFLECT', 'REFLECT_DAMAGE', 'REFLECT_MIRROR', 'REFUSE_DEAL', 'RING_EFFECT', 'ReactionType', 'SATURN', 'SELL_CARD', 'SICKNESS_COLD', 'SICKNESS_DAMAGE', 'SICKNESS_FEVER', 'SICKNESS_HEAVEN', 'SICKNESS_HELL', 'SICKNESS_NONE', 'SICKNESS_WORSEN', 'STAGE_CARD', 'SUNSET', 'SicknessEvent', 'SicknessType', 'TAKE_DAMAGE', 'TIMING_ATK_DEFENCE', 'TIMING_ATK_PLUS', 'TIMING_MAIN_ATK', 'TIMING_MAIN_DEAL', 'TIMING_MAIN_MIRACLE', 'TIMING_MAIN_SUNDRY', 'TIMING_MIRACLE_DEFENCE', 'TIMING_MIRACLE_PLUS', 'TORNADO', 'TRIGGER_PHENOMENON', 'TURN_TRANSITION', 'TurnEndSubstep', 'UNSTAGE_CARD', 'URANUS', 'VENUS', 'WARM_CURRENT', 'clear_state', 'get_card_name', 'get_legal_actions', 'get_observation', 'get_opponent_staged_cards_for_obs', 'get_registry_size', 'get_single_legal_action', 'init_game_logic', 'step_game']
 class ActionType:
     """
     Members:
@@ -512,21 +512,27 @@ class Element:
 class EnvPool:
     def __init__(self, num_envs: typing.SupportsInt | typing.SupportsIndex = 10000) -> None:
         ...
+    def get_current_actors(self) -> numpy.typing.NDArray[numpy.int32]:
+        ...
     def get_dones(self) -> numpy.typing.NDArray[numpy.float32]:
         ...
     def get_observations(self) -> numpy.typing.NDArray[numpy.float32]:
         ...
-    def get_ready_env_ids(self) -> numpy.typing.NDArray[numpy.int32]:
-        ...
     def get_rewards(self) -> numpy.typing.NDArray[numpy.float32]:
         ...
+    def get_rewards_for(self, player_id: typing.SupportsInt | typing.SupportsIndex) -> numpy.typing.NDArray[numpy.float32]:
+        ...
     def get_state(self, env_id: typing.SupportsInt | typing.SupportsIndex) -> InternalState:
+        ...
+    def get_terminal_observations_for(self, player_id: typing.SupportsInt | typing.SupportsIndex) -> numpy.typing.NDArray[numpy.float32]:
         ...
     def reset(self, seed: typing.SupportsInt | typing.SupportsIndex) -> None:
         ...
     def set_state(self, env_id: typing.SupportsInt | typing.SupportsIndex, state: InternalState) -> None:
         ...
     def step_all(self, actions: typing.Annotated[numpy.typing.ArrayLike, numpy.int32]) -> None:
+        ...
+    def step_subset(self, env_ids: typing.Annotated[numpy.typing.ArrayLike, numpy.int32], actions: typing.Annotated[numpy.typing.ArrayLike, numpy.int32]) -> None:
         ...
 class EventType:
     """
@@ -1139,6 +1145,18 @@ class Observation:
     @mp_opp.setter
     def mp_opp(self, arg0: typing.SupportsFloat | typing.SupportsIndex) -> None:
         ...
+    @property
+    def turn_progress(self) -> float:
+        ...
+    @turn_progress.setter
+    def turn_progress(self, arg0: typing.SupportsFloat | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def turns_to_apocalypse(self) -> float:
+        ...
+    @turns_to_apocalypse.setter
+    def turns_to_apocalypse(self, arg0: typing.SupportsFloat | typing.SupportsIndex) -> None:
+        ...
 class PhenomenonType:
     """
     Members:
@@ -1503,6 +1521,7 @@ ACTION_SELECT_HAND_6: ActionType  # value = <ActionType.ACTION_SELECT_HAND_6: 6>
 ACTION_SELECT_HAND_7: ActionType  # value = <ActionType.ACTION_SELECT_HAND_7: 7>
 ACTION_SELECT_HAND_8: ActionType  # value = <ActionType.ACTION_SELECT_HAND_8: 8>
 ACTION_SELECT_HAND_9: ActionType  # value = <ActionType.ACTION_SELECT_HAND_9: 9>
+ACTION_SPACE_SIZE: int = 122
 ACTION_TARGET_OPP: ActionType  # value = <ActionType.ACTION_TARGET_OPP: 18>
 ACTION_TARGET_SELF: ActionType  # value = <ActionType.ACTION_TARGET_SELF: 19>
 ATTACK_HIT: EventType  # value = <EventType.ATTACK_HIT: 6>
@@ -1550,15 +1569,17 @@ GUARDIAN_ENTER: EventType  # value = <EventType.GUARDIAN_ENTER: 25>
 GUARDIAN_LEAVE: EventType  # value = <EventType.GUARDIAN_LEAVE: 26>
 HEAL_HP: EventType  # value = <EventType.HEAL_HP: 12>
 HEAL_MP: EventType  # value = <EventType.HEAL_MP: 13>
+HISTORY_LENGTH: int = 64
 JUPITER: GuardianType  # value = <GuardianType.JUPITER: 3>
 MAGNETIC_STORM: PhenomenonType  # value = <PhenomenonType.MAGNETIC_STORM: 8>
 MARS: GuardianType  # value = <GuardianType.MARS: 1>
+MAX_HAND_SIZE: int = 18
 MERCURY: GuardianType  # value = <GuardianType.MERCURY: 2>
 MOON: GuardianType  # value = <GuardianType.MOON: 10>
 MUSHROOM: PhenomenonType  # value = <PhenomenonType.MUSHROOM: 2>
 NEPTUNE: GuardianType  # value = <GuardianType.NEPTUNE: 7>
 NONE: EventType  # value = <EventType.NONE: 0>
-OBSERVATION_FEATURE_SIZE: int = 582
+OBSERVATION_FEATURE_SIZE: int = 584
 OBSERVATION_SIZE: int = 592
 PASS_DEFENSE: EventType  # value = <EventType.PASS_DEFENSE: 5>
 PHASE_ATTACK_PLUS: GamePhase  # value = <GamePhase.PHASE_ATTACK_PLUS: 3>

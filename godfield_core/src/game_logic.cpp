@@ -362,6 +362,10 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
     obs.current_staged_defense = static_cast<float>(total_def) / 100.0f;
 
     obs.is_apocalypse = (state.current_turn >= APOCALYPSE_TURN) ? 1.0f : 0.0f;
+    // ターン数の打ち切りは行わないため current_turn は基準値を超えうる。
+    // 観測は 0.0〜1.0 に収める契約なので上限で飽和させる。
+    obs.turn_progress = std::min(1.0f, static_cast<float>(state.current_turn) / static_cast<float>(TURN_PROGRESS_SCALE_TURNS));
+    obs.turns_to_apocalypse = static_cast<float>(std::max(0, APOCALYPSE_TURN - state.current_turn)) / static_cast<float>(APOCALYPSE_TURN);
 
     // Phase one-hot (18 dimensional)
     int phase_idx = static_cast<int>(state.current_phase);

@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <unordered_map>
+#include <atomic>
 
 // ============================================================================
 // グローバル変数の実体定義 / Global Variable Instantiations
@@ -12,6 +13,10 @@
 std::vector<CardFeatures> g_card_registry;
 std::vector<std::string> g_card_names;
 std::discrete_distribution<int> g_drop_distribution;
+
+// g_drop_distribution が作り直された回数。draw_card() のスレッドローカルなコピーが
+// 古くなっていないかを判定するために使う（init_game_logic は再呼び出しされうる）。
+static std::atomic<uint64_t> g_distribution_generation{0};
 
 static const std::unordered_map<std::string, CardType> type_map = {
     {"weapon", CardType::WEAPON},
@@ -143,6 +148,7 @@ void init_game_logic(const pybind11::list &cards) {
     }
 
     g_drop_distribution = std::discrete_distribution<int>(weights.begin(), weights.end());
+    g_distribution_generation.fetch_add(1, std::memory_order_release);
     std::cout << "Successfully loaded " << g_card_registry.size() << " cards into game_logic registry." << std::endl;
 }
 
@@ -158,7 +164,20 @@ int draw_card(std::mt19937 &rng) {
     if (g_card_registry.empty()) {
         throw std::runtime_error("Cannot draw card: registry is empty. Call init_game_logic first.");
     }
-    return g_drop_distribution(rng);
+
+    // EnvPool::step_all は OpenMP で並列化されており、全環境のドローがこの関数を通る。
+    // 共有分布をロックで守ると数千環境分の抽選が直列化してしまうため、
+    // スレッドごとに分布のコピーを持つ。分布は確率テーブルから決定的に抽選するので、
+    // コピーでも消費する乱数と結果は共有インスタンスと同一になる。
+    thread_local std::discrete_distribution<int> local_distribution;
+    thread_local uint64_t local_generation = 0;
+
+    uint64_t current_generation = g_distribution_generation.load(std::memory_order_acquire);
+    if (local_generation != current_generation) {
+        local_distribution = g_drop_distribution;
+        local_generation = current_generation;
+    }
+    return local_distribution(rng);
 }
 
 /**

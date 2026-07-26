@@ -213,9 +213,32 @@ StagedCardIds get_staged_card_ids(const InternalState &state, int player);
  */
 void apply_card_effects_to_target(InternalState &state, int target_id, const StagedCardIds& used_card_ids);
 
+/**
+ * @brief カード1枚の効果を対象プレイヤーへ適用します。
+ * @param target_id 効果を適用されるプレイヤーID。
+ * @param card_id 効果を発生させるカードID。
+ */
+void apply_card_effect_to_target(InternalState &state, int target_id, int card_id);
+
+/**
+ * @brief カードが吸収効果（与えたダメージ分だけ攻撃側のHPが回復）を持つかを判定します。
+ *
+ * 仮置きから組み立てる攻撃（evaluate_staged_attack）と、仮置きを経由しない守護神の行動
+ * （setup_guardian_attack_defense）の双方から参照するため、対象カードをここに一元化しています。
+ */
+bool is_absorption_source(int card_id);
+
 void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse);
-void apply_curse_state(InternalState &state, int player_id, CurseType type);
-void clear_curse_state(InternalState &state, int player_id, CurseType type);
+void apply_curse(InternalState &state, int player_id, CurseType type);
+void remove_curse(InternalState &state, int player_id, CurseType type);
+void confirm_all_staged_cards(InternalState &state, int player);
+void apply_damage(InternalState &state, int player_id, int damage, bool absorption = false, bool deal_same_damage = false);
+
+/**
+ * @brief ダメージによってHPが減少した際、一定確率で守護神を離脱させます。
+ * @param hp_decreased このダメージ適用でHPが実際に減少したか。
+ */
+void try_guardian_leave(InternalState &state, int player_id, bool hp_decreased);
 
 /**
  * @brief プレイヤーに病気を適用・悪化させます。

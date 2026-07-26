@@ -11,9 +11,10 @@ EnvPool::EnvPool(int num_envs) : num_envs_(num_envs), seed_(42) {
     reset_counts_.resize(num_envs_, 0);
     rewards_.resize(num_envs_, 0.0f);
     dones_.resize(num_envs_, 0.0f);
-    ready_env_ids_.resize(num_envs_);
-    for(int i=0; i<num_envs_; ++i) {
-        ready_env_ids_[i] = i;
+    current_actors_.resize(num_envs_, 0);
+    for (int p = 0; p < 2; ++p) {
+        terminal_obs_buffers_[p].resize(num_envs_);
+        rewards_per_player_[p].resize(num_envs_, 0.0f);
     }
 }
 
@@ -87,7 +88,9 @@ void EnvPool::reset(int seed) {
         dones_[i] = 0.0f;
         reset_env(i, seed_ + i);
         generate_observation(i);
-        ready_env_ids_[i] = i; // All ready
+        current_actors_[i] = states_[i].current_actor_id;
+        rewards_per_player_[0][i] = 0.0f;
+        rewards_per_player_[1][i] = 0.0f;
     }
 }
 
@@ -96,12 +99,69 @@ void EnvPool::step_all(pybind11::array_t<int> actions) {
     int* ptr = static_cast<int*>(buf.ptr);
     size_t batch_size = buf.shape[0];
 
-    for (size_t i = 0; i < batch_size; ++i) {
-        int env_id = ready_env_ids_[i];
-        int action = ptr[i];
-        step_env(env_id, action);
+    // actions[i] は環境 i への行動。各反復は自分の環境の状態とバッファにしか触れないため並列化できる
+#pragma omp parallel for
+    for (int env_id = 0; env_id < static_cast<int>(batch_size); ++env_id) {
+        step_env(env_id, ptr[env_id]);
         generate_observation(env_id);
     }
+}
+
+void EnvPool::step_subset(pybind11::array_t<int> env_ids, pybind11::array_t<int> actions) {
+    auto id_buf = env_ids.request();
+    auto act_buf = actions.request();
+    if (id_buf.shape[0] != act_buf.shape[0]) {
+        throw std::runtime_error("step_subset: env_ids と actions の長さが一致しません");
+    }
+    int* ids = static_cast<int*>(id_buf.ptr);
+    int* acts = static_cast<int*>(act_buf.ptr);
+    int count = static_cast<int>(id_buf.shape[0]);
+
+    // env_ids に重複がない限り、各反復は自分の環境にしか触れないため並列化できる
+#pragma omp parallel for
+    for (int k = 0; k < count; ++k) {
+        int env_id = ids[k];
+        if (env_id < 0 || env_id >= num_envs_) continue;
+        step_env(env_id, acts[k]);
+        generate_observation(env_id);
+    }
+}
+
+pybind11::array_t<int> EnvPool::get_current_actors() {
+    pybind11::handle base = pybind11::cast(this);
+    return pybind11::array_t<int>(
+        {static_cast<pybind11::ssize_t>(current_actors_.size())},
+        {sizeof(int)},
+        current_actors_.data(),
+        base
+    );
+}
+
+pybind11::array_t<float> EnvPool::get_rewards_for(int player_id) {
+    if (player_id < 0 || player_id > 1) {
+        throw std::runtime_error("get_rewards_for: player_id は 0 か 1 である必要があります");
+    }
+    pybind11::handle base = pybind11::cast(this);
+    return pybind11::array_t<float>(
+        {static_cast<pybind11::ssize_t>(rewards_per_player_[player_id].size())},
+        {sizeof(float)},
+        rewards_per_player_[player_id].data(),
+        base
+    );
+}
+
+pybind11::array_t<float> EnvPool::get_terminal_observations_for(int player_id) {
+    if (player_id < 0 || player_id > 1) {
+        throw std::runtime_error("get_terminal_observations_for: player_id は 0 か 1 である必要があります");
+    }
+    size_t total_floats = num_envs_ * (sizeof(Observation) / sizeof(float));
+    pybind11::handle base = pybind11::cast(this);
+    return pybind11::array_t<float>(
+        {static_cast<pybind11::ssize_t>(total_floats)},
+        {sizeof(float)},
+        reinterpret_cast<float*>(terminal_obs_buffers_[player_id].data()),
+        base
+    );
 }
 
 pybind11::array_t<float> EnvPool::get_observations() {
@@ -135,16 +195,6 @@ pybind11::array_t<float> EnvPool::get_dones() {
     );
 }
 
-pybind11::array_t<int> EnvPool::get_ready_env_ids() {
-    pybind11::handle base = pybind11::cast(this);
-    return pybind11::array_t<int>(
-        {static_cast<pybind11::ssize_t>(ready_env_ids_.size())},
-        {sizeof(int)},
-        ready_env_ids_.data(),
-        base
-    );
-}
-
 
 void EnvPool::step_env(int env_id, int action) {
     InternalState& state = states_[env_id];
@@ -159,22 +209,34 @@ void EnvPool::step_env(int env_id, int action) {
         step_game(state, static_cast<ActionType>(auto_action));
     }
     
-    // Environment specific artificial turn advance (for now)
-    if (state.current_turn > MAX_EPISODE_TURNS) {
-        state.is_done = true;
-    }
+    // ターン数による人為的な打ち切りは行わない。
+    // 上級者同士の膠着から終末の時（150ターン）へ突入する展開もエージェントに学習させたいため、
+    // 決着はゲームルール（run_death_check）にのみ委ねる。終末の時に入れば比較的すぐ決着する。
+    // 打ち切りを安全弁として使えないので、進行不能な状態を作らないこと自体が要件になる
+    // （合法手が0件になる状態は tests/test_rl_pipeline.py で検知している）。
 
     if (state.is_done) {
         // 元のアクション実行プレイヤー視点での最終報酬を設定
         rewards_[env_id] = (acting_player == 0) ? state.p0_reward : state.p1_reward;
+        // 学習者が相手の手番で負ける／勝つ場合に備え、両プレイヤー視点の報酬も残す
+        rewards_per_player_[0][env_id] = state.p0_reward;
+        rewards_per_player_[1][env_id] = state.p1_reward;
         dones_[env_id] = 1.0f;
 
-        // 次のゲームのために環境を自動リセット
-        reset_env(env_id, seed_ + num_envs_ + (reset_counts_[env_id]++));
+        // 自動リセットで真の終端が失われるため、両プレイヤー視点でキャッシュしておく
+        for (int p = 0; p < 2; ++p) {
+            make_observation(state, p, terminal_obs_buffers_[p][env_id]);
+        }
+
+        // 次のゲームのために環境を自動リセット (シード衝突を防ぐため、env_idごとに異なるシード系列を配分)
+        reset_env(env_id, seed_ + num_envs_ * (1 + reset_counts_[env_id]++) + env_id);
     } else {
         rewards_[env_id] = 0.0f;
+        rewards_per_player_[0][env_id] = 0.0f;
+        rewards_per_player_[1][env_id] = 0.0f;
         dones_[env_id] = 0.0f;
     }
+    current_actors_[env_id] = states_[env_id].current_actor_id;
 }
 
 void EnvPool::generate_observation(int env_id) {

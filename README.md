@@ -68,6 +68,18 @@ C++のヘッダーファイルやソースコードをエディタで編集す�
 uv run python tools/generate_compile_flags.py
 ```
 
+### CPU命令セットの最適化フラグ (SIMD / AVX2)
+
+`setup.py` は既定で **AVX2 までを固定ターゲット**としてコンパイルします（Windows は `/arch:AVX2`、Linux/macOS は `-mavx2`）。ARM 系（Apple Silicon 等）ではこれらのフラグが存在しないため、自動的に付与されません。
+
+ビルドしたマシンと実行するマシンが同一である場合（学習用マシンなど）は、環境変数を指定することでネイティブ最適化を有効にできます。
+
+```bash
+GODFIELD_MARCH_NATIVE=1 uv run python setup.py build_ext --inplace
+```
+
+> **⚠️ 注意**: `-march=native` はビルドしたマシンのCPUに固有の命令を埋め込むため、生成されたバイナリを**別のCPUを持つマシンへ持ち込むと不正命令で異常終了します**。CI でビルドして配布する場合や、複数マシンで `.pyd` / `.so` を共有する場合は指定しないでください。
+
 ### 【重要】Windows環境でのC++コンパイルと文字コード設定 (MSVC UTF-8 Pitfalls)
 WindowsのMSVC環境では、デフォルトでソースコードを `Shift-JIS (CP932)` として読み込もうとするため、C++コード内で `"火"` などの日本語文字列を使用するとコンパイル時に文字化けし、JSONからのUTF-8パース結果と一致しなくなる致命的なバグが発生します。
 これを防ぐため、`setup.py` にて `/utf-8` コンパイルオプションを渡しています。

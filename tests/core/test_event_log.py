@@ -1,8 +1,8 @@
-import pytest
 import godfield_core
-from godfield_core import GamePhase, Element, ActionType, EventType
+from godfield_core import ActionType, EventType, GamePhase
 from tests.core.test_utils import SimulationRunner, find_card_by_name
-from visualize_server import format_event_log
+from visualizer.event_formatter import format_event_log
+
 
 def test_guardian_event_logging():
     """守護神の行動発動時に EFFECT_GUARDIAN イベントが記録され、正確にフォーマットされるかテスト"""
@@ -14,10 +14,10 @@ def test_guardian_event_logging():
         sim_test.set_status(0, hp=40, mp=50, money=99)
         sim_test.set_status(1, hp=40, mp=50, money=99)
         sim_test.state.set_guardian(1, 1) # 火星神 (Mars = 1)
-        
+
         # 祈る
         sim_test.step(ActionType.ACTION_PRAY)
-        
+
         # 履歴チェック
         obs = godfield_core.get_observation(sim_test.state, 0)
         for ev in obs.get_history():
@@ -30,7 +30,7 @@ def test_guardian_event_logging():
                 break
         if found_guardian_event:
             break
-            
+
     assert found_guardian_event, "守護神の EFFECT_GUARDIAN イベントが記録されるべきです"
 
 def test_discard_phase_event_logging():
@@ -41,7 +41,7 @@ def test_discard_phase_event_logging():
     sim.set_hand(0, [115])
     sim.state.current_phase = GamePhase.PHASE_MAIN
     sim.state.current_actor_id = 0
-    
+
     # 1. メインフェイズで ACTION_DISCARD を選択
     sim.step(ActionType.ACTION_DISCARD)
     assert sim.state.current_phase == GamePhase.PHASE_DISCARD
@@ -51,7 +51,7 @@ def test_discard_phase_event_logging():
     assert stage_events[-1].card_id == -1
     fmt_discard_stage = format_event_log(stage_events[-1], 0)
     assert "置いた 【捨てる】" in fmt_discard_stage["text"]
-    
+
     # 2. 手札0番目 (ID 115) を仮置き
     sim.step(ActionType.ACTION_SELECT_HAND_0)
     obs_stage = godfield_core.get_observation(sim.state, 0)
@@ -59,10 +59,10 @@ def test_discard_phase_event_logging():
     assert stage_events[-1].card_id == 115
     fmt_card_stage = format_event_log(stage_events[-1], 0)
     assert "置いた 【革の服】" in fmt_card_stage["text"]
-    
+
     # 3. ACTION_CONFIRM で捨てるのを確定
     sim.step(ActionType.ACTION_CONFIRM)
-    
+
     # DISCARD_CARD イベントが記録されたかチェック
     obs = godfield_core.get_observation(sim.state, 0)
     discard_events = [ev for ev in obs.get_history() if ev.event_type == int(EventType.DISCARD_CARD)]
@@ -78,19 +78,19 @@ def test_guardian_summon_and_leave_events():
     sim = SimulationRunner()
     pot_id = find_card_by_name('sundries/guardian-pot')
     release_id = find_card_by_name('miracles/release')
-    
+
     sim.state.current_phase = GamePhase.PHASE_MAIN
     sim.state.current_actor_id = 0
     sim.state.set_mp(0, 50)
-    
+
     # 守護の壺を使用
     sim.set_hand(0, [pot_id])
     sim.perform_attack([0], to_self=True)
     sim.step(ActionType.ACTION_CONFIRM)
-    
+
     # 守護神が降臨していること
     assert sim.state.get_guardian(0) > 0
-    
+
     # イベントログから GUARDIAN_ENTER が検出できること
     obs = godfield_core.get_observation(sim.state, 0)
     enter_events = [ev for ev in obs.get_history() if ev.event_type == int(EventType.GUARDIAN_ENTER)]
@@ -98,17 +98,17 @@ def test_guardian_summon_and_leave_events():
     assert enter_events[-1].value == sim.state.get_guardian(0)
     fmt_enter = format_event_log(enter_events[-1], 0)
     assert "宿った！" in fmt_enter["text"]
-    
+
     # 解放を使用
     sim.state.current_phase = GamePhase.PHASE_MAIN
     sim.state.current_actor_id = 0
     sim.set_hand(0, [release_id])
     sim.perform_attack([0], to_self=True)
     sim.step(ActionType.ACTION_CONFIRM)
-    
+
     # 守護神が消滅していること
     assert sim.state.get_guardian(0) == 0
-    
+
     # イベントログから GUARDIAN_LEAVE が検出できること
     obs = godfield_core.get_observation(sim.state, 0)
     leave_events = [ev for ev in obs.get_history() if ev.event_type == int(EventType.GUARDIAN_LEAVE)]
@@ -121,19 +121,19 @@ def test_curse_events():
     sim = SimulationRunner()
     fog_miracle = find_card_by_name('miracles/fog')
     song_miracle = find_card_by_name('miracles/song')
-    
+
     sim.state.current_phase = GamePhase.PHASE_MAIN
     sim.state.current_actor_id = 0
     sim.state.set_mp(0, 50)
-    
+
     # 霧の奇跡を相手に使用
     sim.set_hand(0, [fog_miracle])
     sim.perform_attack([0])
     sim.step(ActionType.ACTION_CONFIRM)
-    
+
     # 相手が霧状態になっていること
     assert sim.state.get_curses(1, godfield_core.CurseType.CURSE_FOG) == True
-    
+
     # イベントログから EFFECT_CURSE (付与) が検出できること
     obs = godfield_core.get_observation(sim.state, 0)
     curse_events = [ev for ev in obs.get_history() if ev.event_type == int(EventType.EFFECT_CURSE)]
@@ -141,11 +141,11 @@ def test_curse_events():
     val = int(curse_events[-1].value)
     assert (val & 0x0F) == int(godfield_core.CurseEvent.TYPE_FOG)
     assert bool(val & int(godfield_core.CurseEvent.FLAG_APPLIED)) == True
-    
+
     fmt_applied = format_event_log(curse_events[-1], 0)
     assert "霧" in fmt_applied["text"]
     assert "状態になった" in fmt_applied["text"]
-    
+
     # 相手のターン。歌声を使用して解除
     sim.state.current_phase = GamePhase.PHASE_MAIN
     sim.state.current_actor_id = 1
@@ -153,10 +153,10 @@ def test_curse_events():
     sim.set_hand(1, [song_miracle])
     sim.perform_attack([0], to_self=True)
     sim.step(ActionType.ACTION_CONFIRM)
-    
+
     # 相手の霧状態が解除されていること
     assert sim.state.get_curses(1, godfield_core.CurseType.CURSE_FOG) == False
-    
+
     # イベントログから EFFECT_CURSE (解除) が検出できること
     obs = godfield_core.get_observation(sim.state, 0)
     curse_events = [ev for ev in obs.get_history() if ev.event_type == int(EventType.EFFECT_CURSE)]
@@ -164,7 +164,7 @@ def test_curse_events():
     val = int(curse_events[-1].value)
     assert (val & 0x0F) == int(godfield_core.CurseEvent.TYPE_FOG)
     assert bool(val & int(godfield_core.CurseEvent.FLAG_CLEARED)) == True
-    
+
     fmt_cleared = format_event_log(curse_events[-1], 0)
     assert "霧" in fmt_cleared["text"]
     assert "回復した" in fmt_cleared["text"]
@@ -176,32 +176,32 @@ def test_ascension_bow_event_logging():
     sim = SimulationRunner()
     sim.set_status(0, hp=1, mp=10)
     sim.set_status(1, hp=40, mp=10)
-    
+
     # P0の手札に昇天弓（ID 109）をセット
     sim.state.set_true_hand(0, 0, 109)
     sim.state.set_apparent_hand(0, 0, 109)
-    
+
     # P1のメインフェイズから木剣で攻撃
     sim.state.current_phase = GamePhase.PHASE_MAIN
     sim.state.current_actor_id = 1
     wood_sword_id = find_card_by_name("weapons/wooden-sword") # 威力3
     sim.state.set_true_hand(1, 0, wood_sword_id)
     sim.state.set_apparent_hand(1, 0, wood_sword_id)
-    
+
     # P1攻撃
     sim.perform_attack([0])
-    
+
     # P0防御フェイズ、スルーして死亡
     sim.step(ActionType.ACTION_CONFIRM) # スルー (CONFIRM)
-    
+
     # P0が死亡したため昇天弓がキューに入る。
     # 履歴を走査して 昇天弓の使用（CONFIRM_ATTACK）が記録されているか検証
     obs = godfield_core.get_observation(sim.state, 0)
     history = obs.get_history()
-    
+
     confirm_bow_events = [ev for ev in history if ev.event_type == int(EventType.CONFIRM_ATTACK) and ev.card_id == 109]
     assert len(confirm_bow_events) > 0, "昇天弓の使用イベントが記録されているはずです"
-    
+
     fmt = format_event_log(confirm_bow_events[0], 0)
     assert "昇天弓" in fmt["text"]
     assert "使った" in fmt["text"]
@@ -216,15 +216,15 @@ def test_ascension_bow_event_logging():
         sim_miss.set_status(1, hp=40, mp=10)
         sim_miss.state.set_true_hand(0, 0, 109)
         sim_miss.state.set_apparent_hand(0, 0, 109)
-        
+
         sim_miss.state.current_phase = GamePhase.PHASE_MAIN
         sim_miss.state.current_actor_id = 1
         sim_miss.state.set_true_hand(1, 0, wood_sword_id)
         sim_miss.state.set_apparent_hand(1, 0, wood_sword_id)
-        
+
         sim_miss.perform_attack([0])
         sim_miss.step(ActionType.ACTION_CONFIRM)
-        
+
         # 履歴を取得してミスイベントを探す
         obs_miss = godfield_core.get_observation(sim_miss.state, 0)
         miss_events = [ev for ev in obs_miss.get_history() if ev.event_type == int(EventType.ATTACK_MISS) and ev.card_id == 109]
@@ -234,6 +234,6 @@ def test_ascension_bow_event_logging():
             assert "昇天弓" in fmt_miss["text"]
             assert "命中失敗" in fmt_miss["text"] or "ミス" in fmt_miss["text"]
             break
-            
+
     assert found_miss, "昇天弓が命中失敗したイベントがテスト中に検出されるはずです"
 

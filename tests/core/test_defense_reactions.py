@@ -1,5 +1,5 @@
 import godfield_core
-from godfield_core import ActionType, GamePhase, CurseType
+from godfield_core import ActionType, CurseType, GamePhase
 from tests.core.test_utils import SimulationRunner, find_card_by_name
 
 
