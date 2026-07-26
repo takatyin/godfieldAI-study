@@ -33,10 +33,10 @@ extern std::discrete_distribution<int> g_drop_distribution;
  */
 inline void push_event(InternalState &state, int actor, EventType event_type, int card_id = -1, int target_id = -1, float value = 0.0f) {
     GameEvent ev;
-    ev.actor = actor;
-    ev.event_type = static_cast<int>(event_type);
-    ev.card_id = card_id;
-    ev.target_id = target_id;
+    ev.actor = static_cast<float>(actor);
+    ev.event_type = static_cast<float>(event_type);
+    ev.card_id = static_cast<float>(card_id);
+    ev.target_id = static_cast<float>(target_id);
     ev.value = value;
 
     state.history[state.history_head] = ev;
@@ -93,13 +93,6 @@ bool execute_attack_from_staged_cards(InternalState &state, int attacker, int ta
  */
 bool is_last_staged_card_miracle(const InternalState &state, int player_id);
 
-/**
- * @brief 現在の仮置き場（staged_cards）の内容から、今回の攻撃が「武器攻撃」であるかを判定します。
- * @param state ゲーム状態。
- * @param player_id 対象プレイヤーID。
- * @return 武器攻撃（物理）であれば true、奇跡攻撃（属性）であれば false。
- */
-bool is_weapon_attack(const InternalState &state, int player_id);
 
 /**
  * @brief 奇跡を展開し、6つの上限制限（FIFO）を処理します。
@@ -205,7 +198,7 @@ bool is_active_reaction_card(const InternalState &state, int card_id, GamePhase 
  * @param player 対象プレイヤーID。
  * @return カードIDのリスト。
  */
-std::vector<int> get_staged_card_ids(const InternalState &state, int player);
+StagedCardIds get_staged_card_ids(const InternalState &state, int player);
 
 
 // ============================================================================
@@ -218,7 +211,7 @@ std::vector<int> get_staged_card_ids(const InternalState &state, int player);
  * @param target_id 効果を適用されるプレイヤーID。
  * @param used_card_ids 使用されたカードのIDリスト。
  */
-void apply_card_effects_to_target(InternalState &state, int target_id, const std::vector<int>& used_card_ids);
+void apply_card_effects_to_target(InternalState &state, int target_id, const StagedCardIds& used_card_ids);
 
 void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse);
 void apply_curse_state(InternalState &state, int player_id, CurseType type);
@@ -236,6 +229,7 @@ void apply_sickness(InternalState &state, int player_id, SicknessType new_sick);
  */
 bool run_death_check(InternalState &state);
 bool run_immediate_revive(InternalState &state);
+void execute_money_deduction(InternalState &state, int player, int amount);
 
 /**
  * @brief 「売る」アクションにおける商品の引き渡しおよび決済の解決を行います。

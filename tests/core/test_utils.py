@@ -109,3 +109,19 @@ class SimulationRunner:
     def step(self, action: godfield_core.ActionType):
         """Advances the game state by one action."""
         godfield_core.step_game(self.state, action)
+
+    def perform_attack(self, hand_slots: list[int], to_self: bool = False):
+        """指定スロットのカード（複数可、武器プラス対応）で攻撃（およびターゲット選択）を実行します。"""
+        for slot in hand_slots:
+            self.step(godfield_core.ActionType(int(godfield_core.ActionType.ACTION_SELECT_HAND_0) + slot))
+        if to_self:
+            self.step(godfield_core.ActionType.ACTION_TARGET_SELF)
+        else:
+            self.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+
+    def perform_defense(self, hand_slots: list[int], confirm: bool = True):
+        """指定スロットのカードを防御（反射）用として仮置きし、確定します。"""
+        for slot in hand_slots:
+            self.step(godfield_core.ActionType(int(godfield_core.ActionType.ACTION_SELECT_HAND_0) + slot))
+        if confirm:
+            self.step(godfield_core.ActionType.ACTION_CONFIRM)

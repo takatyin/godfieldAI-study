@@ -85,8 +85,7 @@ def test_guardian_summon_and_leave_events():
     
     # 守護の壺を使用
     sim.set_hand(0, [pot_id])
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    sim.step(ActionType.ACTION_TARGET_SELF)
+    sim.perform_attack([0], to_self=True)
     sim.step(ActionType.ACTION_CONFIRM)
     
     # 守護神が降臨していること
@@ -104,8 +103,7 @@ def test_guardian_summon_and_leave_events():
     sim.state.current_phase = GamePhase.PHASE_MAIN
     sim.state.current_actor_id = 0
     sim.set_hand(0, [release_id])
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    sim.step(ActionType.ACTION_TARGET_SELF)
+    sim.perform_attack([0], to_self=True)
     sim.step(ActionType.ACTION_CONFIRM)
     
     # 守護神が消滅していること
@@ -130,8 +128,7 @@ def test_curse_events():
     
     # 霧の奇跡を相手に使用
     sim.set_hand(0, [fog_miracle])
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    sim.step(ActionType.ACTION_TARGET_OPP)
+    sim.perform_attack([0])
     sim.step(ActionType.ACTION_CONFIRM)
     
     # 相手が霧状態になっていること
@@ -154,8 +151,7 @@ def test_curse_events():
     sim.state.current_actor_id = 1
     sim.state.set_mp(1, 50)
     sim.set_hand(1, [song_miracle])
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    sim.step(ActionType.ACTION_TARGET_SELF)
+    sim.perform_attack([0], to_self=True)
     sim.step(ActionType.ACTION_CONFIRM)
     
     # 相手の霧状態が解除されていること
@@ -193,8 +189,7 @@ def test_ascension_bow_event_logging():
     sim.state.set_apparent_hand(1, 0, wood_sword_id)
     
     # P1攻撃
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    sim.step(ActionType.ACTION_TARGET_OPP)
+    sim.perform_attack([0])
     
     # P0防御フェイズ、スルーして死亡
     sim.step(ActionType.ACTION_CONFIRM) # スルー (CONFIRM)
@@ -227,8 +222,7 @@ def test_ascension_bow_event_logging():
         sim_miss.state.set_true_hand(1, 0, wood_sword_id)
         sim_miss.state.set_apparent_hand(1, 0, wood_sword_id)
         
-        sim_miss.step(ActionType.ACTION_SELECT_HAND_0)
-        sim_miss.step(ActionType.ACTION_TARGET_OPP)
+        sim_miss.perform_attack([0])
         sim_miss.step(ActionType.ACTION_CONFIRM)
         
         # 履歴を取得してミスイベントを探す

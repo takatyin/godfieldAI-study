@@ -21,6 +21,8 @@ public:
     void reset(int seed);
     void step_all(pybind11::array_t<int> actions);
     pybind11::array_t<float> get_observations();
+    pybind11::array_t<float> get_rewards();
+    pybind11::array_t<float> get_dones();
     pybind11::array_t<int> get_ready_env_ids();
     
     InternalState get_state(int env_id) const { return states_[env_id]; }
@@ -31,13 +33,16 @@ public:
 
 private:
     int num_envs_;
+    int seed_;
+    std::vector<int> reset_counts_;
     std::vector<InternalState> states_;
     std::vector<Observation> obs_buffers_;
+    std::vector<float> rewards_;
+    std::vector<float> dones_;
     std::vector<int> ready_env_ids_;
 
     // Internal helper functions for game logic
+    void reset_env(int env_id, int seed);
     void step_env(int env_id, int action);
     void generate_observation(int env_id);
-    void check_done(int env_id);
-    void flush_n_step_queue(int env_id);
 };

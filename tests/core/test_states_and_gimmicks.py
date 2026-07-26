@@ -1,7 +1,14 @@
-import numpy as np
-import pytest
 import godfield_core
-from tests.core.test_utils import SimulationRunner, find_card_by_name
+from godfield_core import ActionType, GamePhase, SicknessType, CurseType
+from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards
+import pytest
+
+
+# ==========================================
+# Merged from: tests/core/test_special_gimmicks.py
+# ==========================================
+
+import numpy as np
 
 # Observation オフセット定数 (Observation struct)
 # float hp_me, hp_opp (0, 1)
@@ -13,15 +20,14 @@ from tests.core.test_utils import SimulationRunner, find_card_by_name
 # float incoming_damage (46)
 # float current_staged_defense (47)
 # float is_apocalypse (48)
-# float phase_one_hot[7] (49-55)
-# int hand_cards[18] (56-73)
-# int staged_cards[18] (74-91)
-# int opponent_hand_cards[18] (92-109)
-# int opponent_staged_cards[18] (110-127)
-# int pending_card (128)
-# GameEvent history[64] (129-448)
-# int history_head (449)
-# float action_mask[122] (450-571)
+# float phase_one_hot[18] (49-66)
+# int hand_cards[18] (67-84)
+# int staged_cards[18] (85-102)
+# int opponent_hand_cards[18] (103-120)
+# int opponent_staged_cards[18] (121-138)
+# GameEvent history[64] (139-458)
+# int history_head (459)
+# float action_mask[122] (460-581)
 
 
 def parse_obs(obs_flat):
@@ -40,14 +46,12 @@ def parse_obs(obs_flat):
     obs["guardian_me"] = obs_flat[24:35]
     obs["guardian_opp"] = obs_flat[35:46]
 
-    int_view = obs_flat.view(np.int32)
-    obs["hand_cards"] = int_view[56:74]
-    obs["staged_cards"] = int_view[74:92]
-    obs["opponent_hand_cards"] = int_view[92:110]
-    obs["opponent_staged_cards"] = int_view[110:128]
-    obs["pending_card"] = int_view[128]
+    obs["hand_cards"] = obs_flat[67:85].astype(np.int32)
+    obs["staged_cards"] = obs_flat[85:103].astype(np.int32)
+    obs["opponent_hand_cards"] = obs_flat[103:121].astype(np.int32)
+    obs["opponent_staged_cards"] = obs_flat[121:139].astype(np.int32)
 
-    obs["action_mask"] = obs_flat[450 : 450 + 122]
+    obs["action_mask"] = obs_flat[460 : 460 + 122]
     return obs
 
 
@@ -502,4 +506,282 @@ def test_verify_fever_mask_transition():
 
 
 
+
+
+# ==========================================
+# Merged from: tests/core/test_dream.py
+# ==========================================
+
+
+
+def test_dream_draw_groups():
+    """
+    検証内容: 夢状態でのドローが、正しい夢グループ内のカードに偽装されること。
+    """
+    sim = SimulationRunner()
+    sim.set_status(0, hp=40, mp=0, money=0)
+    sim.set_status(1, hp=40, mp=0, money=0)
+
+    # 夢状態にする
+    sim.state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
+
+    # 通常武器 (銅のこん棒) を手札スロット0にドロー
+    club_id = find_card_by_name("銅のこん棒")
+    sim.state.add_card_to_hand_slot(0, 0, club_id, True)  # is_drawn=True
+
+    # 未確定状態になっていること
+    assert not sim.state.get_is_confirmed(0, 0)
+
+    # 見た目のカードは元のカードと異なる可能性があるが、同じ通常武器グループであること
+    apparent_id = sim.state.get_apparent_hand(0, 0)
+    assert apparent_id != godfield_core.CARD_EMPTY
+
+    # 偽装カードの属性を検証 (通常武器グループは timing == ['main_atk_phase'] かつ is_group == false かつ reaction == none)
+    assert godfield_core.get_card_name(apparent_id) != "両替"
+
+    # 奇跡 (＜火の玉＞) を手札スロット1にドロー -> 奇跡は夢の影響を受けず、即座に確定する
+    fireball_id = find_card_by_name("＜火の玉＞")
+    sim.state.add_card_to_hand_slot(0, 1, fireball_id, True)
+    assert sim.state.get_is_confirmed(0, 1)
+    assert sim.state.get_apparent_hand(0, 1) == fireball_id
+
+
+def test_dream_finalization_success():
+    """
+    検証内容: 夢状態で偽装されたカードを使用し、真のカードも合法だった場合、正常に確定して実行されること。
+    """
+    sim = SimulationRunner()
+    sim.set_status(0, hp=40, mp=0, money=0)
+    sim.set_status(1, hp=40, mp=0, money=0)
+
+    sim.state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
+
+    # 真のカード: パンチ (通常武器、攻撃力3)
+    punch_id = find_card_by_name("パンチ")
+    sim.state.add_card_to_hand_slot(0, 0, punch_id, True)
+
+    # 見た目を 銅のこん棒 (通常武器) に偽装設定
+    bronze_club = find_card_by_name("銅のこん棒")
+    sim.state.set_apparent_hand(0, 0, bronze_club)
+    sim.state.set_is_confirmed(0, 0, False)
+
+    # 1. 銅のこん棒を使用 (手札スロット0を選択して仮置き)
+    # ACTION_SELECT_HAND_0 = 10
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+
+    # PHASE_ATTACK_PLUS に遷移していること
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
+    assert sim.state.get_num_staged_cards(0) == 1
+    assert sim.state.get_staged_card(0, 0) == 0
+    # まだ確定していないこと
+    assert not sim.state.get_is_confirmed(0, 0)
+
+    # 2. ターゲットを相手に選択して攻撃を確定 (ACTION_TARGET_OPP = 2)
+    sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+
+    # 攻撃確定によりカードが確定し、真のパンチ (攻撃力3) の攻撃として処理されること
+    assert sim.state.get_is_confirmed(0, 0)
+    assert sim.state.get_apparent_hand(0, 0) == punch_id
+    assert sim.state.get_true_hand(0, 0) == punch_id
+
+    # 防御フェイズに遷移
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    assert sim.state.pending_attack_power == 3
+
+
+def test_dream_finalization_failure():
+    """
+    検証内容: 夢状態で偽装されたカードを使用し、真のカードが現在のフェイズで非合法だった場合、
+    仮置きがクリアされて手札に戻り、フェイズがメインに戻ること。
+    """
+    sim = SimulationRunner()
+    sim.set_status(0, hp=40, mp=0, money=0)
+    sim.set_status(1, hp=40, mp=0, money=0)
+
+    sim.state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
+
+    # 真のカード: 木の盾 (防具)
+    shield_id = find_card_by_name("木の盾")
+    sim.state.add_card_to_hand_slot(0, 0, shield_id, True)
+
+    # 見た目を 銅のこん棒 (通常武器) に偽装
+    bronze_club = find_card_by_name("銅のこん棒")
+    sim.state.set_apparent_hand(0, 0, bronze_club)
+    sim.state.set_is_confirmed(0, 0, False)
+
+    # 1. 銅のこん棒 (スロット0) を使用して仮置き
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+
+    # 仮置きされ、攻撃追加フェイズへ遷移
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
+    assert sim.state.get_num_staged_cards(0) == 1
+
+    # 2. 相手ターゲットを選択 (ACTION_TARGET_OPP = 2)
+    sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+
+    # 木の盾での攻撃は非合法であるため、仮置きがクリアされ、確定した状態で手札に残り、メインフェイズに戻ること
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
+    assert sim.state.get_num_staged_cards(0) == 0
+    assert sim.state.get_is_confirmed(0, 0)
+    assert sim.state.get_apparent_hand(0, 0) == shield_id
+    assert sim.state.get_true_hand(0, 0) == shield_id
+
+
+def test_dream_buy_confirmation():
+    """
+    検証内容: 「買う」の対象にされたカードは、買われたかどうかにかかわらず確定すること。
+    """
+    sim = SimulationRunner()
+    sim.set_status(0, hp=40, mp=0, money=50)
+    sim.set_status(1, hp=40, mp=0, money=50)
+
+    # プレイヤー1 (相手) は夢状態
+    sim.state.set_curses(1, godfield_core.CurseType.CURSE_DREAM, True)
+
+    # 相手のスロット0に通常武器をドロー (偽装)
+    club_id = find_card_by_name("銅のこん棒")
+    sim.state.add_card_to_hand_slot(1, 0, club_id, True)
+    sim.state.set_apparent_hand(1, 0, find_card_by_name("銀のこん棒"))
+    sim.state.set_is_confirmed(1, 0, False)
+
+    # プレイヤー0 (自分) のスロット0に「買う」を設定
+    buy_id = find_card_by_name("買う")
+    sim.state.add_card_to_hand_slot(0, 0, buy_id, False)
+
+    # 1. プレイヤー0が「買う」を使用 (スロット0を選択)
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+
+    # 2. プレイヤー0が相手 (プレイヤー1) をターゲットに選択 (ACTION_TARGET_OPP = 2)
+    sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+
+    # PHASE_BUY_SELECT_MIRROR に移行
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_BUY_SELECT_MIRROR
+    assert sim.state.current_actor_id == 1
+
+    # 3. 相手 (プレイヤー1) が受諾する (ACTION_CONFIRM)
+    sim.step(godfield_core.ActionType.ACTION_CONFIRM)
+
+    # この時点で、相手の提示された手札スロットが確定していること！
+    offered_idx = sim.state.get_staged_card(1, 0)
+    assert offered_idx == 0
+    assert sim.state.get_is_confirmed(1, offered_idx)
+    assert sim.state.get_apparent_hand(1, offered_idx) == club_id
+    assert sim.state.get_true_hand(1, offered_idx) == club_id
+
+
+def test_dream_cure_restores_apparent_hand():
+    """検証内容: すっきり歌などの解除カードによって夢が治った際、手札が元の本物の見た目に戻ること。"""
+    sim = SimulationRunner()
+    sim.set_status(0, hp=40, mp=10, money=0)
+    sim.set_status(1, hp=40, mp=10, money=0)
+
+    # プレイヤー0を夢状態にする
+    sim.state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
+
+    # 手札を設定
+    bronze_club = find_card_by_name("weapons/bronze-club")
+    song_id = find_card_by_name("miracles/song")
+
+    sim.state.add_card_to_hand_slot(0, 0, bronze_club, True) # ドローなので夢に偽装される
+    sim.state.add_card_to_hand_slot(0, 1, song_id, False)
+
+    # 最初は偽装されていることを確認
+    assert sim.state.get_is_confirmed(0, 0) is False
+    assert sim.state.get_apparent_hand(0, 0) != bronze_club
+
+    # すっきり歌を使用
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_1)
+    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
+
+    # 夢が解除され、手札が本物に戻っていることを確認
+    assert sim.state.get_curses(0, godfield_core.CurseType.CURSE_DREAM) is False
+    assert sim.state.get_is_confirmed(0, 0) is True
+    assert sim.state.get_apparent_hand(0, 0) == bronze_club
+
+
+# ==========================================
+# Merged from: tests/core/test_mushroom.py
+# ==========================================
+
+
+
+def test_mushroom_outbreak_auto_advance():
+    """
+    検証内容: 「運命のひも」によって「きのこ大発生」がトリガーされた際、
+    即座に全自動で6ターン（ご乱心状態）が進行し、ターン数が6進むこと、
+    およびご乱心終了後に通常の操作受付（mushroom_turns = 0）に戻ることを検証する。
+    """
+    string_of_fate_id = find_card_by_name("運命のひも")
+
+    # きのこ大発生（現象インデックス 2）を発生させるシードを探索
+    target_seed = -1
+    for seed in range(100):
+        runner = SimulationRunner()
+        runner.reset_state()
+        runner.state.seed_rng(seed)
+        runner.state.current_turn = 10
+        runner.state.current_actor_id = 0
+        runner.set_status(player=0, hp=40, mp=10, money=10)
+        runner.set_status(player=1, hp=40, mp=10, money=10)
+
+        # 運命のひもを持たせる
+        runner.state.set_true_hand(0, 0, string_of_fate_id)
+
+        # 運命のひもを使用する (選択 ➡ ターゲット自己)
+        runner.perform_attack([0], to_self=True)
+
+        # もし「きのこ大発生」がトリガーされた場合、内部で mushroom_turns が 6 にセットされた後、
+        # ターン終了処理でデクリメントされつつ自動進行するため、
+        # 最終的に現在のターンが 10 + 6 = 16 まで進んでいるはずである。
+        if runner.state.current_turn == 16:
+            target_seed = seed
+            break
+
+    assert target_seed != -1, "Mushroom Outbreak was not triggered in any of the 100 seeds"
+
+    # 発見したシードで再度詳細をアサート
+    runner = SimulationRunner()
+    runner.reset_state()
+    runner.state.seed_rng(target_seed)
+    runner.state.current_turn = 10
+    runner.state.current_actor_id = 0
+    runner.set_status(player=0, hp=40, mp=10, money=10)
+    runner.set_status(player=1, hp=40, mp=10, money=10)
+    runner.state.set_true_hand(0, 0, string_of_fate_id)
+
+    # 運命のひもを使用する前のターンは 10
+    assert runner.state.current_turn == 10
+
+    runner.perform_attack([0], to_self=True)
+
+    # ご乱心中の6ターンが自動進行し、終了していることをアサート
+    assert runner.state.current_turn == 16
+    assert runner.state.mushroom_turns == 0
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
+
+    # 自動進行により、カードがドローされて手札に入っていることを確認
+    hand0 = [runner.state.get_true_hand(0, i) for i in range(18)]
+    hand1 = [runner.state.get_true_hand(1, i) for i in range(18)]
+    has_cards0 = any(c != godfield_core.CARD_EMPTY for c in hand0)
+    has_cards1 = any(c != godfield_core.CARD_EMPTY for c in hand1)
+
+    assert has_cards0 or has_cards1 or runner.state.is_done, (
+        "No cards were drawn or played during the 6 automatic turns under confusion"
+    )
+
+
+def test_mushroom_outbreak_stacking():
+    """
+    検証内容: きのこ大発生中にさらにきのこ大発生が発生した際、ターン数が上書きではなく加算されること。
+    - 内部状態の mushroom_turns に対し、値が正しく加算・保持できることを検証。
+    """
+    runner = SimulationRunner()
+    runner.reset_state()
+
+    # 初期状態としてご乱心3ターンをセット
+    runner.state.mushroom_turns = 3
+
+    # 加算解決（C++側の += 6 と同等の操作）
+    runner.state.mushroom_turns += 6
+    assert runner.state.mushroom_turns == 9
 

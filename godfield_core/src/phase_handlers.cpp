@@ -14,7 +14,7 @@ StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
     StagedAttackInfo info = {};
     info.mp_cost = calculate_staged_mp_cost(state, player_id);
 
-    std::vector<int> card_ids = get_staged_card_ids(state, player_id);
+    auto card_ids = get_staged_card_ids(state, player_id);
 
     int total_atk = 0;
     Element current_element = ELEM_NONE;
@@ -110,7 +110,7 @@ StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
 
 
 void update_staged_pending_info(InternalState &state, int player_id) {
-    std::vector<int> card_ids = get_staged_card_ids(state, player_id);
+    auto card_ids = get_staged_card_ids(state, player_id);
 
     // 防御フェーズで仮置きしている場合は、攻撃側の pending_attack_power を上書き破棄しない
     bool is_defense_staging = (state.current_phase == GamePhase::PHASE_DEFENSE || state.current_phase == GamePhase::PHASE_MIRACLE_DEFENSE);
@@ -167,7 +167,18 @@ static void trigger_next_ring_counter(InternalState &state) {
     state.attacker_id = attacker;
     state.defender_id = defender;
     state.current_actor_id = defender;
-    state.current_phase = GamePhase::PHASE_DEFENSE;
+
+    int card_id = state.pending_counter_source_id[idx];
+    bool is_special_ring = (card_id == ID_VENUS_RING ||
+                            card_id == ID_MERCURY_RING ||
+                            card_id == ID_JUPITER_RING ||
+                            card_id == ID_URANUS_RING ||
+                            card_id == ID_PLUTO_RING);
+    if (is_special_ring) {
+        state.current_phase = GamePhase::PHASE_SUNDRY_SELECT_MIRROR;
+    } else {
+        state.current_phase = GamePhase::PHASE_DEFENSE;
+    }
 
     state.pending_attack_power = state.pending_counter_power[idx];
     state.pending_attack_element = state.pending_counter_element[idx];
@@ -176,7 +187,6 @@ static void trigger_next_ring_counter(InternalState &state) {
     state.pending_is_group_attack = false;
     state.pending_attack_curse = state.pending_counter_curse[idx];
     state.pending_take_cp = state.pending_counter_take_cp[idx];
-    int card_id = state.pending_counter_source_id[idx];
     state.pending_attack_source_id = card_id;
     state.num_staged_cards[defender] = 0;
 
@@ -189,7 +199,7 @@ static void process_ring_defense_effects(InternalState &state, int me, int opp, 
         int card_id = state.true_hand[me][state.staged_cards[me][i]];
         if (card_id == ID_MARS_RING) {
             int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
-            if (roll < 75 && state.num_pending_counters < 10) {
+            if (roll < MARS_RING_RATE && state.num_pending_counters < 10) {
                 int idx = state.num_pending_counters++;
                 state.pending_counter_attacker[idx] = me;
                 state.pending_counter_defender[idx] = opp;
@@ -596,7 +606,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
         st.hp[player] = std::clamp(st.hp[player] - dmg, 0, 99);
         if (st.hp[player] < hp_before && st.guardian[player] > GUARDIAN_NONE) {
             int roll = std::uniform_int_distribution<int>(0, 99)(st.rng);
-            if (roll < 10) {
+            if (roll < GUARDIAN_LEAVE_RATE) {
                 push_event(st, player, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(st.guardian[player]));
                 st.guardian[player] = GUARDIAN_NONE;
             }
@@ -608,7 +618,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
         st.hp[player] = 0;
         if (st.hp[player] < hp_before && st.guardian[player] > GUARDIAN_NONE) {
             int roll = std::uniform_int_distribution<int>(0, 99)(st.rng);
-            if (roll < 10) {
+            if (roll < GUARDIAN_LEAVE_RATE) {
                 push_event(st, player, EventType::GUARDIAN_LEAVE, -1, -1, static_cast<float>(st.guardian[player]));
                 st.guardian[player] = GUARDIAN_NONE;
             }
@@ -673,7 +683,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
             bool success = true;
             if (react_type == REACTION_BOUNCE) {
                 int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
-                success = (roll < 50);
+                success = (roll < BOUNCE_SUCCESS_RATE);
             }
             if (success) {
                 EventType ev_type = (react_type == REACTION_BOUNCE) ? EventType::BOUNCE_ATTACK : EventType::REFLECT_DAMAGE;
@@ -1003,30 +1013,12 @@ void step_phase_sundry_select_mirror(InternalState &state, ActionType action, in
                 state.money[state.defender_id] = std::min(99, state.money[state.defender_id] + state.pending_attack_power);
             } else if (source_id == ID_FINE) {
                 int damage = state.pending_attack_power;
-                int total_paid = 0;
-                int me = state.defender_id;
-                int opp = state.attacker_id;
-                if (state.money[me] >= damage) {
-                    state.money[me] -= damage;
-                    total_paid = damage;
-                } else {
-                    total_paid += state.money[me];
-                    int remaining = damage - state.money[me];
-                    state.money[me] = 0;
-                    if (state.mp[me] >= remaining) {
-                        state.mp[me] -= remaining;
-                        total_paid += remaining;
-                    } else {
-                        total_paid += state.mp[me];
-                        remaining -= state.mp[me];
-                        state.mp[me] = 0;
-                        state.hp[me] = std::max(0, state.hp[me] - remaining);
-                    }
-                }
-                state.money[opp] = std::min(99, state.money[opp] + total_paid);
-                if (state.hp[me] == 0) {
-                    run_immediate_revive(state);
-                }
+                execute_money_deduction(state, state.defender_id, damage);
+                state.money[state.attacker_id] = std::min(99, state.money[state.attacker_id] + damage);
+            } else if (source_id == ID_VENUS_RING) {
+                int damage = state.pending_attack_power;
+                execute_money_deduction(state, state.defender_id, damage);
+                state.money[state.attacker_id] = std::min(99, state.money[state.attacker_id] + damage);
             }
             if (state.pending_attack_curse != CURSE_NONE) {
                 apply_curse_to_player(state, state.defender_id, state.pending_attack_curse);

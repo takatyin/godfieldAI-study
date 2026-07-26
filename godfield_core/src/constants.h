@@ -1,21 +1,26 @@
 #pragma once
+#include "rl_config.h"
 
+// 確率定数 / Probability Constants
+constexpr int BOUNCE_SUCCESS_RATE = 50;
+constexpr int MARS_RING_RATE = 75;
+constexpr int GUARDIAN_LEAVE_RATE = 10;
+constexpr int ASCENSION_BOW_HIT_RATE = 75;
+constexpr int SICKNESS_WORSEN_RATE = 5;
+constexpr int GUARDIAN_ACT_RATE = 25;
+
+// Observation 配列次元 / Observation Array Dimensions
+constexpr int NUM_SICKNESS_TYPES = 5;
+constexpr int NUM_CURSE_TYPES = 4;
+constexpr int NUM_GUARDIAN_TYPES = 11;
 constexpr int MAX_HAND_SIZE = 18;     // 最大手札枚数（使用済み奇跡含む）
 constexpr int CARD_EMPTY = -1;        // 手札スロットが空であることを示す仮想カードID
 constexpr int ACTION_SPACE_SIZE = 122; // 行動の次元数
 constexpr int HISTORY_LENGTH = 64;    // イベント履歴の長さ（リングバッファ、2のべき乗推奨）
-constexpr int NUM_ENVS = 10000;       // 並列実行するゲーム数（メモリ・コア数に応じて調整）
 
 // ゲームの進行と終末の時（Apocalypse）用パラメータ
 constexpr int APOCALYPSE_TURN = 150;   // 終末の時が発動するターン数
 constexpr int MAX_EPISODE_TURNS = 600; // 無限ループ防止用の最大ターン数（到達で引き分け）
-
-// n-step学習用パラメータ
-constexpr int N_STEP = 3;            // または 5。報酬を伝播させるステップ数
-constexpr float GAMMA = 0.995f;      // 割引率 (ゲーム長 100〜500 stepを想定)
-constexpr float WIN_REWARD = 1.0f;   // 勝利時の報酬
-constexpr float LOSE_REWARD = -1.0f; // 敗北時の報酬
-constexpr float DRAW_REWARD = 0.0f;  // 引き分け（昇天弓による相打ち、最大ターン超過等）の報酬
 
 enum ActionType {
     ACTION_SELECT_HAND_0 = 0,

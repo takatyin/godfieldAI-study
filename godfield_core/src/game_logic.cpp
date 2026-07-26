@@ -347,40 +347,60 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
         }
     }
     
+    // Support and Special states
+    obs.incoming_damage = (state.defender_id == me && state.pending_attack_power > 0) ? (static_cast<float>(state.pending_attack_power) / 100.0f) : 0.0f;
+
+    int total_def = 0;
+    for (int i = 0; i < state.num_staged_cards[me]; ++i) {
+        int h_idx = state.staged_cards[me][i];
+        int card_id = state.apparent_hand[me][h_idx];
+        if (card_id < 0) card_id = state.true_hand[me][h_idx];
+        if (card_id >= 0 && card_id < static_cast<int>(g_card_registry.size())) {
+            total_def += g_card_registry[card_id].defense_power;
+        }
+    }
+    obs.current_staged_defense = static_cast<float>(total_def) / 100.0f;
+
     obs.is_apocalypse = (state.current_turn >= APOCALYPSE_TURN) ? 1.0f : 0.0f;
+
+    // Phase one-hot (18 dimensional)
+    int phase_idx = static_cast<int>(state.current_phase);
+    if (phase_idx >= 0 && phase_idx < NUM_PHASES) {
+        obs.phase_one_hot[phase_idx] = 1.0f;
+    }
 
     // Hand cards
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-        obs.hand_cards[i] = state.apparent_hand[me][i];
+        obs.hand_cards[i] = static_cast<float>(state.apparent_hand[me][i]);
     }
 
     // Staged cards
-    std::fill(std::begin(obs.staged_cards), std::end(obs.staged_cards), CARD_EMPTY);
+    std::fill(std::begin(obs.staged_cards), std::end(obs.staged_cards), static_cast<float>(CARD_EMPTY));
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
         int h_idx = state.staged_cards[me][i];
-        obs.staged_cards[i] = state.apparent_hand[me][h_idx];
+        obs.staged_cards[i] = static_cast<float>(state.apparent_hand[me][h_idx]);
     }
 
     // Opponent hand cards (相手の公開手札のスロット位置リークを防ぐため、左詰めで格納する)
     int known_count = 0;
-    std::fill(std::begin(obs.opponent_hand_cards), std::end(obs.opponent_hand_cards), 0);
+    std::fill(std::begin(obs.opponent_hand_cards), std::end(obs.opponent_hand_cards), 0.0f);
     if (!is_me_fog) {
         for (int i = 0; i < MAX_HAND_SIZE; ++i) {
             if (state.is_known_to_opp[opp][i] || state.is_deployed[opp][i]) {
-                obs.opponent_hand_cards[known_count++] = state.true_hand[opp][i];
+                obs.opponent_hand_cards[known_count++] = static_cast<float>(state.true_hand[opp][i]);
             }
         }
     }
 
     // Opponent staged cards
-    std::fill(std::begin(obs.opponent_staged_cards), std::end(obs.opponent_staged_cards), CARD_EMPTY);
+    std::fill(std::begin(obs.opponent_staged_cards), std::end(obs.opponent_staged_cards), static_cast<float>(CARD_EMPTY));
     if (state.num_staged_cards[opp] > 0) {
         for (int i = 0; i < state.num_staged_cards[opp]; ++i) {
             int h_idx = state.staged_cards[opp][i];
-            obs.opponent_staged_cards[i] = state.true_hand[opp][h_idx];
+            obs.opponent_staged_cards[i] = static_cast<float>(state.true_hand[opp][h_idx]);
         }
     } else if (state.pending_attack_source_id != CARD_EMPTY) {
-        obs.opponent_staged_cards[0] = state.pending_attack_source_id;
+        obs.opponent_staged_cards[0] = static_cast<float>(state.pending_attack_source_id);
     }
 
     // Legal actions mask
@@ -390,25 +410,27 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
         obs.action_mask[i] = legal_actions[i] ? 1.0f : 0.0f;
     }
 
-    // Populate and normalize history events for observing player
-    obs.history_head = state.history_head;
-    obs.history_count = state.history_count;
-    obs.player_id = player_id;
+    // Populate history metadata
+    obs.history_head = static_cast<float>(state.history_head);
 
+    // リングバッファを時系列順に展開 (2回のmemcpy)
+    int head = state.history_head;
+    int tail_count = HISTORY_LENGTH - head;
+    std::memcpy(&obs.history[0], &state.history[head], tail_count * sizeof(GameEvent));
+    std::memcpy(&obs.history[tail_count], &state.history[0], head * sizeof(GameEvent));
+
+    // actor/target_id の視点正規化
     for (int i = 0; i < HISTORY_LENGTH; ++i) {
-        GameEvent ev = state.history[i];
-        if (ev.event_type == static_cast<int>(EventType::NONE)) {
-            obs.history[i] = ev;
+        GameEvent& ev = obs.history[i];
+        if (ev.event_type == static_cast<float>(EventType::NONE)) {
             continue;
         }
 
         // Normalize actor and target_id (0 = observer/me, 1 = opponent)
-        ev.actor = (ev.actor == player_id) ? 0 : 1;
-        if (ev.target_id != -1) {
-            ev.target_id = (ev.target_id == player_id) ? 0 : 1;
+        ev.actor = (static_cast<int>(ev.actor) == player_id) ? 0.0f : 1.0f;
+        if (ev.target_id != -1.0f) {
+            ev.target_id = (static_cast<int>(ev.target_id) == player_id) ? 0.0f : 1.0f;
         }
-
-        obs.history[i] = ev;
     }
 }
 

@@ -284,51 +284,6 @@ def normalize_element(element):
     return "none"
 
 
-def combine_elements(cards):
-    if not cards:
-        return "none"
-
-    current_element = None
-    has_processed = False
-
-    for card in cards:
-        if not card:
-            continue
-
-        cid = card.get("id", -1)
-        name = card.get("name", "")
-        raw_elem = card.get("element", "none")
-        e = normalize_element(raw_elem)
-
-        # ワンド（発火のワンド、水魔のワンド等）は無条件で攻撃属性をその属性へ確定・上書き
-        is_wand = "ワンド" in name or cid in [63, 64]
-
-        if "精霊" in name:
-            # 精霊系カードは属性計算に関与しない
-            continue
-        elif is_wand:
-            current_element = e
-            has_processed = True
-        else:
-            if not has_processed:
-                current_element = e
-                has_processed = True
-            else:
-                if e == "none" or current_element == "none":
-                    current_element = "none"
-                elif e == "light":
-                    if current_element == "darkness":
-                        current_element = "none"
-                elif current_element == "light":
-                    if e == "darkness":
-                        current_element = "none"
-                    else:
-                        current_element = e
-                elif current_element != e:
-                    current_element = "none"
-
-    return current_element if has_processed else "none"
-
 
 def get_element_badge_class(element):
     key = normalize_element(element)
@@ -843,7 +798,7 @@ def serialize_observation(obs, player_id):
         "staged_total_badge": staged_total_badge,
         "opponent_hand": opp_hand,
         "opponent_staged": opp_staged,
-        "pending_card": get_card_info(obs.pending_card) if obs.pending_card != 0 else None,
+        "pending_card": get_card_info(state.pending_attack_source_id) if state.pending_attack_source_id != godfield_core.CARD_EMPTY else (get_card_info(opp_staged[0]["id"]) if state.current_phase.name == "PHASE_BUY" and state.current_actor_id == player_id and len(opp_staged) > 0 else None),
         "legal_actions": legal_actions,
         "current_actor_id": state.current_actor_id,
         "current_phase": state.current_phase.name,
@@ -851,7 +806,7 @@ def serialize_observation(obs, player_id):
         "is_done": state.is_done,
         "is_apocalypse": state.current_turn >= 300,
         "event_log": event_log,
-        "history_count": obs.history_count,
+        "history_count": state.history_count,
     }
 
 

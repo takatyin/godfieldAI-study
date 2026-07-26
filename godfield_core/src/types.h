@@ -1,10 +1,12 @@
 #pragma once
 #include "constants.h"
 #include <random>
+#include <array>
+#include <iterator>
 
-enum Element { ELEM_NONE = 0, ELEM_FIRE, ELEM_WATER, ELEM_WOOD, ELEM_STONE, ELEM_LIGHT, ELEM_DARKNESS };
-enum ReactionType { REACTION_NONE = 0, REACTION_BOUNCE, REACTION_REFLECT, REACTION_BLOCK };
-enum HitCurse {
+enum Element : uint8_t { ELEM_NONE = 0, ELEM_FIRE, ELEM_WATER, ELEM_WOOD, ELEM_STONE, ELEM_LIGHT, ELEM_DARKNESS };
+enum ReactionType : uint8_t { REACTION_NONE = 0, REACTION_BOUNCE, REACTION_REFLECT, REACTION_BLOCK };
+enum HitCurse : uint8_t {
     CURSE_NONE = 0,
     CURSE_FOG,
     CURSE_FLASH,
@@ -16,7 +18,7 @@ enum HitCurse {
     CURSE_HEAVEN
 };
 
-enum SicknessType {
+enum SicknessType : uint8_t {
     SICKNESS_NONE = 0,
     SICKNESS_COLD = 1,
     SICKNESS_FEVER = 2,
@@ -24,7 +26,7 @@ enum SicknessType {
     SICKNESS_HEAVEN = 4
 };
 
-enum CurseType { 
+enum CurseType : uint8_t { 
     CURSE_TYPE_FOG = 0, 
     CURSE_TYPE_FLASH = 1, 
     CURSE_TYPE_DARK_CLOUD = 2, 
@@ -59,7 +61,7 @@ enum PhenomenonType {
 };
 
 
-enum class DreamGroup {
+enum class DreamGroup : uint8_t {
     NONE = 0,                       // 常に確定するグループ（夢の影響を受けない）
     SUNDRY_NORMAL,                  // 通常雑貨（15種）
     SUNDRY_PASSIVE,                 // 受動系雑貨（2種: 太陽のお守り, あぶないウス）
@@ -104,19 +106,24 @@ enum class CardType : uint8_t {
 };
 
 struct alignas(64) CardFeatures {
-    CardType type;
-    uint32_t usage_timing;
-    int price;
-    int drop_rate;
-    int attack_power;
-    int defense_power;
-    int accuracy;
-    int mp_cost;
-    Element element;
-    ReactionType reaction_type;
-    HitCurse hit_curse;
-    bool is_group_attack;
-    DreamGroup dream_group;
+    // 4-byte fields
+    uint32_t usage_timing = 0;
+    int price = 0;
+    int drop_rate = 0;
+    int attack_power = 0;
+    int defense_power = 0;
+    int accuracy = 100;
+    int mp_cost = 0;
+
+    // 1-byte fields (enums)
+    CardType type = CardType::SUNDRY;
+    Element element = ELEM_NONE;
+    ReactionType reaction_type = REACTION_NONE;
+    HitCurse hit_curse = CURSE_NONE;
+    DreamGroup dream_group = DreamGroup::NONE;
+
+    // 1-byte fields (bools)
+    bool is_group_attack = false;
 
     inline bool is_weapon() const { return type == CardType::WEAPON; }
     inline bool is_defense() const { return type == CardType::DEFENSE; }
@@ -146,7 +153,21 @@ enum class GamePhase {
     PHASE_EXCHANGE_HP,
     PHASE_EXCHANGE_MP,
     PHASE_DISCARD,
-    PHASE_END
+    PHASE_END,
+    NUM_PHASES
+};
+
+constexpr int NUM_PHASES = static_cast<int>(GamePhase::NUM_PHASES);
+
+enum class TurnEndSubstep : int {
+    DEATH_CHECK_START = 0,    // ターン開始時/終了時等の死亡・お守り・昇天弓チェック
+    SICKNESS_WORSEN = 1,      // 病気悪化判定
+    SICKNESS_DAMAGE = 2,      // 病気ダメージ/回復処理
+    FINAL_DEATH_CHECK = 3,    // 勝敗最終確定前の死亡チェック
+    GUARDIAN_ACT = 4,         // 相手の守護神の行動判定と実行
+    CLEANUP_DEATH_CHECK = 5,  // クリーンアップ前の死亡チェック
+    CLEANUP = 6,              // 手札補充・奇跡再配置などのクリーンアップ処理
+    TURN_TRANSITION = 7       // クリーンアップ後の死亡チェックとターン交代
 };
 
 enum class EventType : uint8_t {
@@ -212,10 +233,10 @@ namespace CurseEvent {
 }
 
 struct GameEvent {
-    int actor;       // 0: 自分(観測者), 1: 相手 (視点正規化時に XOR で反転する)
-    int event_type;  // EventType enum
-    int card_id;     // 関連カードID (非公開情報は 0 にマスキング, なしは -1)
-    int target_id;   // 対象プレイヤー (0: 自分, 1: 相手, なしは -1)
+    float actor;       // 0: 自分(観測者), 1: 相手 (視点正規化時に観測者視点に正規化される)
+    float event_type;  // EventType enum
+    float card_id;     // 関連カードID (非公開情報は 0 にマスキング, なしは -1)
+    float target_id;   // 対象プレイヤー (0: 自分, 1: 相手, なしは -1)
     float value;     // ダメージ量 / 回復量 / 成功フラグなどの値
 };
 
@@ -226,12 +247,12 @@ struct alignas(64) Observation {
     float money_me, money_opp;
 
     // 状態異常・病・守護神 (排他要素は独立したOne-hot次元として表現)
-    float sickness_me[5]; // 病 (なし, 風邪, 熱病, 地獄病, 天国病)
-    float sickness_opp[5];
-    float curses_me[4]; // 霧, 閃光, 暗雲, 夢 (Multi-hot)
-    float curses_opp[4];
-    float guardian_me[11]; // 守護神 (なし=0, 火星神=1, ..., 月神=10)
-    float guardian_opp[11];
+    float sickness_me[NUM_SICKNESS_TYPES]; // 病 (なし, 風邪, 熱病, 地獄病, 天国病)
+    float sickness_opp[NUM_SICKNESS_TYPES];
+    float curses_me[NUM_CURSE_TYPES]; // 霧, 閃光, 暗雲, 夢 (Multi-hot)
+    float curses_opp[NUM_CURSE_TYPES];
+    float guardian_me[NUM_GUARDIAN_TYPES]; // 守護神 (なし=0, 火星神=1, ..., 月神=10)
+    float guardian_opp[NUM_GUARDIAN_TYPES];
 
     // 計算済みサポート数値と特殊状態
     float incoming_damage;        // 飛んできている総ダメージ
@@ -239,26 +260,49 @@ struct alignas(64) Observation {
     float is_apocalypse;          // 終末の時フラグ (通常=0.0, 150ターン以降=1.0)
 
     // フェイズ情報
-    float phase_one_hot[7]; // 現在のフェイズ (State1 ~ State6, StateM)
+    float phase_one_hot[NUM_PHASES]; // 現在のフェイズ (State1 ~ State6, StateM)
 
     // カードID群 (Embedding層へ入力)
-    int hand_cards[MAX_HAND_SIZE];            // 自分の手札（夢状態ならC++で偽装済みIDを入れる）
-    int staged_cards[MAX_HAND_SIZE];          // 現在の仮置き場
-    int opponent_hand_cards[MAX_HAND_SIZE];   // 相手の手札（非公開=0, 既知のカード・使用済み奇跡=実ID）
-    int opponent_staged_cards[MAX_HAND_SIZE]; // 相手が場に出しているカードID（攻撃順など）
-    int pending_card;                         // 注目カード（飛んできた攻撃や買う対象など。なし=0）
+    float hand_cards[MAX_HAND_SIZE];            // 自分の手札（夢状態ならC++で偽装済みIDを入れる）
+    float staged_cards[MAX_HAND_SIZE];          // 現在の仮置き場
+    float opponent_hand_cards[MAX_HAND_SIZE];   // 相手の手札（非公開=0, 既知のカード・使用済み奇跡=実ID）
+    float opponent_staged_cards[MAX_HAND_SIZE]; // 相手が場に出しているカードID（攻撃順など）
 
-    // イベント履歴（リングバッファ: 64 * 5 = 320 float + 1 float head = 321 float -> 129 + 321 = 450）
+    // イベント履歴（リングバッファ: 64 * 5 = 320 float + 1 float head = 321 float）
     GameEvent history[HISTORY_LENGTH];
-    int history_head;  // 次に書き込むインデックス
+    float history_head;  // 次に書き込むインデックス
 
     // 合法手マスク (インデックス 450..571)
     float action_mask[ACTION_SPACE_SIZE]; // 1.0 = 選択可能, 0.0 = 選択不可
-
-    // 追加メタデータ (action_maskの直後に配置)
-    int history_count; // 通算イベント生成数
-    int player_id;     // 観測プレイヤーID (0 or 1)
 };
+
+static_assert(sizeof(Observation) % sizeof(float) == 0, "Observation must be float-aligned");
+static_assert(sizeof(GameEvent) % sizeof(float) == 0, "GameEvent must be float-aligned");
+
+struct StagedCardIds {
+    std::array<int, MAX_HAND_SIZE> ids;
+    int count = 0;
+
+    StagedCardIds() = default;
+    StagedCardIds(std::initializer_list<int> list) {
+        for (int val : list) {
+            if (count < MAX_HAND_SIZE) {
+                ids[count++] = val;
+            }
+        }
+    }
+
+    int* begin() { return ids.data(); }
+    const int* begin() const { return ids.data(); }
+    int* end() { return ids.data() + count; }
+    const int* end() const { return ids.data() + count; }
+
+    bool empty() const { return count == 0; }
+    size_t size() const { return static_cast<size_t>(count); }
+    int operator[](size_t idx) const { return ids[idx]; }
+    int back() const { return count > 0 ? ids[count - 1] : -1; }
+};
+
 
 struct Transition {
     Observation state; // その瞬間の観測
@@ -291,13 +335,10 @@ struct alignas(64) InternalState {
     bool is_known_to_opp[2][MAX_HAND_SIZE];        // 相手に中身がバレているか
     bool is_used[2][MAX_HAND_SIZE];                // 今回のターン内で使用され、補充待ちのスロット
     bool is_deployed[2][MAX_HAND_SIZE];            // 奇跡が展開されているか
-    bool miracle_used_this_turn[2][MAX_HAND_SIZE]; // 展開済みの奇跡がこのターン既に使用されたか
-    int deployed_miracles_order[2][MAX_HAND_SIZE]; // 奇跡の展開順序 (FIFO制御用)
-    int num_deployed_miracles[2];                  // 展開されている奇跡の個数
 
     // 病と災い (Sickness & Curses)
     SicknessType sickness[2];   // 0:なし, 1:風邪, 2:熱病, 3:地獄病, 4:天国病
-    bool curses[2][4];         // 0:霧, 1:閃光, 2:暗雲, 3:夢
+    bool curses[2][NUM_CURSE_TYPES];         // 0:霧, 1:閃光, 2:暗雲, 3:夢
     GuardianType guardian[2];   // 守護神ID (0: なし, 1..10: 守護神)
 
     // 状態遷移用変数
@@ -324,7 +365,7 @@ struct alignas(64) InternalState {
     int exchange_hp;
 
     // ターン終了時処理 (PHASE_END) のステートマシン用
-    int turn_end_state;              // 0: 死亡判定/お守り/昇天弓, 1: 病気悪化, 2: 病気ダメージ, 3: 引き分け, 4: 守護神, 5: クリーンアップ
+    TurnEndSubstep turn_end_state;              // ターン終了処理のステートマシン管理用
     int pending_ascension_bows[2];   // 各プレイヤーの保留中昇天弓射撃回数
     bool heaven_seizure_occurred[2]; // 各プレイヤーが天国病悪化（発作）を起こしたか
 

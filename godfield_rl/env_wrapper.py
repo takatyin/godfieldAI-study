@@ -1,6 +1,6 @@
 import gymnasium as gym
 import numpy as np
-from gymnasium.spaces import Box, MultiDiscrete
+from gymnasium.spaces import Box, Discrete
 
 try:
     import godfield_core
@@ -9,54 +9,92 @@ except ImportError:
 
 
 class GodFieldVectorEnv(gym.vector.VectorEnv):
+    """
+    GodField game environment implementing Gymnasium VectorEnv interface.
+    This wrapper leverages C++ EnvPool for massively parallel game simulation
+    and self-play state transition handling.
+    """
     def __init__(self, num_envs: int):
-        # 30 floats: 5 stats + 5 miracles + 10 hand + 5 opp stats + 5 opp miracles
-        observation_space = Box(low=0, high=9999, shape=(30,), dtype=np.float32)
-        # Action: 4 indices (e.g., up to 4 cards combined, 0=None). Up to 500 cards.
-        action_space = MultiDiscrete([500, 500, 500, 500])
-        super().__init__(num_envs, observation_space, action_space)
+        # Observation is a flat vector of OBSERVATION_FEATURE_SIZE floats, excluding padding
+        observation_space = Box(
+            low=-np.inf, 
+            high=np.inf, 
+            shape=(godfield_core.OBSERVATION_FEATURE_SIZE,), 
+            dtype=np.float32
+        )
+        # Action space has 122 discrete choices (ActionType enum options)
+        action_space = Discrete(122)
+        
+        # Manually initialize attributes to support newer Gymnasium VectorEnv specifications
+        self.num_envs = num_envs
+        self.observation_space = observation_space
+        self.action_space = action_space
+        self.single_observation_space = Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(godfield_core.OBSERVATION_FEATURE_SIZE,),
+            dtype=np.float32
+        )
+        self.single_action_space = Discrete(122)
+        
+        super().__init__()
 
-        self.core_env = godfield_core.VectorEnv(num_envs)
-
-        # Zero-copy buffers
-        self._obs_p0 = np.zeros((num_envs, 30), dtype=np.float32)
-        self._obs_p1 = np.zeros((num_envs, 30), dtype=np.float32)
-        self._rewards_p0 = np.zeros((num_envs,), dtype=np.float32)
-        self._rewards_p1 = np.zeros((num_envs,), dtype=np.float32)
-        self._dones = np.zeros((num_envs,), dtype=bool)
+        self.core_env = godfield_core.EnvPool(num_envs)
+        self.seed_val = 42
 
     def reset(self, *, seed=None, options=None):
-        self.core_env.reset(self._obs_p0, self._obs_p1)
-        # We return a view/copy of player 0's observation
-        return self._obs_p0.copy(), {}
+        """
+        Resets all parallel environments in the pool.
+        """
+        super().reset(seed=seed)
+        if seed is not None:
+            self.seed_val = seed
+            
+        self.core_env.reset(self.seed_val)
+        
+        # Fetch the flat zero-copy observations and reshape to batch format
+        obs_flat = self.core_env.get_observations()
+        obs_raw = obs_flat.reshape(self.num_envs, godfield_core.OBSERVATION_SIZE)
+        obs = obs_raw[:, :godfield_core.OBSERVATION_FEATURE_SIZE].copy()
+        
+        self._last_obs = obs.copy()
+        return obs, {}
 
     def step(self, actions):
         """
-        actions: numpy array of shape (num_envs, 4)
+        Steps all environments simultaneously with the provided actions.
+        actions: a numpy array of shape (num_envs,) with integer action indices.
         """
-        # Placeholder for opponent actions (random actions for now)
-        actions_p1 = np.random.randint(0, 500, size=(self.num_envs, 4), dtype=np.int32)
-        actions_p0 = np.array(actions, dtype=np.int32)
+        # Cache the observation prior to stepping (used for final_observation)
+        last_obs = self._last_obs.copy()
 
-        # C++ extension call (fills the zero-copy buffers)
-        self.core_env.step(
-            actions_p0,
-            actions_p1,
-            self._obs_p0,
-            self._obs_p1,
-            self._rewards_p0,
-            self._rewards_p1,
-            self._dones,
-        )
+        # Call C++ parallel stepping
+        self.core_env.step_all(np.array(actions, dtype=np.int32))
+        
+        # Retrieve batch data from zero-copy arrays
+        obs_flat = self.core_env.get_observations()
+        obs_raw = obs_flat.reshape(self.num_envs, godfield_core.OBSERVATION_SIZE)
+        obs = obs_raw[:, :godfield_core.OBSERVATION_FEATURE_SIZE].copy()
+        self._last_obs = obs.copy()
+        
+        rewards = self.core_env.get_rewards().copy()
+        terminated = self.core_env.get_dones().astype(bool).copy()
+        
+        truncated = np.zeros(self.num_envs, dtype=bool)
+        
+        # info must contain placeholder dictionaries for each environment
+        info = {
+            "_terminated": terminated,
+            "_truncated": truncated,
+        }
 
-        info = {}
-        # In stable-baselines3, vectorized envs don't need manual resets,
-        # but our C++ implementation automatically resets done environments anyway!
-
-        return (
-            self._obs_p0.copy(),
-            self._rewards_p0.copy(),
-            self._dones.copy(),
-            np.zeros_like(self._dones),
-            info,
-        )
+        # Populate final_observation for terminated environments
+        if np.any(terminated):
+            info["final_observation"] = np.empty(self.num_envs, dtype=object)
+            info["final_info"] = np.empty(self.num_envs, dtype=object)
+            for i, done in enumerate(terminated):
+                if done:
+                    info["final_observation"][i] = last_obs[i]
+                    info["final_info"][i] = {}
+        
+        return obs, rewards, terminated, truncated, info

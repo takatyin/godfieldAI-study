@@ -21,8 +21,7 @@ def test_sun_amulet_revive():
 
     # 「捨てる」フェイズを経由してターンを終了させることで自動終了解決（PHASE_END）を起動
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([1])
 
     # HPが10に復活し、ターンは相手(1)のMAINになっていること
     assert runner.state.get_hp(0) == 10
@@ -56,8 +55,7 @@ def test_ascension_bow_trigger_and_defense():
 
     # 「捨てる」フェイズを経由してターン終了処理を起動
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([1])
 
     # 相手(1)の防御フェイズに移行していることを確認（一時中断状態）
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
@@ -97,8 +95,7 @@ def test_sickness_escalation_heaven_instant_death():
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([0])
 
         # 天国病悪化による死亡によって、ゲーム終了（is_done=True）しているシードを探す
         if test_run.state.is_done:
@@ -118,8 +115,7 @@ def test_sickness_escalation_heaven_instant_death():
     runner.state.set_true_hand(0, 1, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([1])
 
     # 悪化即死したが、お守りで復活。
     # 発作による死亡時は天国病の回復（+5）はスキップされるため、最終HPは10になること
@@ -146,8 +142,7 @@ def test_sickness_escalation_hell_to_heaven():
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([0])
 
         # 悪化して天国病になっているシードを探す
         if test_run.state.get_sickness(0) == SicknessType.SICKNESS_HEAVEN:
@@ -165,8 +160,7 @@ def test_sickness_escalation_hell_to_heaven():
     runner.state.set_true_hand(0, 0, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # 天国病に悪化していること
     assert runner.state.get_sickness(0) == SicknessType.SICKNESS_HEAVEN
@@ -190,8 +184,7 @@ def test_sickness_damage_and_healing_turn_end():
     runner.state.set_true_hand(0, 0, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # 地獄病の5ダメを受けてHPが5になっていること
     assert runner.state.get_hp(0) == 5
@@ -206,8 +199,7 @@ def test_sickness_damage_and_healing_turn_end():
     runner2.state.set_true_hand(0, 0, shield_id)
 
     runner2.step(ActionType.ACTION_DISCARD)
-    runner2.step(ActionType.ACTION_SELECT_HAND_0)
-    runner2.step(ActionType.ACTION_CONFIRM)
+    runner2.perform_defense([0])
 
     # 天国病で回復するが99にクランプされること
     assert runner2.state.get_hp(0) == 99
@@ -233,8 +225,7 @@ def test_guardian_action_mars_fire_attack():
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([0])
 
         if test_run.state.current_phase == GamePhase.PHASE_DEFENSE:
             act_seed = seed
@@ -252,8 +243,7 @@ def test_guardian_action_mars_fire_attack():
     runner.state.set_true_hand(0, 0, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # P0が被弾・防御状態になっていること
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
@@ -285,8 +275,7 @@ def test_guardian_action_venus_golden_drain():
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([0])
 
         if test_run.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR and test_run.state.pending_attack_source_id == find_card_by_name("罰金"):
             act_seed = seed
@@ -306,8 +295,7 @@ def test_guardian_action_venus_golden_drain():
     runner.state.set_true_hand(0, 0, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # 雑貨反射選択フェイズになっていることを確認
     assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
@@ -340,8 +328,7 @@ def test_guardian_action_neptune_support_healing():
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([0])
 
         if test_run.state.get_hp(1) > 20 or test_run.state.get_mp(1) > 10:
             act_seed = seed
@@ -360,8 +347,7 @@ def test_guardian_action_neptune_support_healing():
     runner.state.set_true_hand(0, 0, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # P1のHPまたはMPが回復していること
     assert (runner.state.get_hp(1) > 20) or (runner.state.get_mp(1) > 10)
@@ -382,8 +368,7 @@ def test_simultaneous_death_draw():
     runner.state.set_true_hand(0, 0, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # 引き分け終了
     assert runner.state.is_done is True
@@ -409,8 +394,7 @@ def test_sickness_only_applies_to_active_player():
     runner.state.set_true_hand(0, 0, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # ターンを終えたP0は無傷、かつ待機側のP1もターン終了の病気ダメージを受けずHP 40を維持していること
     assert runner.state.get_hp(0) == 40
@@ -476,8 +460,7 @@ def test_heaven_escalation_death_amulet_revive_sickness_persists():
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([0])
 
         if test_run.state.is_done:  # 天国病悪化死で終了したシード
             escalate_seed = seed
@@ -496,8 +479,7 @@ def test_heaven_escalation_death_amulet_revive_sickness_persists():
     runner.state.set_true_hand(0, 1, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([1])
 
     # 悪化即死後、お守り復活(10 HP)のみで、+5回復はスキップされるため最終HPは10になること
     assert runner.state.get_hp(0) == 10
@@ -536,8 +518,7 @@ def test_kill_opp_bow_counter_sickness_death_amulet_revive():
     runner.state.set_true_hand(1, 1, shield_id)
 
     # 1. P0がP1を攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # P1の防御フェイズ（Confirmで被弾して死亡させる）
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
@@ -583,8 +564,7 @@ def test_guardian_attack_kills_player_defeat():
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([0])
 
         if test_run.state.current_phase == GamePhase.PHASE_DEFENSE:
             act_seed = seed
@@ -603,8 +583,7 @@ def test_guardian_attack_kills_player_defeat():
 
     # ターン終了
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # 相手の守護神による攻撃フェイズへ移行していること
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
@@ -645,8 +624,7 @@ def test_kill_opp_bow_counter_kills_player_draw():
     runner.state.set_true_hand(1, 1, shield_id)
 
     # 1. P0がP1を攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # P1の防御フェイズ（Confirmで被弾して死亡させる）
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
@@ -695,8 +673,7 @@ def test_kill_opp_bow_counter_hp1_sickness_death_draw():
     runner.state.set_true_hand(1, 1, shield_id)
 
     # 1. P0がP1を攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # P1の防御フェイズ（Confirmで被弾して死亡させる）
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
@@ -750,8 +727,7 @@ def test_heaven_wind_mutual_seizure_draw():
         test_run.state.set_true_hand(1, 1, shield_id)
 
         # 1. P0が＜天国風＞をP1に使用
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_TARGET_OPP)
+        test_run.perform_attack([0])
 
         # P1の防御フェイズ（Confirmで被弾させて発作即死させる）
         if test_run.state.current_phase != GamePhase.PHASE_MIRACLE_DEFENSE:
@@ -793,8 +769,7 @@ def test_heaven_wind_mutual_seizure_draw():
     runner.state.set_true_hand(1, 1, shield_id)
 
     # 1. P0が＜天国風＞をP1に使用
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # P1の防御フェイズ（Confirmで被弾させて発作即死させる）
     assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
@@ -847,8 +822,7 @@ def test_heaven_wind_on_self_revive_heals():
     runner.state.set_true_hand(0, 2, shield_id)
 
     # 1. P0が自分に＜天国風＞を使用
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_SELF)
+    runner.perform_attack([0], to_self=True)
 
     # 自分への状態異常奇跡はメインフェイズ中に即時解決され、発作死亡→お守り自動復活がワンステップで行われる。
     # 復活直後のHP=10から、このターン終了時処理（PHASE_END）も同ステップ内で自動解決される。
@@ -892,8 +866,7 @@ def test_simultaneous_death_ascension_bow_no_trigger_draw():
 
     # 「捨てる」フェイズを経由してターンを終了させ、PHASE_END を起動
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # 即座に引き分け終了し、昇天弓による反撃フェイズ（PHASE_DEFENSE）に遷移しないこと
     assert runner.state.is_done is True
@@ -926,8 +899,7 @@ def test_venus_drain_kills_active_bow_counter_resumes_state5():
         test_run.state.set_true_hand(0, 1, bow_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([0])
 
         # 罰金は雑貨反射選択フェイズ（PHASE_SUNDRY_SELECT_MIRROR, アクターP0）へ遷移する
         if test_run.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR and test_run.state.current_actor_id == 0 and test_run.state.pending_attack_source_id == find_card_by_name("罰金"):
@@ -949,8 +921,7 @@ def test_venus_drain_kills_active_bow_counter_resumes_state5():
 
     # 1. ターン終了
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # 金星神の罰金による雑貨反射選択フェイズ(P0)になっていること
     assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
@@ -996,8 +967,7 @@ def test_ascension_bow_multiple_first_miss_second_hit():
         runner.state.set_true_hand(0, 2, shield_id)
 
         runner.step(ActionType.ACTION_DISCARD)
-        runner.step(ActionType.ACTION_SELECT_HAND_2)
-        runner.step(ActionType.ACTION_CONFIRM)
+        runner.perform_defense([2])
 
         if runner.state.current_phase == GamePhase.PHASE_DEFENSE:
             if runner.state.get_pending_ascension_bows(0) == 0:
@@ -1017,8 +987,7 @@ def test_ascension_bow_multiple_first_miss_second_hit():
     runner.state.set_true_hand(0, 2, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_2)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([2])
 
     # 2発目の処理により、相手(P1)の防御フェイズへ移行していること
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
@@ -1055,8 +1024,7 @@ def test_colored_leaves_reflection():
 
         # メインフェイズで手札1を捨てる
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_1)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([1])
 
         # 紅葉(COLORED_LEAVES)の雑貨反射フェイズに移行したシードを探す
         if (
@@ -1082,8 +1050,7 @@ def test_colored_leaves_reflection():
 
     # 1. ターン終了 Confirm (手札1を捨てる)
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([1])
 
     # 雑貨反射フェイズ(P0)へ
     assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
@@ -1129,8 +1096,7 @@ def test_halo_reflection():
 
         # メインフェイズで手札1を捨てる
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_1)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([1])
 
         # 後光(HALO)の雑貨反射フェイズに移行したシードを探す
         if (
@@ -1156,8 +1122,7 @@ def test_halo_reflection():
 
     # 1. ターン終了 Confirm
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([1])
 
     # 雑貨反射フェイズ(P0)へ
     assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
@@ -1201,8 +1166,7 @@ def test_ominous_premonition_reflection():
 
         # メインフェイズで手札1を捨てる
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_1)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([1])
 
         # 不吉な予感(OMINOUS_PREMONITION)の雑貨反射フェイズに移行したシードを探す
         if (
@@ -1228,8 +1192,7 @@ def test_ominous_premonition_reflection():
 
     # 1. ターン終了 Confirm
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([1])
 
     # 雑貨反射フェイズ(P0)へ
     assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
@@ -1272,8 +1235,7 @@ def test_little_something_targets_self():
         test_run.state.set_true_hand(0, 0, shield_id)
 
         test_run.step(ActionType.ACTION_DISCARD)
-        test_run.step(ActionType.ACTION_SELECT_HAND_0)
-        test_run.step(ActionType.ACTION_CONFIRM)
+        test_run.perform_defense([0])
 
         # 10 + 8 = 18 または 10 + 20 = 30 になっているシード
         if test_run.state.get_money(1) in (18, 30):
@@ -1294,8 +1256,7 @@ def test_little_something_targets_self():
     runner.state.set_true_hand(0, 0, shield_id)
 
     runner.step(ActionType.ACTION_DISCARD)
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # P1のお金が増えており(18 または 30)、P0は変化なし(10)であることを確認
     assert runner.state.get_money(1) in (18, 30)
@@ -1324,16 +1285,14 @@ def test_sickness_turn_end_after_combat():
     runner.set_hand(1, [shield_id])
     
     # P0が攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
     
     # P1の防御ターン
     assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
     assert runner.state.current_actor_id == 1
     
     # P1が木の盾で防御
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
     
     # ターン終了処理が完了し、P1のメインフェイズへ移行していること
     assert runner.state.current_phase == GamePhase.PHASE_MAIN
@@ -1342,3 +1301,396 @@ def test_sickness_turn_end_after_combat():
     # 病気ダメージがP0（ターンプレイヤー）に適用され、HPが39になっていること
     assert runner.state.get_hp(0) == 39
     assert runner.state.get_hp(1) == 40
+
+# ==========================================
+# Merged from: tests/core/test_discrepancy_fixes.py
+# ==========================================
+
+
+def test_dark_cloud_accuracy():
+    # 暗雲状態なら命中率100%未満の攻撃も100%必中になることをテスト
+    sim = SimulationRunner()
+    
+    # 命中率75%の「つるシュート」を探す
+    vine_shoot = find_card_by_name("つるシュート")
+    
+    # 1. 相手が暗雲状態の場合
+    hit_count = 0
+    total_trials = 100
+    for _ in range(total_trials):
+        sim.reset_state()
+        sim.set_hand(0, [vine_shoot])
+        sim.state.set_curses(1, godfield_core.CURSE_DARK_CLOUD, True)
+        
+        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+        sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+        
+        # 命中した場合のみ相手の防御フェイズに遷移する
+        if sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE:
+            hit_count += 1
+            
+    # 暗雲なら100%必中
+    assert hit_count == total_trials
+
+    # 2. 相手が暗雲状態でない場合（通常確率）
+    hit_count_normal = 0
+    for _ in range(total_trials):
+        sim.reset_state()
+        sim.set_hand(0, [vine_shoot])
+        
+        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+        sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+        
+        if sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE:
+            hit_count_normal += 1
+            
+    # 通常なら75%程度 (100回中50〜95回程度)
+    assert 50 < hit_count_normal < 100
+
+
+def test_dark_cloud_bounce_is_unaffected():
+    # 暗雲状態であっても「弾く」の確率（50%）には影響しないことをテスト
+    sim = SimulationRunner()
+    
+    # 奇跡を弾く「＜乱気流＞」と、攻撃する「＜火の玉＞」
+    turbulence = find_card_by_name("＜乱気流＞")
+    fireball = find_card_by_name("＜火の玉＞")
+    
+    bounce_success_count = 0
+    total_trials = 100
+    for _ in range(total_trials):
+        sim.reset_state()
+        # プレイヤー0に＜火の玉＞、プレイヤー1に＜乱気流＞
+        sim.set_hand(0, [fireball])
+        sim.set_hand(1, [turbulence])
+        sim.set_status(0, mp=10)
+        sim.set_status(1, mp=10)
+        
+        # 防御側を暗雲状態にする
+        sim.state.set_curses(1, godfield_core.CURSE_DARK_CLOUD, True)
+        
+        # プレイヤー0が＜火の玉＞で攻撃
+        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+        sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+        
+        # プレイヤー1が＜乱気流＞で防御（弾き試行）
+        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+        sim.step(godfield_core.ActionType.ACTION_CONFIRM)
+        
+        # 弾きに成功した場合、攻守交代してプレイヤー1が攻撃側になり、プレイヤー0（me=0）の奇跡防御フェイズになる
+        if sim.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE and sim.state.current_actor_id == 0:
+            bounce_success_count += 1
+            
+    # 50%確率なので、100回中25〜75回程度成功するはず（暗雲の影響を受けない）
+    assert 25 < bounce_success_count < 75
+
+
+def test_guardian_leaves_on_combat_damage():
+    # プレイヤーが戦闘ダメージを受けた際に10%の確率で守護神が去ることをテスト
+    sim = SimulationRunner()
+    
+    # 攻撃力1の「銅のこん棒」と「アイアンシールド」
+    bronze_club = find_card_by_name("銅のこん棒")
+    iron_shield = find_card_by_name("アイアンシールド")
+    
+    # 1. ダメージを受けた場合
+    dismiss_count = 0
+    total_trials = 200
+    for _ in range(total_trials):
+        sim.reset_state()
+        sim.state.seed_rng(_)
+        sim.set_hand(0, [bronze_club])
+        # プレイヤー1に守護神（火星神）を憑ける
+        sim.state.set_guardian(1, godfield_core.MARS)
+        
+        # プレイヤー0が攻撃
+        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+        sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+        
+        # プレイヤー1はスルー（無防備）
+        sim.step(godfield_core.ActionType.ACTION_CONFIRM)
+        
+        # 守護神が去った（GuardianType.NONEになった）か確認
+        if sim.state.get_guardian(1) == godfield_core.GuardianType.NONE:
+            dismiss_count += 1
+            
+    # 10%確率なので、200回中10〜40回程度去るはず
+    assert 10 < dismiss_count < 40
+
+    # 2. ダメージを受けなかった（防具で完全に防いだ）場合
+    dismiss_count_prevented = 0
+    for _ in range(50):
+        sim.reset_state()
+        sim.set_hand(0, [bronze_club])
+        # プレイヤー1に防御力4の「アイアンシールド」を持たせる（攻撃力1を防げる）
+        sim.set_hand(1, [iron_shield])
+        sim.state.set_guardian(1, godfield_core.MARS)
+        
+        # プレイヤー0が攻撃
+        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+        sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+        
+        # プレイヤー1がアイアンシールドで防御
+        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+        sim.step(godfield_core.ActionType.ACTION_CONFIRM)
+        
+        if sim.state.get_guardian(1) == godfield_core.GuardianType.NONE:
+            dismiss_count_prevented += 1
+            
+    # 被ダメージ0なので、絶対に去らない
+    assert dismiss_count_prevented == 0
+
+
+def test_guardian_leaves_on_sickness_damage():
+    # プレイヤーが病気ダメージを受けた際に10%の確率で守護神が去ることをテスト
+    sim = SimulationRunner()
+    
+    # 1. 風邪ダメージ（1ダメージ）を受ける場合
+    dismiss_count = 0
+    total_trials = 200
+    for _ in range(total_trials):
+        sim.reset_state()
+        sim.state.seed_rng(_)
+        # プレイヤー0に風邪と火星神
+        sim.state.set_sickness(0, godfield_core.SICKNESS_COLD)
+        sim.state.set_guardian(0, godfield_core.MARS)
+        
+        # プレイヤー0が祈る（ターン終了を進めるため）
+        sim.step(godfield_core.ActionType.ACTION_PRAY)
+        
+        if sim.state.get_guardian(0) == godfield_core.GuardianType.NONE:
+            dismiss_count += 1
+            
+    # 10%確率なので、200回中10〜40回程度去るはず
+    assert 10 < dismiss_count < 40
+
+    # 2. 天国病による回復の場合
+    dismiss_count_heaven = 0
+    for _ in range(50):
+        sim.reset_state()
+        # HP減少を抑えるため初期HPを30にする
+        sim.set_status(0, hp=30)
+        sim.state.set_sickness(0, godfield_core.SICKNESS_HEAVEN)
+        sim.state.set_guardian(0, godfield_core.MARS)
+        
+        sim.step(godfield_core.ActionType.ACTION_PRAY)
+        
+        if sim.state.get_guardian(0) == godfield_core.NONE:
+            dismiss_count_heaven += 1
+            
+    # 天国病は回復なので、絶対に去らない
+    assert dismiss_count_heaven == 0
+
+
+def test_guardian_does_not_leave_on_exchange():
+    # 両替によるHP減少では守護神が去らないことをテスト
+    sim = SimulationRunner()
+    
+    # プレイヤー0に「両替」カードと火星神
+    exchange = find_card_by_name("両替")
+    sim.set_hand(0, [exchange])
+    sim.state.set_guardian(0, godfield_core.MARS)
+    sim.set_status(0, hp=40, mp=10, money=20) # 合計70
+    
+    # 両替を使用
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    # HPを20に変更する（HP40から20へ減少）
+    sim.step(godfield_core.ActionType.ACTION_NUM_20)
+    # MPを10に変更
+    sim.step(godfield_core.ActionType.ACTION_NUM_10)
+    
+    # 両替後のHPが20に減っていることを確認
+    assert sim.state.get_hp(0) == 20
+    # 守護神が去っていないことをアサート
+    assert sim.state.get_guardian(0) == godfield_core.MARS
+
+
+def test_guardian_does_not_leave_on_fine():
+    # 金星神の「罰金」によるHP引き落とし（減少）では守護神が去らないことをテスト
+    sim = SimulationRunner()
+    
+    fine_card = find_card_by_name("罰金")
+    
+    sim.reset_state()
+    # プレイヤー0に守護神Mars、HP 40, MP 0, お金 0 （罰金はHPから引かれる）
+    sim.state.set_guardian(0, godfield_core.MARS)
+    sim.set_status(0, hp=40, mp=0, money=0)
+    
+    # プレイヤー1（金星神側）からの罰金攻撃の防御フェイズを直接セットアップ
+    sim.state.current_actor_id = 0
+    sim.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
+    sim.state.attacker_id = 1
+    sim.state.defender_id = 0
+    sim.state.pending_attack_power = 3
+    sim.state.pending_attack_source_id = fine_card
+    
+    # プレイヤー0がスルー
+    sim.step(godfield_core.ActionType.ACTION_CONFIRM)
+    
+    # 罰金で3HP引かれるため、プレイヤー0のHPは37に減少
+    assert sim.state.get_hp(0) == 37
+    # 守護神 Mars は去っていないことをアサート
+    assert sim.state.get_guardian(0) == godfield_core.MARS
+
+
+def test_reaction_card_strict_weapon_check():
+    # 虹のカーテンの無属性化後、武器攻撃に対しては重ねがけ防御が可能であり、
+    # タライ、守護神攻撃、指輪反撃などの非武器攻撃に対しては重ねがけ防御が不可能であることをテスト
+    sim = SimulationRunner()
+    
+    rainbow = find_card_by_name("虹のカーテン")
+    wall = find_card_by_name("＜壁＞")
+    fire_sword = find_card_by_name("ブレイズブレイド")
+    gigantic_tub = find_card_by_name("巨大なタライ")
+    
+    # 1. 武器攻撃（ブレイズブレイド）に対して虹のカーテン＋壁が有効であること
+    sim.reset_state()
+    # プレイヤー0がブレイズブレイドで攻撃、プレイヤー1が虹のカーテン＋壁で受ける
+    sim.set_hand(0, [fire_sword])
+    sim.set_hand(1, [rainbow, wall])
+    sim.set_status(0, mp=10)
+    sim.set_status(1, mp=10)
+    
+    # 攻撃
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+    
+    # 防御フェイズ
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
+    # 虹のカーテンを選択 (スロット0)
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    
+    # 壁 (スロット1) が合法手マスクに含まれていることをアサート
+    actions = godfield_core.get_legal_actions(sim.state)
+    assert actions[int(godfield_core.ActionType.ACTION_SELECT_HAND_1)] == 1.0
+    
+    # 2. 超常現象（巨大なタライ）に対して虹のカーテンを使用した後、壁が「合法」であること
+    sim.reset_state()
+    sim.set_hand(1, [rainbow, wall])
+    sim.set_status(1, mp=10)
+    
+    # 直接巨大なタライの防御フェイズをセットアップする
+    sim.state.current_actor_id = 1
+    sim.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
+    sim.state.attacker_id = 0
+    sim.state.defender_id = 1
+    sim.state.pending_attack_power = 50
+    sim.state.pending_attack_element = godfield_core.Element.ELEM_LIGHT
+    sim.state.pending_attack_source_id = gigantic_tub
+    
+    # 虹のカーテンを選択 (スロット0)
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    
+    # 巨大なタライは物理武器攻撃として扱われるため、壁 (スロット1) は合法手
+    actions = godfield_core.get_legal_actions(sim.state)
+    assert actions[int(godfield_core.ActionType.ACTION_SELECT_HAND_1)] == 1.0
+
+    # 3. 守護神の固有攻撃（点滅）に対して壁が「非合法」であること
+    twinkle = find_card_by_name("点滅")
+    sim.reset_state()
+    sim.set_hand(1, [rainbow, wall])
+    sim.set_status(1, mp=10)
+    
+    # 点滅の防御フェイズをセットアップ
+    sim.state.current_actor_id = 1
+    sim.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
+    sim.state.attacker_id = 0
+    sim.state.defender_id = 1
+    sim.state.pending_attack_power = 2
+    sim.state.pending_attack_element = godfield_core.Element.ELEM_LIGHT
+    sim.state.pending_attack_source_id = twinkle
+    
+    # 虹のカーテンを選択 (スロット0)
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    
+    # 点滅は type: guardian で非武器扱いのため、壁は非合法手
+    actions = godfield_core.get_legal_actions(sim.state)
+    assert actions[int(godfield_core.ActionType.ACTION_SELECT_HAND_1)] == 0.0
+
+    # 3.5. 守護神の固有攻撃（ダイヤモンドアクス）に対して壁が「合法」であること
+    diamond_axe = find_card_by_name("gurdians/diamond-axe")
+    sim.reset_state()
+    sim.set_hand(1, [rainbow, wall])
+    sim.set_status(1, mp=10)
+    
+    # ダイヤモンドアクスの防御フェイズをセットアップ
+    sim.state.current_actor_id = 1
+    sim.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
+    sim.state.attacker_id = 0
+    sim.state.defender_id = 1
+    sim.state.pending_attack_power = 15
+    sim.state.pending_attack_element = godfield_core.Element.ELEM_STONE
+    sim.state.pending_attack_source_id = diamond_axe
+    
+    # 虹のカーテンを選択 (スロット0)
+    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
+    
+    # ダイヤモンドアクスは物理武器攻撃として扱われるため、壁は合法手
+    actions = godfield_core.get_legal_actions(sim.state)
+    assert actions[int(godfield_core.ActionType.ACTION_SELECT_HAND_1)] == 1.0
+
+    # 4. 月神の満月刀（武器扱い）に対して壁が「合法」であること
+    full_moon_blade = find_card_by_name("満月刀")
+    sim.reset_state()
+    sim.set_hand(1, [rainbow, wall])
+    sim.set_status(1, mp=10)
+    
+    # 満月刀（無属性、元々壁が有効なはず）の防御フェイズをセットアップ
+    sim.state.current_actor_id = 1
+    sim.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
+    sim.state.attacker_id = 0
+    sim.state.defender_id = 1
+    sim.state.pending_attack_power = 10
+    sim.state.pending_attack_element = godfield_core.Element.ELEM_NONE
+    sim.state.pending_attack_source_id = full_moon_blade
+    
+    # 満月刀は最初から無属性なので、虹のカーテンなしでいきなり壁を出せる
+    actions = godfield_core.get_legal_actions(sim.state)
+    assert actions[int(godfield_core.ActionType.ACTION_SELECT_HAND_1)] == 1.0
+
+
+def test_zero_power_defense_validation():
+    # 攻撃力0の攻撃に対する防具の合法・非合法判定をテスト
+    sim = SimulationRunner()
+    
+    magical_stick = find_card_by_name("マジカルステッキ")
+    iron_shield = find_card_by_name("アイアンシールド")
+    twinkle = find_card_by_name("点滅")
+    
+    # 1. 相手が攻撃力0の武器（マジカルステッキ）で攻撃してきた場合
+    # 通常の防具（アイアンシールド）が出せる（合法手となる）こと
+    sim.reset_state()
+    sim.set_hand(1, [iron_shield])
+    
+    # 直接マジカルステッキMP0の防御フェイズをセットアップする
+    sim.state.current_actor_id = 1
+    sim.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
+    sim.state.attacker_id = 0
+    sim.state.defender_id = 1
+    sim.state.pending_attack_power = 0  # MP0なので攻撃力0
+    sim.state.pending_attack_element = godfield_core.Element.ELEM_NONE
+    sim.state.pending_attack_source_id = magical_stick
+    
+    actions = godfield_core.get_legal_actions(sim.state)
+    # アイアンシールド（スロット0）が合法であること
+    assert actions[int(godfield_core.ActionType.ACTION_SELECT_HAND_0)] == 1.0
+    
+    # 2. 相手が攻撃力0の守護神固有アクション（点滅）で攻撃してきた場合
+    # 通常の防具（アイアンシールド）は出せない（非合法手となる）こと
+    sim.reset_state()
+    sim.set_hand(1, [iron_shield])
+    
+    # 直接点滅の防御フェイズをセットアップする
+    sim.state.current_actor_id = 1
+    sim.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
+    sim.state.attacker_id = 0
+    sim.state.defender_id = 1
+    sim.state.pending_attack_power = 0
+    sim.state.pending_attack_element = godfield_core.Element.ELEM_LIGHT
+    sim.state.pending_attack_source_id = twinkle
+    
+    actions = godfield_core.get_legal_actions(sim.state)
+    # アイアンシールド（スロット0）が非合法であること
+    assert actions[int(godfield_core.ActionType.ACTION_SELECT_HAND_0)] == 0.0
+
+

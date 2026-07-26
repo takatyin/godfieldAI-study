@@ -12,9 +12,6 @@ void legal_phase_main(const InternalState &state, bool legal_actions[ACTION_SPAC
 
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
-            // 展開済みかつ使用済みの奇跡は使えない
-            if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
-            
             CardFeatures &f = g_card_registry[state.apparent_hand[me][i]];
             
             // 奇跡のMP消費が足りるか（将来的に精霊系カードで0にできる可能性を含めて判定）
@@ -46,14 +43,14 @@ void legal_phase_main_target_select(const InternalState &state, bool legal_actio
 void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     bool has_unstable_accuracy = false;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        CardFeatures &f = get_registry_size() > 0 ? g_card_registry[state.apparent_hand[me][state.staged_cards[me][i]]] : g_card_registry[0]; // safety fallback
+        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
+        if (card_id == CARD_EMPTY) continue;
+        CardFeatures &f = get_registry_size() > 0 ? g_card_registry[card_id] : g_card_registry[0]; // safety fallback
         if (f.accuracy < 100) has_unstable_accuracy = true;
     }
 
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
-            if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
-            
             int card_id = state.apparent_hand[me][i];
             CardFeatures &f = g_card_registry[card_id];
             
@@ -108,8 +105,6 @@ void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACT
                 int card_id = state.apparent_hand[me][i];
                 if (card_id < 0) card_id = state.true_hand[me][i];
                 if (card_id > 0 && card_id < 300) {
-                    if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
-                    
                     if (card_id == ID_MIRAGE || card_id == ID_AURA || is_spiritual_zero_mp_card(card_id) || card_id == ID_WAND_OF_IGNITION || card_id == ID_WAND_OF_MYSTIC_WATER) {
                         if (can_afford_staged_plus_card(state, me, i)) {
                             legal_actions[ACTION_SELECT_HAND_0 + i] = true;
@@ -136,8 +131,6 @@ void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACT
 void legal_phase_group_miracle(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
-            if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
-            
             int card_id = state.apparent_hand[me][i];
             if (is_spiritual_zero_mp_card(card_id)) {
                 if (is_last_staged_card_miracle(state, me)) {
@@ -241,8 +234,6 @@ static void legal_defense_common(const InternalState &state, bool legal_actions[
 
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
-            if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
-            
             int card_id = state.apparent_hand[me][i];
             const CardFeatures &f = g_card_registry[card_id];
 
@@ -353,14 +344,14 @@ void legal_phase_defense(const InternalState &state, bool legal_actions[ACTION_S
 void legal_phase_miracle_plus(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     bool has_unstable_accuracy = false;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        CardFeatures &f = g_card_registry[state.apparent_hand[me][state.staged_cards[me][i]]];
+        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
+        if (card_id == CARD_EMPTY) continue;
+        CardFeatures &f = g_card_registry[card_id];
         if (f.accuracy < 100) has_unstable_accuracy = true;
     }
 
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         if (!state.is_used[me][i] && state.apparent_hand[me][i] != CARD_EMPTY) {
-            if (state.is_deployed[me][i] && state.miracle_used_this_turn[me][i]) continue;
-            
             int card_id = state.apparent_hand[me][i];
             CardFeatures &f = g_card_registry[card_id];
             

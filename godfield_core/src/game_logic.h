@@ -12,7 +12,7 @@ extern std::discrete_distribution<int> g_drop_distribution;
  * Initializes the global card registry and drop distribution for the game.
  * Must be called once before any game logic or environments are run.
  */
-void init_game_logic(pybind11::list cards);
+void init_game_logic(const pybind11::list &cards);
 
 /**
  * Draws a random card ID from the initialized game logic registry.

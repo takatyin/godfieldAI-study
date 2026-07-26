@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <unordered_map>
 
 // ============================================================================
 // グローバル変数の実体定義 / Global Variable Instantiations
@@ -12,13 +13,63 @@ std::vector<CardFeatures> g_card_registry;
 std::vector<std::string> g_card_names;
 std::discrete_distribution<int> g_drop_distribution;
 
+static const std::unordered_map<std::string, CardType> type_map = {
+    {"weapon", CardType::WEAPON},
+    {"defense", CardType::DEFENSE},
+    {"miracle", CardType::MIRACLE},
+    {"sundry", CardType::SUNDRY},
+    {"deal", CardType::DEAL},
+    {"devil", CardType::DEVIL},
+    {"phenomena", CardType::PHENOMENA},
+    {"guardian", CardType::GUARDIAN}
+};
+
+static const std::unordered_map<std::string, uint32_t> timing_map = {
+    {"main_atk_phase", TIMING_MAIN_ATK},
+    {"main_miracle_phase", TIMING_MAIN_MIRACLE},
+    {"main_sundry_phase", TIMING_MAIN_SUNDRY},
+    {"main_deal_phase", TIMING_MAIN_DEAL},
+    {"atk_plus_phase", TIMING_ATK_PLUS},
+    {"miracle_plus_phase", TIMING_MIRACLE_PLUS},
+    {"atk_defence_phase", TIMING_ATK_DEFENCE},
+    {"miracle_defence_phase", TIMING_MIRACLE_DEFENCE},
+    {"guardian_phase", TIMING_GUARDIAN}
+};
+
+static const std::unordered_map<std::string, Element> element_map = {
+    {"火", ELEM_FIRE},
+    {"水", ELEM_WATER},
+    {"木", ELEM_WOOD},
+    {"土", ELEM_STONE},
+    {"光", ELEM_LIGHT},
+    {"闇", ELEM_DARKNESS}
+};
+
+static const std::unordered_map<std::string, ReactionType> reaction_map = {
+    {"bounce", REACTION_BOUNCE},
+    {"reflect", REACTION_REFLECT},
+    {"block", REACTION_BLOCK}
+};
+
+static const std::unordered_map<std::string, HitCurse> curse_map = {
+    {"fog", CURSE_FOG},
+    {"flash", CURSE_FLASH},
+    {"dark_cloud", CURSE_DARK_CLOUD},
+    {"dark cloud", CURSE_DARK_CLOUD},
+    {"dream", CURSE_DREAM},
+    {"cold", CURSE_COLD},
+    {"fever", CURSE_FEVER},
+    {"hell", CURSE_HELL},
+    {"heaven", CURSE_HEAVEN}
+};
+
 /**
  * @brief Python側から渡されたカードデータリストを解析し、C++のグローバルレジストリ（g_card_registry）に登録します。
  *        同時に、カード出現の確率分布（g_drop_distribution）を生成します。
  *
  * @param cards Pythonのリストオブジェクト。各要素は辞書型で、カードの属性（type, usage_timing, price, drop_rate等）を保持。
  */
-void init_game_logic(pybind11::list cards) {
+void init_game_logic(const pybind11::list &cards) {
     g_card_registry.clear();
     g_card_names.clear();
     std::vector<int> weights;
@@ -26,31 +77,24 @@ void init_game_logic(pybind11::list cards) {
     for (auto item : cards) {
         pybind11::dict card = item.cast<pybind11::dict>();
         CardFeatures f = {};
-        std::memset(&f, 0, sizeof(f));
 
-        std::string type = card["type"].cast<std::string>();
-        if (type == "weapon") f.type = CardType::WEAPON;
-        else if (type == "defense") f.type = CardType::DEFENSE;
-        else if (type == "miracle") f.type = CardType::MIRACLE;
-        else if (type == "sundry") f.type = CardType::SUNDRY;
-        else if (type == "deal") f.type = CardType::DEAL;
-        else if (type == "devil") f.type = CardType::DEVIL;
-        else if (type == "phenomena") f.type = CardType::PHENOMENA;
-        else if (type == "guardian") f.type = CardType::GUARDIAN;
-        else f.type = CardType::SUNDRY;
+        std::string type = card.contains("type") ? card["type"].cast<std::string>() : "sundry";
+        auto type_it = type_map.find(type);
+        if (type_it != type_map.end()) {
+            f.type = type_it->second;
+        } else {
+            f.type = CardType::SUNDRY;
+        }
 
-        pybind11::list timings = card["usage_timing"].cast<pybind11::list>();
-        for (auto timing : timings) {
-            std::string t = timing.cast<std::string>();
-            if (t == "main_atk_phase") f.usage_timing |= TIMING_MAIN_ATK;
-            else if (t == "main_miracle_phase") f.usage_timing |= TIMING_MAIN_MIRACLE;
-            else if (t == "main_sundry_phase") f.usage_timing |= TIMING_MAIN_SUNDRY;
-            else if (t == "main_deal_phase") f.usage_timing |= TIMING_MAIN_DEAL;
-            else if (t == "atk_plus_phase") f.usage_timing |= TIMING_ATK_PLUS;
-            else if (t == "miracle_plus_phase") f.usage_timing |= TIMING_MIRACLE_PLUS;
-            else if (t == "atk_defence_phase") f.usage_timing |= TIMING_ATK_DEFENCE;
-            else if (t == "miracle_defence_phase") f.usage_timing |= TIMING_MIRACLE_DEFENCE;
-            else if (t == "guardian_phase") f.usage_timing |= TIMING_GUARDIAN;
+        if (card.contains("usage_timing")) {
+            pybind11::list timings = card["usage_timing"].cast<pybind11::list>();
+            for (auto timing : timings) {
+                std::string t = timing.cast<std::string>();
+                auto timing_it = timing_map.find(t);
+                if (timing_it != timing_map.end()) {
+                    f.usage_timing |= timing_it->second;
+                }
+            }
         }
 
         f.price = card.contains("price") ? card["price"].cast<int>() : 0;
@@ -62,38 +106,35 @@ void init_game_logic(pybind11::list cards) {
 
         if (card.contains("element")) {
             std::string el = card["element"].cast<std::string>();
-            if (el == "火") f.element = ELEM_FIRE;
-            else if (el == "水") f.element = ELEM_WATER;
-            else if (el == "木") f.element = ELEM_WOOD;
-            else if (el == "土") f.element = ELEM_STONE;
-            else if (el == "光") f.element = ELEM_LIGHT;
-            else if (el == "闇") f.element = ELEM_DARKNESS;
-            else f.element = ELEM_NONE;
+            auto el_it = element_map.find(el);
+            if (el_it != element_map.end()) {
+                f.element = el_it->second;
+            } else {
+                f.element = ELEM_NONE;
+            }
         }
 
         if (card.contains("reaction_type")) {
             std::string rt = card["reaction_type"].cast<std::string>();
-            if (rt == "bounce") f.reaction_type = REACTION_BOUNCE;
-            else if (rt == "reflect") f.reaction_type = REACTION_REFLECT;
-            else if (rt == "block") f.reaction_type = REACTION_BLOCK;
+            auto rt_it = reaction_map.find(rt);
+            if (rt_it != reaction_map.end()) {
+                f.reaction_type = rt_it->second;
+            }
         }
 
         if (card.contains("hit_curse")) {
             std::string hc = card["hit_curse"].cast<std::string>();
-            if (hc == "fog") f.hit_curse = CURSE_FOG;
-            else if (hc == "flash") f.hit_curse = CURSE_FLASH;
-            else if (hc == "dark_cloud" || hc == "dark cloud") f.hit_curse = CURSE_DARK_CLOUD;
-            else if (hc == "dream") f.hit_curse = CURSE_DREAM;
-            else if (hc == "cold") f.hit_curse = CURSE_COLD;
-            else if (hc == "fever") f.hit_curse = CURSE_FEVER;
-            else if (hc == "hell") f.hit_curse = CURSE_HELL;
-            else if (hc == "heaven") f.hit_curse = CURSE_HEAVEN;
+            auto hc_it = curse_map.find(hc);
+            if (hc_it != curse_map.end()) {
+                f.hit_curse = hc_it->second;
+            }
         }
 
         f.is_group_attack = card.contains("is_group_attack") ? card["is_group_attack"].cast<bool>() : false;
 
         g_card_registry.push_back(f);
-        g_card_names.push_back(card["name"].cast<std::string>());
+        std::string name = card.contains("name") ? card["name"].cast<std::string>() : "Unknown";
+        g_card_names.push_back(name);
         weights.push_back(f.drop_rate);
     }
 

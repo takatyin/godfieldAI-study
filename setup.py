@@ -29,7 +29,7 @@ ext_modules = [
 
 setup(
     name="godfield_rl",
-    version="0.0.1",
+    version="0.1.0",
     packages=["godfield_rl"],
     ext_modules=ext_modules,
 )

@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
+#include <cstddef>
 #include "env_pool.h"
 #include "game_logic.h"
 #include "game_logic_internal.h"
@@ -10,6 +11,9 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(godfield_core, m) {
     m.doc() = "GodField core engine and RL environment pool";
+
+    m.attr("OBSERVATION_SIZE") = sizeof(Observation) / sizeof(float);
+    m.attr("OBSERVATION_FEATURE_SIZE") = (offsetof(Observation, action_mask) + sizeof(decltype(Observation::action_mask))) / sizeof(float);
 
     // Bind initialization function
     m.def("init_game_logic", &init_game_logic, "Initialize the global card registry from JSON");
@@ -120,6 +124,17 @@ PYBIND11_MODULE(godfield_core, m) {
         .value("PHASE_END", GamePhase::PHASE_END)
         .export_values();
 
+    py::enum_<TurnEndSubstep>(m, "TurnEndSubstep")
+        .value("DEATH_CHECK_START", TurnEndSubstep::DEATH_CHECK_START)
+        .value("SICKNESS_WORSEN", TurnEndSubstep::SICKNESS_WORSEN)
+        .value("SICKNESS_DAMAGE", TurnEndSubstep::SICKNESS_DAMAGE)
+        .value("FINAL_DEATH_CHECK", TurnEndSubstep::FINAL_DEATH_CHECK)
+        .value("GUARDIAN_ACT", TurnEndSubstep::GUARDIAN_ACT)
+        .value("CLEANUP_DEATH_CHECK", TurnEndSubstep::CLEANUP_DEATH_CHECK)
+        .value("CLEANUP", TurnEndSubstep::CLEANUP)
+        .value("TURN_TRANSITION", TurnEndSubstep::TURN_TRANSITION)
+        .export_values();
+
     auto action_enum = py::enum_<ActionType>(m, "ActionType")
         .value("ACTION_SELECT_HAND_0", ActionType::ACTION_SELECT_HAND_0)
         .value("ACTION_SELECT_HAND_1", ActionType::ACTION_SELECT_HAND_1)
@@ -166,6 +181,7 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("is_done", &InternalState::is_done)
         .def_readwrite("p0_reward", &InternalState::p0_reward)
         .def_readwrite("p1_reward", &InternalState::p1_reward)
+        .def_readwrite("history_count", &InternalState::history_count)
         .def_readwrite("attacker_id", &InternalState::attacker_id)
         .def_readwrite("defender_id", &InternalState::defender_id)
         .def_readwrite("pending_attack_power", &InternalState::pending_attack_power)
@@ -187,94 +203,170 @@ PYBIND11_MODULE(godfield_core, m) {
         // For array members, pybind11 requires special handling to access by index from python.
         // For now, we will add helper methods to InternalState bindings to get/set these arrays.
         .def(
-            "get_hp", [](InternalState &s, int p) { return s.hp[p]; }, py::arg("player_id"))
+            "get_hp", [](InternalState &s, int p) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                return s.hp[p];
+            }, py::arg("player_id"))
         .def(
-            "set_hp", [](InternalState &s, int p, int v) { s.hp[p] = v; }, py::arg("player_id"), py::arg("hp"))
+            "set_hp", [](InternalState &s, int p, int v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                s.hp[p] = v;
+            }, py::arg("player_id"), py::arg("hp"))
         .def(
-            "get_mp", [](InternalState &s, int p) { return s.mp[p]; }, py::arg("player_id"))
+            "get_mp", [](InternalState &s, int p) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                return s.mp[p];
+            }, py::arg("player_id"))
         .def(
-            "set_mp", [](InternalState &s, int p, int v) { s.mp[p] = v; }, py::arg("player_id"), py::arg("mp"))
+            "set_mp", [](InternalState &s, int p, int v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                s.mp[p] = v;
+            }, py::arg("player_id"), py::arg("mp"))
         .def(
-            "get_money", [](InternalState &s, int p) { return s.money[p]; }, py::arg("player_id"))
+            "get_money", [](InternalState &s, int p) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                return s.money[p];
+            }, py::arg("player_id"))
         .def(
-            "set_money", [](InternalState &s, int p, int v) { s.money[p] = v; }, py::arg("player_id"), py::arg("money"))
+            "set_money", [](InternalState &s, int p, int v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                s.money[p] = v;
+            }, py::arg("player_id"), py::arg("money"))
         .def(
-            "get_true_hand", [](InternalState &s, int p, int idx) { return s.true_hand[p][idx]; }, py::arg("player_id"),
-            py::arg("hand_idx"))
+            "get_true_hand", [](InternalState &s, int p, int idx) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                return s.true_hand[p][idx];
+            }, py::arg("player_id"), py::arg("hand_idx"))
         .def(
-            "set_true_hand", [](InternalState &s, int p, int idx, int v) { s.true_hand[p][idx] = v; s.apparent_hand[p][idx] = v; s.is_confirmed[p][idx] = true; },
-            py::arg("player_id"), py::arg("hand_idx"), py::arg("card_id"))
+            "set_true_hand", [](InternalState &s, int p, int idx, int v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                s.true_hand[p][idx] = v;
+                s.apparent_hand[p][idx] = v;
+                s.is_confirmed[p][idx] = true;
+            }, py::arg("player_id"), py::arg("hand_idx"), py::arg("card_id"))
         .def(
-            "add_card_to_hand_slot", [](InternalState &s, int p, int idx, int card_id, bool is_drawn) { add_card_to_hand_slot(s, p, idx, card_id, is_drawn); },
-            py::arg("player_id"), py::arg("hand_idx"), py::arg("card_id"), py::arg("is_drawn"))
+            "add_card_to_hand_slot", [](InternalState &s, int p, int idx, int card_id, bool is_drawn) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                add_card_to_hand_slot(s, p, idx, card_id, is_drawn);
+            }, py::arg("player_id"), py::arg("hand_idx"), py::arg("card_id"), py::arg("is_drawn"))
         .def(
-            "get_apparent_hand", [](InternalState &s, int p, int idx) { return s.apparent_hand[p][idx]; }, py::arg("player_id"),
-            py::arg("hand_idx"))
+            "get_apparent_hand", [](InternalState &s, int p, int idx) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                return s.apparent_hand[p][idx];
+            }, py::arg("player_id"), py::arg("hand_idx"))
         .def(
-            "set_apparent_hand", [](InternalState &s, int p, int idx, int v) { s.apparent_hand[p][idx] = v; },
-            py::arg("player_id"), py::arg("hand_idx"), py::arg("card_id"))
+            "set_apparent_hand", [](InternalState &s, int p, int idx, int v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                s.apparent_hand[p][idx] = v;
+            }, py::arg("player_id"), py::arg("hand_idx"), py::arg("card_id"))
         .def(
-            "get_is_confirmed", [](InternalState &s, int p, int idx) { return s.is_confirmed[p][idx]; }, py::arg("player_id"),
-            py::arg("hand_idx"))
+            "get_is_confirmed", [](InternalState &s, int p, int idx) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                return s.is_confirmed[p][idx];
+            }, py::arg("player_id"), py::arg("hand_idx"))
         .def(
-            "set_is_confirmed", [](InternalState &s, int p, int idx, bool v) { s.is_confirmed[p][idx] = v; },
-            py::arg("player_id"), py::arg("hand_idx"), py::arg("is_confirmed"))
+            "set_is_confirmed", [](InternalState &s, int p, int idx, bool v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                s.is_confirmed[p][idx] = v;
+            }, py::arg("player_id"), py::arg("hand_idx"), py::arg("is_confirmed"))
         .def(
-            "get_is_known_to_opp", [](InternalState &s, int p, int idx) { return s.is_known_to_opp[p][idx]; },
-            py::arg("player_id"), py::arg("hand_idx"))
+            "get_is_known_to_opp", [](InternalState &s, int p, int idx) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                return s.is_known_to_opp[p][idx];
+            }, py::arg("player_id"), py::arg("hand_idx"))
         .def(
-            "set_is_known_to_opp", [](InternalState &s, int p, int idx, bool v) { s.is_known_to_opp[p][idx] = v; },
-            py::arg("player_id"), py::arg("hand_idx"), py::arg("is_known"))
+            "set_is_known_to_opp", [](InternalState &s, int p, int idx, bool v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                s.is_known_to_opp[p][idx] = v;
+            }, py::arg("player_id"), py::arg("hand_idx"), py::arg("is_known"))
         .def(
-            "get_is_used", [](InternalState &s, int p, int idx) { return s.is_used[p][idx]; }, py::arg("player_id"),
-            py::arg("hand_idx"))
+            "get_is_used", [](InternalState &s, int p, int idx) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                return s.is_used[p][idx];
+            }, py::arg("player_id"), py::arg("hand_idx"))
         .def(
-            "set_is_used", [](InternalState &s, int p, int idx, bool v) { s.is_used[p][idx] = v; },
-            py::arg("player_id"), py::arg("hand_idx"), py::arg("is_used"))
+            "set_is_used", [](InternalState &s, int p, int idx, bool v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                s.is_used[p][idx] = v;
+            }, py::arg("player_id"), py::arg("hand_idx"), py::arg("is_used"))
         .def(
-            "get_num_staged_cards", [](InternalState &s, int p) { return s.num_staged_cards[p]; }, py::arg("player_id"))
+            "get_num_staged_cards", [](InternalState &s, int p) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                return s.num_staged_cards[p];
+            }, py::arg("player_id"))
         .def(
-            "set_num_staged_cards", [](InternalState &s, int p, int v) { s.num_staged_cards[p] = v; },
-            py::arg("player_id"), py::arg("num"))
+            "set_num_staged_cards", [](InternalState &s, int p, int v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                s.num_staged_cards[p] = v;
+            }, py::arg("player_id"), py::arg("num"))
         .def(
-            "get_staged_card", [](InternalState &s, int p, int idx) { return s.staged_cards[p][idx]; },
-            py::arg("player_id"), py::arg("staged_idx"))
+            "get_staged_card", [](InternalState &s, int p, int idx) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("staged index must be in [0, 17]");
+                return s.staged_cards[p][idx];
+            }, py::arg("player_id"), py::arg("staged_idx"))
         .def(
-            "set_staged_card", [](InternalState &s, int p, int idx, int v) { s.staged_cards[p][idx] = v; },
-            py::arg("player_id"), py::arg("staged_idx"), py::arg("val"))
+            "set_staged_card", [](InternalState &s, int p, int idx, int v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("staged index must be in [0, 17]");
+                s.staged_cards[p][idx] = v;
+            }, py::arg("player_id"), py::arg("staged_idx"), py::arg("val"))
         .def(
-            "get_is_deployed", [](InternalState &s, int p, int idx) { return s.is_deployed[p][idx]; },
-            py::arg("player_id"), py::arg("hand_idx"))
+            "get_is_deployed", [](InternalState &s, int p, int idx) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
+                return s.is_deployed[p][idx];
+            }, py::arg("player_id"), py::arg("hand_idx"))
         .def(
-            "set_is_deployed", [](InternalState &s, int p, int idx, bool v) { 
+            "set_is_deployed", [](InternalState &s, int p, int idx, bool v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("hand index must be in [0, 17]");
                 if (v) deploy_miracle(s, p, idx);
                 else undeploy_miracle(s, p, idx);
-            },
-            py::arg("player_id"), py::arg("hand_idx"), py::arg("val"))
+            }, py::arg("player_id"), py::arg("hand_idx"), py::arg("val"))
         .def(
-            "get_num_deployed_miracles", [](const InternalState &s, int p) { return s.num_deployed_miracles[p]; },
-            py::arg("player_id"))
+            "get_sickness", [](InternalState &s, int p) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                return s.sickness[p];
+            }, py::arg("player_id"))
         .def(
-            "get_deployed_miracle_order", [](const InternalState &s, int p, int idx) { return s.deployed_miracles_order[p][idx]; },
-            py::arg("player_id"), py::arg("order_idx"))
+            "set_sickness", [](InternalState &s, int p, SicknessType v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                s.sickness[p] = v;
+            }, py::arg("player_id"), py::arg("val"))
         .def(
-            "get_miracle_used_this_turn", [](InternalState &s, int p, int idx) { return s.miracle_used_this_turn[p][idx]; },
-            py::arg("player_id"), py::arg("hand_idx"))
+            "get_curses", [](InternalState &s, int p, CurseType idx) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (static_cast<int>(idx) < 0 || static_cast<int>(idx) >= 4) throw std::out_of_range("curse index must be in [0, 3]");
+                return s.curses[p][idx];
+            }, py::arg("player_id"), py::arg("curse_idx"))
         .def(
-            "set_miracle_used_this_turn", [](InternalState &s, int p, int idx, bool v) { s.miracle_used_this_turn[p][idx] = v; },
-            py::arg("player_id"), py::arg("hand_idx"), py::arg("val"))
+            "set_curses", [](InternalState &s, int p, CurseType idx, bool v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (static_cast<int>(idx) < 0 || static_cast<int>(idx) >= 4) throw std::out_of_range("curse index must be in [0, 3]");
+                s.curses[p][idx] = v;
+            }, py::arg("player_id"), py::arg("curse_idx"), py::arg("val"))
         .def(
-            "get_sickness", [](InternalState &s, int p) { return s.sickness[p]; }, py::arg("player_id"))
+            "get_guardian", [](InternalState &s, int p) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                return static_cast<int>(s.guardian[p]);
+            }, py::arg("player_id"))
         .def(
-            "set_sickness", [](InternalState &s, int p, SicknessType v) { s.sickness[p] = v; }, py::arg("player_id"), py::arg("val"))
-        .def(
-            "get_curses", [](InternalState &s, int p, CurseType idx) { return s.curses[p][idx]; }, py::arg("player_id"), py::arg("curse_idx"))
-        .def(
-            "set_curses", [](InternalState &s, int p, CurseType idx, bool v) { s.curses[p][idx] = v; }, py::arg("player_id"), py::arg("curse_idx"), py::arg("val"))
-        .def(
-            "get_guardian", [](InternalState &s, int p) { return static_cast<int>(s.guardian[p]); }, py::arg("player_id"))
-        .def(
-            "set_guardian", [](InternalState &s, int p, int v) { s.guardian[p] = static_cast<GuardianType>(v); }, py::arg("player_id"), py::arg("val"));
+            "set_guardian", [](InternalState &s, int p, int v) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                s.guardian[p] = static_cast<GuardianType>(v);
+            }, py::arg("player_id"), py::arg("val"));
 
     m.def("step_game", &step_game, "Step a single InternalState");
     m.def(
@@ -388,9 +480,6 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("current_staged_defense", &Observation::current_staged_defense)
         .def_readwrite("is_apocalypse", &Observation::is_apocalypse)
         .def_readwrite("history_head", &Observation::history_head)
-        .def_readwrite("history_count", &Observation::history_count)
-        .def_readwrite("player_id", &Observation::player_id)
-        .def_readwrite("pending_card", &Observation::pending_card)
         .def("get_history", [](const Observation& obs) {
             py::list res;
             for (int i = 0; i < HISTORY_LENGTH; ++i) res.append(obs.history[i]);
@@ -428,7 +517,7 @@ PYBIND11_MODULE(godfield_core, m) {
         })
         .def("get_phase_one_hot", [](const Observation& obs) {
             py::list res;
-            for (int i = 0; i < 7; ++i) res.append(obs.phase_one_hot[i]);
+            for (int i = 0; i < NUM_PHASES; ++i) res.append(obs.phase_one_hot[i]);
             return res;
         })
         .def("get_hand_cards", [](const Observation& obs) {
@@ -471,6 +560,8 @@ PYBIND11_MODULE(godfield_core, m) {
         .def("reset", &EnvPool::reset, py::arg("seed"))
         .def("step_all", &EnvPool::step_all, py::arg("actions"))
         .def("get_observations", &EnvPool::get_observations)
+        .def("get_rewards", &EnvPool::get_rewards)
+        .def("get_dones", &EnvPool::get_dones)
         .def("get_ready_env_ids", &EnvPool::get_ready_env_ids)
         .def("get_state", &EnvPool::get_state, py::arg("env_id"))
         .def("set_state", &EnvPool::set_state, py::arg("env_id"), py::arg("state"));

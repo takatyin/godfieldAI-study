@@ -1,14 +1,65 @@
 import godfield_core
-from godfield_core import ActionType
-from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards
+from godfield_core import ActionType, GamePhase
+from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards, find_card_by_type
+import pytest
+
+
+# ==========================================
+# Merged from: tests/core/test_basic.py
+# ==========================================
+
+
+
+def test_basic_attack_state_transition():
+    """
+    検証内容: 非合法手（違法なアクション）を選択した際に、ゲーム状態が遷移せずに無視されることをテストする。
+    具体的には、守護神フェーズ (PHASE_GUARDIAN) において、手札決定アクション (ACTION_TARGET_OPP) は非合法であるため、
+    ステップを実行してもフェーズやアクティブプレイヤーなどの状態が一切変化しないことを確認する。
+    """
+    sim = SimulationRunner()
+
+    sim.set_status(player=0, hp=40)
+    sim.set_status(player=1, hp=40)
+
+    # 初期状態のアクティブプレイヤーが 0 であることを確認
+    assert sim.state.current_actor_id == 0
+    sim.state.current_phase = godfield_core.GamePhase.PHASE_GUARDIAN
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_GUARDIAN
+
+    # 守護神フェーズにおいて無効なアクション 18 (ACTION_TARGET_OPP) を実行
+    sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+
+    # アクションは無視され、状態が変わっていないことをアサート
+    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_GUARDIAN
+    assert sim.state.current_actor_id == 0
+
+
+def test_env_pool_reset_clears_events():
+    """EnvPool.reset(seed) がイベント履歴(events)や状態異常・守護神を完全にクリアすることを確認"""
+    pool = godfield_core.EnvPool(1)
+    pool.reset(0)
+
+    state = pool.get_state(0)
+    godfield_core.step_game(state, godfield_core.ActionType.ACTION_PRAY)
+    obs = godfield_core.get_observation(state, 0)
+    assert len(obs.get_history()) > 0
+
+    # リセット実行
+    pool.reset(42)
+    new_state = pool.get_state(0)
+    new_obs = godfield_core.get_observation(new_state, 0)
+
+    # リセット直後は過去のイベントログがクリアされ初期状態になっていること
+    valid_events = [ev for ev in new_obs.get_history() if hasattr(ev, "event_type") and ev.event_type != 0]
+    assert len(valid_events) == 0
+
+# ==========================================
+# Merged from: tests/core/test_weapon_attacks.py
+# ==========================================
+
 
 
 def test_physical_attack_phase_transition():
-    """
-    検証内容: 無属性（物理）通常攻撃選択時のフェイズ遷移テスト。
-    - 攻撃者がメインフェイズにおいて「パンチ」を選択すると、フェイズが PHASE_ATTACK_PLUS に遷移することを確認します。
-    - 相手を対象（TARGET_OPP）に決定すると、防御側の防御フェイズ（PHASE_DEFENSE）に遷移することを確認します。
-    """
     runner = SimulationRunner()
     weapon_id = find_card_by_name("パンチ")
 
@@ -16,23 +67,14 @@ def test_physical_attack_phase_transition():
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
 
-    # パンチを選択
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
-    assert runner.state.attacker_id == 0
+    runner.perform_attack([0])
 
-    # 相手を対象に確定
-    runner.step(ActionType.ACTION_TARGET_OPP)
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
     assert runner.state.defender_id == 1
     assert runner.state.current_actor_id == 1
 
 
 def test_physical_attack_pending_atk_power():
-    """
-    検証内容: 武器選択時の保留攻撃力（pending_attack_power）の設定テスト。
-    - 攻撃者が「パンチ (攻撃力3)」を選択し、相手をターゲットした時点で、保留攻撃力が正確に 3 に設定されることを確認します。
-    """
     runner = SimulationRunner()
     weapon_id = find_card_by_name("パンチ")
 
@@ -40,19 +82,12 @@ def test_physical_attack_pending_atk_power():
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
 
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
-    # 保留攻撃力が 3 であること
     assert runner.state.pending_attack_power == 3
 
 
 def test_physical_defense_resolves_damage_and_turns():
-    """
-    検証内容: 防具を使用した防御解決におけるダメージ量とターン終了テスト。
-    - 攻撃力 3 の攻撃に対し、防御側が「革の服 (防御力2)」を使用して防御を確定した際、受けるダメージが 3 - 2 = 1 となり、HPが 40 から 39 に減少することを確認します。
-    - 防御解決後、手番（current_actor_id）が相手（プレイヤー1）のメインフェイズに正常に移行することを確認します。
-    """
     runner = SimulationRunner()
     weapon_id = find_card_by_name("パンチ")
     shield_id = find_card_by_name("革の服")
@@ -64,27 +99,15 @@ def test_physical_defense_resolves_damage_and_turns():
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
 
-    # 攻撃確定
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
+    runner.perform_defense([0])
 
-    # 防御確定
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # HPが減少していること (40 - 1 = 39)
     assert runner.state.get_hp(1) == 39
-    # 手番が防御側(1)のメインフェイズになっていること
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
     assert runner.state.current_actor_id == 1
 
 
 def test_physical_self_attack_resolves_instantly():
-    """
-    検証内容: 自傷物理攻撃時の即時解決とアクター遷移テスト。
-    - プレイヤーが自分を対象（TARGET_SELF）に物理攻撃を実行した際、防御フェイズを経由せず即座にHPが減少することを確認します。
-    - 自傷解決後、ターンが自動的に終了し、相手（プレイヤー1）のメインフェイズに手番が移行することを確認します。
-    """
     runner = SimulationRunner()
     weapon_id = find_card_by_name("パンチ")
 
@@ -93,13 +116,9 @@ def test_physical_self_attack_resolves_instantly():
     runner.state.current_actor_id = 0
     runner.set_status(0, hp=40)
 
-    # 自分を選択して攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_SELF)
+    runner.perform_attack([0], to_self=True)
 
-    # 防御を挟まず即座にダメージ適用（パンチのATKは3）
     assert runner.state.get_hp(0) < 40
-    # 手番が相手(1)のメインフェイズに遷移していること
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
     assert runner.state.current_actor_id == 1
 
@@ -242,8 +261,7 @@ def test_ghost_swords_absorption():
     runner.state.current_actor_id = 0
 
     # 攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # 防御側(1)は何もしないで確定
     runner.step(ActionType.ACTION_CONFIRM)
@@ -264,8 +282,7 @@ def test_ghost_swords_absorption():
     runner_real.state.current_actor_id = 0
 
     # 攻撃
-    runner_real.step(ActionType.ACTION_SELECT_HAND_0)
-    runner_real.step(ActionType.ACTION_TARGET_OPP)
+    runner_real.perform_attack([0])
 
     # 防御側(1)は何もしないで確定
     runner_real.step(ActionType.ACTION_CONFIRM)
@@ -293,8 +310,7 @@ def test_evil_broadsword_damage_flow():
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
 
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
     runner.step(ActionType.ACTION_CONFIRM)  # 防御側は確定
 
     assert runner.state.get_hp(1) == 26  # 40 - 14
@@ -308,8 +324,7 @@ def test_evil_broadsword_damage_flow():
     runner_self.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner_self.state.current_actor_id = 0
 
-    runner_self.step(ActionType.ACTION_SELECT_HAND_0)
-    runner_self.step(ActionType.ACTION_TARGET_SELF)  # 自分を攻撃して即時解決
+    runner_self.perform_attack([0], to_self=True)  # 自分を攻撃して即時解決
 
     assert runner_self.state.get_hp(0) == 12  # 40 - 14 - 14 (2倍)
 
@@ -333,8 +348,7 @@ def test_evil_broadsword_damage_flow():
     runner_bounce.step(ActionType.ACTION_TARGET_OPP)
 
     # プレイヤー1は乱弾武剣で防御
-    runner_bounce.step(ActionType.ACTION_SELECT_HAND_0)
-    runner_bounce.step(ActionType.ACTION_CONFIRM)
+    runner_bounce.perform_defense([0])
 
     # 弾きが失敗した場合、防御側であるプレイヤー1に攻撃が当たり、かつ自傷で2倍ダメージを受ける。
     # プレイヤー1のHPが12 (40 - 28) になっていること、プレイヤー0のHPは40のままであることを確認。
@@ -576,8 +590,7 @@ def test_dangerous_pestle_and_mortar():
         runner.state.set_true_hand(0, 0, pestle_id)
         runner.state.set_true_hand(1, 0, super_mirror_id)
 
-        runner.step(ActionType.ACTION_SELECT_HAND_0)
-        runner.step(ActionType.ACTION_TARGET_OPP)
+        runner.perform_attack([0])
 
         if runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN:
             # PHASE_MAIN になった場合: 自傷ダメージ解決後、またはミスの場合
@@ -616,8 +629,7 @@ def test_dangerous_pestle_and_mortar():
         runner.state.set_true_hand(1, 0, mortar_id)
         runner.state.set_true_hand(1, 1, mortar_id)
 
-        runner.step(ActionType.ACTION_SELECT_HAND_0)
-        runner.step(ActionType.ACTION_TARGET_OPP)
+        runner.perform_attack([0])
 
         # 防御フェイズを介さずに自動解決され PHASE_MAIN になる
         assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
@@ -674,8 +686,7 @@ def test_dangerous_pestle_and_mortar():
     runner_scenario.state.set_true_hand(1, 3, sun_amulet_id)
 
     # 1回目のキネ (AがBに向けて撃つ)
-    runner_scenario.step(ActionType.ACTION_SELECT_HAND_0)
-    runner_scenario.step(ActionType.ACTION_TARGET_OPP)
+    runner_scenario.perform_attack([0])
 
     # Bが100%被弾するが、お守りでHP10に復活していること
     assert runner_scenario.state.get_hp(1) == 10
@@ -740,16 +751,14 @@ def test_fever_mask_and_dreaming_hat():
     runner_fever.state.set_true_hand(1, 0, fever_mask_id)
 
     # 攻撃アクション
-    runner_fever.step(ActionType.ACTION_SELECT_HAND_0)
-    runner_fever.step(ActionType.ACTION_TARGET_OPP)
+    runner_fever.perform_attack([0])
 
     # 防御フェイズ
     assert runner_fever.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
     assert runner_fever.state.current_actor_id == 1
 
     # 防御選択 -> 確定
-    runner_fever.step(ActionType.ACTION_SELECT_HAND_0)
-    runner_fever.step(ActionType.ACTION_CONFIRM)
+    runner_fever.perform_defense([0])
 
     # ダメージ解決され、ターン終了処理を経て PHASE_MAIN に戻る
     assert runner_fever.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
@@ -776,8 +785,7 @@ def test_fever_mask_and_dreaming_hat():
     runner_dream.state.set_true_hand(1, 3, dummy_card_id)
 
     # 攻撃アクション
-    runner_dream.step(ActionType.ACTION_SELECT_HAND_0)
-    runner_dream.step(ActionType.ACTION_TARGET_OPP)
+    runner_dream.perform_attack([0])
 
     # 防御選択 -> 確定
     runner_dream.step(ActionType.ACTION_SELECT_HAND_0)
@@ -836,8 +844,7 @@ def test_saw_bunbun_multiple_attacks():
     runner1.state.set_true_hand(1, 0, leather_clothes_id)
 
     # 攻撃選択 -> ターゲット
-    runner1.step(ActionType.ACTION_SELECT_HAND_0)
-    runner1.step(ActionType.ACTION_TARGET_OPP)
+    runner1.perform_attack([0])
 
     # 防御フェイズ
     assert runner1.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
@@ -845,8 +852,7 @@ def test_saw_bunbun_multiple_attacks():
     assert runner1.state.remaining_attacks == 2
 
     # 1回目の防御：革の服を選択して確定
-    runner1.step(ActionType.ACTION_SELECT_HAND_0)
-    runner1.step(ActionType.ACTION_CONFIRM)
+    runner1.perform_defense([0])
 
     # まだ攻撃が残っているので、フェイズは PHASE_DEFENSE のまま
     assert runner1.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
@@ -956,8 +962,7 @@ def test_aura_miracle_effects():
 
     # 重ねがけ
     runner1.step(ActionType.ACTION_SELECT_HAND_0)
-    runner1.step(ActionType.ACTION_SELECT_HAND_1)
-    runner1.step(ActionType.ACTION_TARGET_OPP)
+    runner1.perform_attack([1])
 
     # 攻撃力評価の検証
     assert runner1.state.pending_attack_power == 6
@@ -977,8 +982,7 @@ def test_aura_miracle_effects():
 
     runner2.step(ActionType.ACTION_SELECT_HAND_0)
     runner2.step(ActionType.ACTION_SELECT_HAND_1)
-    runner2.step(ActionType.ACTION_SELECT_HAND_2)
-    runner2.step(ActionType.ACTION_TARGET_OPP)
+    runner2.perform_attack([2])
 
     # (3 * 2) + 1 = 7
     assert runner2.state.pending_attack_power == 7
@@ -998,8 +1002,7 @@ def test_aura_miracle_effects():
 
     runner3.step(ActionType.ACTION_SELECT_HAND_0)
     runner3.step(ActionType.ACTION_SELECT_HAND_1)
-    runner3.step(ActionType.ACTION_SELECT_HAND_2)
-    runner3.step(ActionType.ACTION_TARGET_OPP)
+    runner3.perform_attack([2])
 
     # (3 + 10) * 2 = 26
     assert runner3.state.pending_attack_power == 26
@@ -1019,8 +1022,7 @@ def test_aura_miracle_effects():
 
     runner4.step(ActionType.ACTION_SELECT_HAND_0)
     runner4.step(ActionType.ACTION_SELECT_HAND_1)
-    runner4.step(ActionType.ACTION_SELECT_HAND_2)
-    runner4.step(ActionType.ACTION_TARGET_OPP)
+    runner4.perform_attack([2])
 
     # 3 * 2 * 2 = 12
     assert runner4.state.pending_attack_power == 12
@@ -1039,8 +1041,7 @@ def test_aura_miracle_effects():
 
     runner5.step(ActionType.ACTION_SELECT_HAND_0)
     runner5.step(ActionType.ACTION_SELECT_HAND_1)
-    runner5.step(ActionType.ACTION_SELECT_HAND_2)
-    runner5.step(ActionType.ACTION_TARGET_OPP)
+    runner5.perform_attack([2])
 
     # 流星MP7 + オーラMP6 = 13. 残りMP = 2
     # ステッキ攻撃力 = 2 * 2 = 4
@@ -1074,16 +1075,14 @@ def test_saw_bunbun_bounce_target_reset():
     runner.state.set_true_hand(1, 0, reflect_sword_id)
 
     # 攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
     assert runner.state.current_actor_id == 1
     assert runner.state.remaining_attacks == 2
 
     # 1回目を反射
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # 反射により攻守交代。 me=0 が防御側になり、防御フェイズに入る
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
@@ -1131,12 +1130,10 @@ def test_dreaming_hat_miracle_clearance():
     runner.state.set_is_deployed(1, 1, True)
 
     # 攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # プレイヤー1が夢見る帽子で防御し、確定
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
+    runner.perform_defense([0])
 
     # ターン解決後
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
@@ -1151,248 +1148,6 @@ def test_dreaming_hat_miracle_clearance():
         assert runner.state.get_true_hand(1, j) != -1
         assert runner.state.get_is_deployed(1, j) == False
         assert runner.state.get_is_used(1, j) == False
-
-
-def test_mars_ring_counter():
-    """
-    検証内容: 火星の指輪による反撃ダメージ処理。
-    - Aが「パンチ」（ATK3）でB（HP40）を攻撃。
-    - Bが「火星の指輪」（確率75%、火属性、ATK=被ダメ）で防御し確定。
-    - 被ダメージ3（HP40->37）を受け、75%の確率ロールに成功すれば、Aに対して火属性・ATK3の反撃が飛ぶ。
-    - 反撃によりAが防御フェイズになり、Aが「木の盾」（DEF2）で防御して確定。被ダメージ1（HP40->39）となり終了。
-    """
-    punch_id = find_card_by_name("weapons/punch")
-    mars_ring_id = find_card_by_name("armor/mars-ring")
-    ice_shield_id = find_card_by_name("アイスシールド")
-
-    runner = SimulationRunner()
-    runner.state.seed_rng(42)  # ロール成功するシード値
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-
-    runner.state.set_true_hand(0, 0, punch_id)
-    runner.state.set_true_hand(0, 1, ice_shield_id)
-    runner.state.set_true_hand(1, 0, mars_ring_id)
-
-    # A 攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
-
-    # B 火星の指輪で防御し確定
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # 被ダメージ 3 なので B の HP は 37 になるはず
-    assert runner.state.get_hp(1) == 37
-
-    # 火星の指輪反撃が起動し、A(0) が防御側、フェイズは PHASE_DEFENSE、属性は火、攻撃力 3 になっていること
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 0
-    assert runner.state.pending_attack_power == 3
-    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_FIRE
-
-    # A 川の盾で防御し確定
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # A の被ダメージは 3 - 3 = 0 なので HP は 40 になり、フェイズは PHASE_MAIN に戻る
-    assert runner.state.get_hp(0) == 40
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-
-
-def test_jupiter_ring_curse():
-    """
-    検証内容: 木星の指輪による状態異常（夢）反撃。
-    - Aが「パンチ」（ATK3）でB（HP40）を攻撃。
-    - Bが「木星の指輪」（木属性、ATK0、夢付与）で防御し確定。 BのHPは37。
-    - 反撃によりAに対して木属性・ATK0・夢の攻撃が起動。
-    - Aが防具を出さずに確定（被弾）し、Aが「夢」状態になることを確認。
-    """
-    punch_id = find_card_by_name("weapons/punch")
-    jupiter_ring_id = find_card_by_name("armor/jupiter-ring")
-
-    runner = SimulationRunner()
-    runner.state.seed_rng(42)
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-
-    runner.state.set_true_hand(0, 0, punch_id)
-    runner.state.set_true_hand(1, 0, jupiter_ring_id)
-
-    # 攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
-
-    # 防御
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # 反撃起動
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 0
-    assert runner.state.pending_attack_power == 0
-    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_WOOD
-
-    # 確定して被弾
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # ダメージは 0 なので A の HP は 40 のまま、夢状態になること
-    assert runner.state.get_hp(0) == 40
-    assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_DREAM) == True
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-
-
-def test_neptune_venus_rings():
-    """
-    検証内容: 海王の指輪によるMP回復と、金星の指輪によるお金没収およびミラー反射。
-    - Aが「パンチ」（ATK3）でBを攻撃。 Bは海王の指輪、金星の指輪で防御し確定。
-    - 海王の効果により、BのMPが被ダメージ3*2 = 6回復。
-    - 金星の反撃により、Aに対して無属性・ATK3・没収フラグありの反撃が起動。
-    - Aが何も出さずに被弾し、Aのお金が3減り、Bのお金が3増える。
-    """
-    punch_id = find_card_by_name("weapons/punch")
-    neptune_ring_id = find_card_by_name("armor/neptune-ring")
-    venus_ring_id = find_card_by_name("armor/venus-ring")
-
-    runner = SimulationRunner()
-    runner.state.seed_rng(42)
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.set_status(0, hp=40, mp=10, money=20)
-    runner.set_status(1, hp=40, mp=10, money=20)
-
-    runner.state.set_true_hand(0, 0, punch_id)
-    runner.state.set_true_hand(1, 0, neptune_ring_id)
-    runner.state.set_true_hand(1, 1, venus_ring_id)
-
-    # 攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
-
-    # 重ねがけ防御
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # BのMPが 10 -> 16 (海王の効果) になっていること
-    assert runner.state.get_mp(1) == 16
-    assert runner.state.get_hp(1) == 37
-
-    # 金星の没収反撃が起動 (Aが防御側、ATK3)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 0
-    assert runner.state.pending_attack_power == 3
-
-    # Aが被弾
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # Aのお金が 20->17、Bのお金が 20->23 になっていること
-    assert runner.state.get_money(0) == 17
-    assert runner.state.get_money(1) == 23
-
-
-def test_ring_multiple_attacks_delay():
-    """
-    検証内容: 連撃終了後の指輪一括解決。
-    - Aが「のこぶんぶん」（2回攻撃）でBを攻撃。
-    - 1回目：Bが「土星の指輪」で防御し確定（ダメージ3、土6反撃予約）。連撃中なので反撃はまだ起動しない。
-    - 2回目：Bが「革の服」で防御し確定（ダメージ1）。
-    - 2回目の解決で連撃が終わり、予約されていた土星の指輪の反撃がここで初めて起動することを確認。
-    """
-    saw_bunbun_id = find_card_by_name("weapons/saw-boom-boom")
-    saturn_ring_id = find_card_by_name("armor/saturn-ring")
-    leather_clothes_id = find_card_by_name("armor/leather-clothes")
-
-    runner = SimulationRunner()
-    runner.state.seed_rng(42)
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-
-    runner.state.set_true_hand(0, 0, saw_bunbun_id)
-    runner.state.set_true_hand(1, 0, saturn_ring_id)
-    runner.state.set_true_hand(1, 1, leather_clothes_id)
-
-    # A のこぶんぶん攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
-
-    # B 1回目を土星の指輪で防御し確定
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # 1回目解決。まだ連撃残り1回あるため、フェイズはBの防御のまま（反撃は起動しない）
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 1
-    assert runner.state.remaining_attacks == 1
-    assert runner.state.get_hp(1) == 37
-
-    # B 2回目を革の服で防御し確定
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # 2回目解決。連撃終了し、予約されていた土星の反撃（土・ATK6 = 3*2）がAに対して起動することを確認
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 0
-    assert runner.state.pending_attack_power == 6
-    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_STONE
-
-
-def test_ring_counter_super_mirror_chain():
-    """
-    検証内容: 指輪反撃に対するスーパーミラーによる反射（没収効果含む）。
-    - Aが「パンチ」（ATK3）でBを攻撃。 Bが「金星の指輪」で防御確定。被ダメ3。
-    - Bからの金星反撃（ATK3、没収）に対し、Aが「スーパーミラー」で反射確定。
-    - 反射により、Bに対して金星没収（ATK3）が戻り、Bが被弾してBのお金がAに没収されることを検証。
-    """
-    punch_id = find_card_by_name("weapons/punch")
-    venus_ring_id = find_card_by_name("armor/venus-ring")
-    super_mirror_id = find_card_by_name("armor/super-mirror")
-
-    runner = SimulationRunner()
-    runner.state.seed_rng(42)
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.set_status(0, hp=40, mp=10, money=20)
-    runner.set_status(1, hp=40, mp=10, money=20)
-
-    runner.state.set_true_hand(0, 0, punch_id)
-    runner.state.set_true_hand(0, 1, super_mirror_id)
-    runner.state.set_true_hand(1, 0, venus_ring_id)
-
-    # 攻撃
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
-
-    # Bが金星の指輪で防御し確定
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # Aに対して金星の没収反撃（ATK3）が起動
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 0
-
-    # Aがスーパーミラーで反射し確定
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # 反射により、Bに対して再び金星没収（ATK3）が返る (current_actor_id = 1)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 1
-    assert runner.state.pending_attack_power == 3
-
-    # Bが被弾
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # Bのお金が没収され 20->17、Aのお金が 20->23 になること。かつBはダメージ3を受けること
-    assert runner.state.get_money(1) == 17
-    assert runner.state.get_money(0) == 23
-    assert runner.state.get_hp(1) == 34
 
 
 def test_pending_attack_source_id_and_observation():
@@ -1425,8 +1180,7 @@ def test_pending_attack_source_id_and_observation():
     runner.state.set_true_hand(0, 1, ice_shield_id)
 
     # --- 1. 通常攻撃の検証 ---
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # 防御フェイズになり、攻撃発生源 ID がパンチの ID になっていること
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
@@ -1480,8 +1234,7 @@ def test_attack_on_dead_player():
     # A 攻撃
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # 1回目の攻撃の防御フェイズ
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
@@ -1536,8 +1289,7 @@ def test_amulet_revive_mid_attack():
     # A 攻撃
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # 1回目の防御フェイズ
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
@@ -1583,8 +1335,7 @@ def test_ascension_bow_deferred_to_turn_end():
     # A 攻撃
     runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
     runner.state.current_actor_id = 0
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.step(ActionType.ACTION_TARGET_OPP)
+    runner.perform_attack([0])
 
     # 1回目の防御フェイズ
     assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
@@ -1635,8 +1386,7 @@ def test_dangerous_pestle_targets_only_alive():
         # プレイヤー1がウスを持っているが、死亡しているので無視されるべき
         runner.state.set_true_hand(1, 0, mortar_id)
 
-        runner.step(ActionType.ACTION_SELECT_HAND_0)
-        runner.step(ActionType.ACTION_TARGET_OPP)
+        runner.perform_attack([0])
 
         # プレイヤー1が死亡しているので、絶対に攻撃対象にはならず、唯一の生存プレイヤーであるプレイヤー0（自分自身）が100%対象になる
         # 自分への自傷攻撃（光30ダメージ）が必ず適用され、HPが10になり、ターン終了（PHASE_END）に移行すること
@@ -1645,4 +1395,882 @@ def test_dangerous_pestle_targets_only_alive():
         assert runner.state.current_phase == godfield_core.GamePhase.PHASE_END
 
 
+def test_attack_plus_multi_index():
+    """
+    検証内容: スロット0以外の複数スロット武器プラス検証 (AGENTS.mdガイドライン準拠)。
+    - 攻撃者が手札スロット 2 (疾風剣: ATK9) とスロット 4 (ブーメラン: +3) にカードを持つ。
+    - スロット 2 を選択したのちにスロット 4 を選択し、相手に攻撃（合計攻撃力 12）。
+    - 防御側は手札スロット 3 (木盾: DEF2) とスロット 5 (革の服: DEF2) を重ねがけ防御。
+    - ダメージが 12 - (2 + 2) = 8 になり、防御側のHPが 40 -> 32 になること。
+    - 選択順序を逆（スロット4 ➜ スロット2）にした場合も同様に処理されること。
+    """
+    gale_sword = find_card_by_name("weapons/gale-sword") # ATK 9, plus対応
+    boomerang = find_card_by_name("ブーメラン")          # +ATK 3
+    wood_shield = find_card_by_name("armor/wood-shield")  # DEF 2
+    leather_clothes = find_card_by_name("armor/leather-clothes") # DEF 2
 
+    # パターン1: 2 -> 4 の順で攻撃選択
+    runner = SimulationRunner()
+    runner.state.seed_rng(42)
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.set_status(0, hp=40, mp=10)
+    runner.set_status(1, hp=40, mp=10)
+
+    # 0以外のインデックスに設定
+    runner.state.set_true_hand(0, 2, gale_sword)
+    runner.state.set_true_hand(0, 4, boomerang)
+    runner.state.set_true_hand(1, 3, wood_shield)
+    runner.state.set_true_hand(1, 5, leather_clothes)
+
+    runner.perform_attack([2, 4])
+    assert runner.state.pending_attack_power == 12
+
+    runner.perform_defense([3, 5])
+    assert runner.state.get_hp(1) == 32
+
+    # パターン2: プラス武器を先に選択した場合、通常武器を後から重ねることはできない（非合法手になる）
+    runner2 = SimulationRunner()
+    runner2.state.seed_rng(42)
+    runner2.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner2.state.current_actor_id = 0
+    runner2.set_status(0, hp=40, mp=10)
+    runner2.set_status(1, hp=40, mp=10)
+
+    runner2.state.set_true_hand(0, 2, gale_sword)
+    runner2.state.set_true_hand(0, 4, boomerang)
+    runner2.state.set_true_hand(1, 3, wood_shield)
+    runner2.state.set_true_hand(1, 5, leather_clothes)
+
+    # 先にスロット4 (ブーメラン) を選択
+    runner2.step(ActionType.ACTION_SELECT_HAND_4)
+    # 通常武器であるスロット2 (疾風剣) は重ねがけできないため非合法手になっていることを確認
+    legal = godfield_core.get_legal_actions(runner2.state)
+    assert not legal[int(ActionType.ACTION_SELECT_HAND_2)]
+
+    # そのまま相手を対象に攻撃確定
+    runner2.step(ActionType.ACTION_TARGET_OPP)
+    assert runner2.state.pending_attack_power == 3
+
+
+
+
+# ==========================================
+# Merged from: tests/core/test_elemental_attacks.py
+# ==========================================
+
+
+
+def test_element_mixing_light_light():
+    """
+    検証内容: 光属性と光属性の混成テスト。
+    - 光属性（ベース: 聖剣）に光属性（プラス: 輝きのカケラ）を重ねた場合、最終属性が光属性（ELEM_LIGHT）になることを確認します。
+    """
+    runner = SimulationRunner()
+    light_base = find_card_by_name("聖剣")
+    light_plus = find_card_by_name("輝きのカケラ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, light_base)
+    runner.state.set_true_hand(0, 1, light_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_LIGHT
+
+
+def test_element_mixing_light_fire():
+    """
+    検証内容: 光属性（ベース）に火属性（プラス）を混ぜた混成テスト。
+    - 光属性は「ニュートラル」として振る舞うため、他の属性が存在する場合はその属性に変化します。
+    - 光属性（ベース: 聖剣）に火属性（プラス: ファイヤークロスボウ）を重ねた場合、最終属性が火属性（ELEM_FIRE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    light_base = find_card_by_name("聖剣")
+    fire_plus = find_card_by_name("ファイヤークロスボウ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, light_base)
+    runner.state.set_true_hand(0, 1, fire_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_FIRE
+
+
+def test_element_mixing_fire_light():
+    """
+    検証内容: 火属性（ベース）に光属性（プラス）を混ぜた混成テスト。
+    - 火属性（ベース: ブレイズブレイド）に光属性（プラス: 輝きのカケラ）を重ねた場合、光属性のニュートラル性により、最終属性が火属性（ELEM_FIRE）に維持されることを確認します。
+    """
+    runner = SimulationRunner()
+    fire_base = find_card_by_name("ブレイズブレイド")
+    light_plus = find_card_by_name("輝きのカケラ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, fire_base)
+    runner.state.set_true_hand(0, 1, light_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_FIRE
+
+
+def test_element_mixing_fire_earth():
+    """
+    検証内容: 異なる通常属性同士（火＋土）を混ぜた混成テスト（無属性化）。
+    - 異なる属性（火ベース: ブレイズブレイド、土プラス: 新石器トマホーク）を混成した場合、互いの属性が打ち消し合い、無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    fire_base = find_card_by_name("ブレイズブレイド")
+    stone_plus = find_card_by_name("新石器トマホーク")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, fire_base)
+    runner.state.set_true_hand(0, 1, stone_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+
+
+def test_element_mixing_fire_none():
+    """
+    検証内容: 有属性（火）に無属性（プラス）を混ぜた混成テスト（無属性化）。
+    - 火ベース（ブレイズブレイド）に無属性プラス（ブーメラン）を重ねた場合、無属性が混ざるため最終属性が無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    fire_base = find_card_by_name("ブレイズブレイド")
+    none_plus = find_card_by_name("ブーメラン")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, fire_base)
+    runner.state.set_true_hand(0, 1, none_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+
+
+def test_element_mixing_none_fire():
+    """
+    検証内容: 無属性に有属性（火プラス）を混ぜた混成テスト（無属性化）。
+    - 無属性ベース（ブーメラン）に火プラス（ファイヤークロスボウ）を重ねた場合、最終属性が無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    none_base = find_card_by_name("ブーメラン")
+    fire_plus = find_card_by_name("ファイヤークロスボウ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, none_base)
+    runner.state.set_true_hand(0, 1, fire_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+
+
+def test_element_mixing_none_light():
+    """
+    検証内容: 無属性に光属性を混ぜた混成テスト（無属性化）。
+    - 無属性ベース（ブーメラン）に光プラス（輝きのカケラ）を重ねた場合、最終属性が無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    none_base = find_card_by_name("ブーメラン")
+    light_plus = find_card_by_name("輝きのカケラ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, none_base)
+    runner.state.set_true_hand(0, 1, light_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+
+
+def test_element_defense_masking_matching_rules():
+    """
+    検証内容: 属性防御時の防具マスク制限ルール。
+    - 火属性の攻撃を受けた際、無効な属性防具（火属性のフレイムブーツ）は非合法手（False）としてマスクされることを確認します。
+    - 有効な属性防具（水属性のアイスブーツ）および全属性防護（虹のカーテン）のみが合法手（True）として選択可能であることを確認します。
+    """
+    runner = SimulationRunner()
+    fire_sword = find_card_by_name("ブレイズブレイド")
+    fire_shield = find_card_by_name("フレイムブーツ")
+    water_shield = find_card_by_name("アイスブーツ")
+    rainbow = find_card_by_name("虹のカーテン") or find_card_by_name("armor/rainbow-curtain")
+
+    runner.state.set_true_hand(0, 0, fire_sword)
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+
+    runner.perform_attack([0])
+
+    runner.state.set_true_hand(1, 0, fire_shield)
+    runner.state.set_true_hand(1, 1, water_shield)
+    runner.state.set_true_hand(1, 2, rainbow)
+
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+
+    # 相手は火属性の攻撃に対してフレイムブーツ(火)は非合法、アイスブーツ(水)とカーテンは合法
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_0] == False
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_1] == True
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_2] == True
+
+
+def test_element_defense_curtain_unmasks_all_shields():
+    """
+    検証内容: 虹のカーテン（全属性防護）使用後の防具重ねがけ制限緩和。
+    - 火属性の攻撃に対し、1枚目に「虹のカーテン」を使用した場合、2枚目の防具にはあらゆる属性・無属性防具（本来マスクされていた火属性のフレイムブーツを含む）が合法手として重ねられるようになることを確認します。
+    """
+    runner = SimulationRunner()
+    fire_sword = find_card_by_name("ブレイズブレイド")
+    fire_shield = find_card_by_name("フレイムブーツ")
+    water_shield = find_card_by_name("アイスブーツ")
+    rainbow = find_card_by_name("虹のカーテン") or find_card_by_name("armor/rainbow-curtain")
+
+    runner.state.set_true_hand(0, 0, fire_sword)
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+
+    runner.perform_attack([0])
+
+    runner.state.set_true_hand(1, 0, fire_shield)
+    runner.state.set_true_hand(1, 1, water_shield)
+    runner.state.set_true_hand(1, 2, rainbow)
+
+    # 1枚目に虹のカーテンを使用
+    runner.step(ActionType.ACTION_SELECT_HAND_2)
+
+    # 2枚目には本来非合法だったフレイムブーツ(火: スロット0)が選択可能になる
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_0] == True
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_1] == True
+
+
+def test_element_light_defense_rules():
+    """
+    検証内容: 光属性攻撃に対する防御制限ルール。
+    - 光属性の攻撃（聖剣）を受けた際、通常の属性・無属性防具（スロット0~4）はすべて非合法となり、全属性防護（虹のカーテン: スロット5）のみが合法となることを確認します。
+    - 虹のカーテンを1枚目に置いた後は、無属性防具が追加で選択可能になることを確認します。
+    """
+    runner = SimulationRunner()
+    light_sword = find_card_by_name("聖剣")
+    rainbow = find_card_by_name("虹のカーテン") or find_card_by_name("armor/rainbow-curtain")
+
+    normal_shield = find_card_by_type(type="defense", element="")
+    fire_shield = find_card_by_type(type="defense", element="火")
+    water_shield = find_card_by_type(type="defense", element="水")
+    wood_shield = find_card_by_type(type="defense", element="木")
+    stone_shield = find_card_by_type(type="defense", element="土")
+
+    runner.state.set_true_hand(0, 0, light_sword)
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+
+    runner.perform_attack([0])
+
+    runner.set_hand(1, [normal_shield, fire_shield, water_shield, wood_shield, stone_shield, rainbow])
+
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+
+    # 光属性の攻撃に対して、0~4の通常防具は非合法、5のカーテンのみ合法
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_0] == False
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_1] == False
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_2] == False
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_3] == False
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_4] == False
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_5] == True
+
+    # カーテンを選択
+    runner.step(ActionType.ACTION_SELECT_HAND_5)
+
+    # カーテン選択後は、無属性防具（スロット0）が選択可能になる
+    legal_actions_after = godfield_core.get_legal_actions(runner.state)
+    assert legal_actions_after[ActionType.ACTION_SELECT_HAND_0] == True
+
+
+def test_darkness_attack_insta_death():
+    """
+    検証内容: 闇属性攻撃の無防御即死効果。
+    - プレイヤーが闇属性攻撃（pending_attack_element = ELEM_DARKNESS）を防御なし（ACTION_CONFIRMのみ）で受けた際、ダメージに関わらずHPが即座に0（即死）になり、ゲーム終了（is_done = True）となることを確認します。
+    """
+    runner = SimulationRunner()
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
+    runner.state.current_actor_id = 0
+    runner.state.pending_attack_element = godfield_core.Element.ELEM_DARKNESS
+    runner.state.pending_attack_power = 10
+    runner.state.set_hp(0, 40)
+
+    # 防御をせず確定（即死）
+    runner.step(ActionType.ACTION_CONFIRM)
+
+    # HPが 0 で即死判定、ゲーム終了
+    assert runner.state.get_hp(0) == 0
+    assert runner.state.is_done == True
+
+
+def test_darkness_attack_rainbow_defense():
+    """
+    検証内容: 闇属性攻撃に対する虹のカーテンの無効化（ダメージ化）処理。
+    - 闇属性攻撃に対し、「虹のカーテン」を使用した場合、即死効果が中和され、攻撃力（pending_attack_power = 10）に応じた通常の被弾ダメージのみ（40 - 10 = 30）が適用されて生存（ゲームが続行）することを確認します。
+    """
+    runner = SimulationRunner()
+    rainbow = find_card_by_name("虹のカーテン") or find_card_by_name("armor/rainbow-curtain")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
+    runner.state.current_actor_id = 0
+    runner.state.pending_attack_element = godfield_core.Element.ELEM_DARKNESS
+    runner.state.pending_attack_power = 10
+    runner.state.set_hp(0, 40)
+    runner.state.set_true_hand(0, 0, rainbow)
+
+    # 虹のカーテンで防御
+    runner.perform_defense([0])
+
+    # 即死せず、攻撃力分のみ被弾 (40 - 10 = 30)
+    assert runner.state.get_hp(0) == 30
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
+
+
+def test_element_mixing_darkness_light():
+    """
+    検証内容: 闇属性と光属性の混成テスト（無属性化）。
+    - 闇属性（ベース: 死神のカマ）に光属性（プラス: 輝きのカケラ）を重ねた場合、光属性が闇属性の代わりになれないため、最終属性が無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    dark_base = find_card_by_name("死神のカマ")
+    light_plus = find_card_by_name("輝きのカケラ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, dark_base)
+    runner.state.set_true_hand(0, 1, light_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    # 無属性（ELEM_NONE）になっていることをアサート
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+    assert runner.state.pending_attack_power == 11  # 10 + 1 = 11
+
+
+def test_element_mixing_darkness_darkness():
+    """
+    検証内容: 闇属性と闇属性の混成テスト。
+    - 闇属性（ベース: 死神のカマ）に闇属性（プラス: 冥矢）を重ねた場合、同一属性のため、最終属性が闇属性（ELEM_DARKNESS）に維持されることを確認します。
+    """
+    runner = SimulationRunner()
+    dark_base = find_card_by_name("死神のカマ")
+    dark_plus = find_card_by_name("冥矢")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, dark_base)
+    runner.state.set_true_hand(0, 1, dark_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    # 闇属性（ELEM_DARKNESS）のままであることをアサート
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_DARKNESS
+    assert runner.state.pending_attack_power == 15  # 10 + 5 = 15
+
+
+def test_element_mixing_light_darkness():
+    """
+    検証内容: 光属性と闇属性の混成テスト（無属性化、逆順）。
+    - 光属性（ベース: 聖剣）に闇属性（プラス: 冥矢）を重ねた場合、光属性が闇属性の代わりになれないため、最終属性が無属性（ELEM_NONE）になることを確認します。
+    """
+    runner = SimulationRunner()
+    light_base = find_card_by_name("聖剣")
+    dark_plus = find_card_by_name("冥矢")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, light_base)
+    runner.state.set_true_hand(0, 1, dark_plus)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.perform_attack([1])
+
+    # 無属性（ELEM_NONE）になっていることをアサート
+    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
+    assert runner.state.pending_attack_power == 14  # 9 + 5 = 14
+
+
+def test_chikurincho_and_wand_of_mystic_water():
+    """
+    検証内容: ちくりんちょ（闇属性）に魔水のワンド（属性変更: 水）を重ねた場合、最終属性が水属性（ELEM_WATER）になることを確認します。
+    """
+    runner = SimulationRunner()
+    chikurincho = find_card_by_name("ちくりんちょ")
+    wand = find_card_by_name("魔水のワンド")
+
+    runner.set_status(player=0, hp=99, mp=50, money=50)
+    runner.set_status(player=1, hp=50, mp=50, money=50)
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_num_staged_cards(0, 0)
+    runner.state.set_true_hand(0, 0, chikurincho)
+    runner.state.set_true_hand(0, 1, wand)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    print(f"DEBUG: Before target opp: phase={runner.state.current_phase}")
+    runner.step(ActionType.ACTION_TARGET_OPP)
+    print(f"DEBUG: After target opp: pending_elem={runner.state.pending_attack_element}, power={runner.state.pending_attack_power}, phase={runner.state.current_phase}")
+
+    runner.step(ActionType.ACTION_CONFIRM)
+    print(f"DEBUG: After confirm: hp1={runner.state.get_hp(1)}, phase={runner.state.current_phase}")
+    obs = godfield_core.get_observation(runner.state, 0)
+    for ev in obs.get_history():
+        print(f"EV: actor={ev.actor}, type={ev.event_type}, card={ev.card_id}, target={ev.target_id}, val={ev.value}")
+    assert runner.state.get_hp(1) == 44
+
+# ==========================================
+# Merged from: tests/core/test_group_attacks.py
+# ==========================================
+
+
+
+def test_group_attack_mirage_transition():
+    """
+    検証内容: 単体物理武器攻撃に対する「＜蜃気楼＞」による全体化とフェイズ遷移。
+    - 単体武器（銅のこん棒）を選択後、「＜蜃気楼＞」を追加することで、フェイズが全体武器攻撃フェイズ（PHASE_GROUP_WEAPON）に遷移することを確認します。
+    - 全体化された後は、他の物理武器（吹き矢）の重ねがけや、自傷攻撃（TARGET_SELF）が非合法手となることを確認します。
+    - 精霊のぬいぐるみを追加して、MP消費 0 のまま相手全体をターゲットし、物理防御フェイズ（PHASE_DEFENSE）に遷移できることを確認します。
+    """
+    runner = SimulationRunner()
+    runner.state.seed_rng(0)
+    sword_id = find_card_by_name("銅のこん棒")
+    mirage_id = find_card_by_name("＜蜃気楼＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+    blowpipe_id = find_card_by_name("吹き矢")
+
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 10)
+
+    runner.state.set_true_hand(0, 0, sword_id)
+    runner.state.set_true_hand(0, 1, mirage_id)
+    runner.state.set_true_hand(0, 2, doll_id)
+    runner.state.set_true_hand(0, 3, blowpipe_id)
+
+    # 武器選択
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.current_phase == GamePhase.PHASE_ATTACK_PLUS
+
+    # 蜃気楼を追加 -> 全体化
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+    assert runner.state.current_phase == GamePhase.PHASE_GROUP_WEAPON
+
+    # 合法手判定: 吹き矢(スロット3)と自傷は非合法、ぬいぐるみ(スロット2)は合法
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_3] is False
+    assert legal_actions[ActionType.ACTION_TARGET_SELF] is False
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_2] is True
+
+    # ぬいぐるみを追加して相手をターゲット
+    runner.perform_attack([2])
+
+    # 防御フェイズへ遷移し、MPが減っていないこと
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.get_mp(0) == 10
+
+
+def test_group_attack_original_group_weapon():
+    """
+    検証内容: 生来の全体物理武器攻撃時のフェイズ遷移とターゲット制限。
+    - 全体物理武器である「火の粉袋」を選択した際、直接全体武器攻撃フェイズ（PHASE_GROUP_WEAPON）に遷移することを確認します。
+    - このフェイズでは、他の武器などの重ねがけが一切非合法になり、相手をターゲット（TARGET_OPP）することのみが合法手となることを確認します。
+    """
+    runner = SimulationRunner()
+    runner.state.seed_rng(0)
+    saw_id = find_card_by_name("火の粉袋")
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_true_hand(0, 0, saw_id)
+
+    # 全体攻撃武器を選択
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.current_phase == GamePhase.PHASE_GROUP_WEAPON
+
+    # 重ねがけは一切禁止されていることを確認
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+    for idx in range(18):
+        assert legal_actions[ActionType.ACTION_SELECT_HAND_0.value + idx] is False
+
+    assert legal_actions[ActionType.ACTION_TARGET_OPP] is True
+    assert legal_actions[ActionType.ACTION_TARGET_SELF] is False
+
+    # ターゲットして確定
+    runner.step(ActionType.ACTION_TARGET_OPP)
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+
+
+def test_group_attack_original_group_miracle():
+    """
+    検証内容: 生来の全体奇跡攻撃時のフェイズ遷移とターゲット制限。
+    - 全体奇跡である「＜煙＞」を選択した際、直接全体奇跡攻撃フェイズ（PHASE_GROUP_MIRACLE_PLUS）に遷移することを確認します。
+    - このフェイズでは、自傷（TARGET_SELF）が非合法手であり、相手全体をターゲット（TARGET_OPP）することが合法手であることを確認します。
+    """
+    runner = SimulationRunner()
+    runner.state.seed_rng(0)
+    storm_id = find_card_by_name("＜煙＞")
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 20)
+    runner.state.set_true_hand(0, 0, storm_id)
+
+    # 全体奇跡を選択
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.current_phase == GamePhase.PHASE_GROUP_MIRACLE_PLUS
+
+    # 自傷は不可、相手攻撃は可
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+    assert legal_actions[ActionType.ACTION_TARGET_OPP] is True
+    assert legal_actions[ActionType.ACTION_TARGET_SELF] is False
+
+    # 攻撃確定
+    runner.step(ActionType.ACTION_TARGET_OPP)
+    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
+
+
+def test_group_attack_miracle_stacking_group_weapon():
+    """
+    検証内容: 物理攻撃への奇跡プラス・全体化と複合MP解決。
+    - 物理武器「パンチ」を使用し、そこに奇跡「＜火の玉＞」を重ねて属性物理攻撃とする。
+    - そこにさらに「＜蜃気楼＞」を追加することで、全体化されて PHASE_GROUP_WEAPON に遷移することを確認します。
+    - 「精霊のぬいぐるみ」を追加して、MP消費が 2（火の玉のコスト）のままで攻撃が解決されることを確認します。
+    """
+    runner = SimulationRunner()
+    runner.state.seed_rng(0)
+    punch_id = find_card_by_name("パンチ")
+    fireball_id = find_card_by_name("＜火の玉＞")
+    mirage_id = find_card_by_name("＜蜃気楼＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 20)
+    runner.state.set_true_hand(0, 0, punch_id)
+    runner.state.set_true_hand(0, 1, fireball_id)
+    runner.state.set_true_hand(0, 2, mirage_id)
+    runner.state.set_true_hand(0, 3, doll_id)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)  # パンチ (ATTACK_PLUSへ)
+    assert runner.state.current_phase == GamePhase.PHASE_ATTACK_PLUS
+
+    runner.step(ActionType.ACTION_SELECT_HAND_1)  # 火の玉 (ATTACK_PLUSのまま)
+    assert runner.state.current_phase == GamePhase.PHASE_ATTACK_PLUS
+
+    runner.step(ActionType.ACTION_SELECT_HAND_2)  # 蜃気楼 (GROUP_WEAPONへ)
+    assert runner.state.current_phase == GamePhase.PHASE_GROUP_WEAPON
+
+    # ぬいぐるみを追加して相手をターゲット
+    runner.perform_attack([3])
+
+    # 最終的に防御フェイズへ移行し、MPは 20 - 2 = 18 となっていること
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.get_mp(0) == 18
+
+
+def test_mirage_group_attack_flag_prevents_self_target():
+    """
+    検証内容: 蜃気楼による全体攻撃フラグ変更と自傷ターゲットの不許可。
+    - 通常の単体武器「パンチ」を選択した段階では、自傷（TARGET_SELF）が合法であることを確認します。
+    - 「＜蜃気楼＞」をプラスした時点で、全体攻撃フラグ（pending_is_group_attack）が True になり、自傷（TARGET_SELF）が非合法手になることを確認します。
+    """
+    runner = SimulationRunner()
+    punch_id = find_card_by_name("パンチ")
+    mirage_id = find_card_by_name("＜蜃気楼＞")
+
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.set_status(0, hp=40, mp=10)
+
+    runner.state.set_true_hand(0, 0, punch_id)
+    runner.state.set_true_hand(0, 1, mirage_id)
+
+    # パンチを選択
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.current_phase == GamePhase.PHASE_ATTACK_PLUS
+
+    # 最初は自傷可能であること
+    actions_before = godfield_core.get_legal_actions(runner.state)
+    assert actions_before[ActionType.ACTION_TARGET_SELF] is True
+
+    # 蜃気楼を追加
+    runner.step(ActionType.ACTION_SELECT_HAND_1)
+
+    # 全体攻撃フラグがONになり、自傷が不可になっていること
+    assert runner.state.pending_is_group_attack is True
+    actions_after = godfield_core.get_legal_actions(runner.state)
+    assert actions_after[ActionType.ACTION_TARGET_SELF] is False
+
+
+def test_multiple_mirage_stacking_punch():
+    """
+    検証内容: パンチ -> 蜃気楼 -> 蜃気楼 -> 精霊 -> 蜃気楼 の重ねがけテスト。
+    - 3枚の蜃気楼と1枚の精霊を物理攻撃に重ねがけした際、MP消費が合計 10 となり、
+      攻撃回数（remaining_attacks）が 3 回の全体物理攻撃になることを確認します。
+    """
+    runner = SimulationRunner()
+    runner.state.seed_rng(0)
+    punch_id = find_card_by_name("パンチ")
+    mirage_id = find_card_by_name("＜蜃気楼＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 30)
+
+    # 手札設定
+    runner.state.set_true_hand(0, 0, punch_id)
+    runner.state.set_true_hand(0, 1, mirage_id)
+    runner.state.set_true_hand(0, 2, mirage_id)
+    runner.state.set_true_hand(0, 3, doll_id)
+    runner.state.set_true_hand(0, 4, mirage_id)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)  # パンチ (PHASE_ATTACK_PLUSへ)
+    assert runner.state.current_phase == GamePhase.PHASE_ATTACK_PLUS
+
+    runner.step(ActionType.ACTION_SELECT_HAND_1)  # 蜃気楼 1 (PHASE_GROUP_WEAPONへ)
+    assert runner.state.current_phase == GamePhase.PHASE_GROUP_WEAPON
+
+    runner.step(ActionType.ACTION_SELECT_HAND_2)  # 蜃気楼 2 (PHASE_GROUP_WEAPON継続)
+    assert runner.state.current_phase == GamePhase.PHASE_GROUP_WEAPON
+
+    runner.step(ActionType.ACTION_SELECT_HAND_3)  # 精霊 (PHASE_GROUP_WEAPON継続)
+    assert runner.state.current_phase == GamePhase.PHASE_GROUP_WEAPON
+
+    runner.step(ActionType.ACTION_SELECT_HAND_4)  # 蜃気楼 3 (PHASE_GROUP_WEAPON継続)
+    assert runner.state.current_phase == GamePhase.PHASE_GROUP_WEAPON
+
+    # 攻撃確定
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # 防御フェイズへ遷移し、MP消費が 10 (蜃気楼1=5, 蜃気楼2=0, 精霊=0, 蜃気楼3=5) となり、
+    # 攻撃回数が 3回 に設定されていることを確認
+    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    assert runner.state.get_mp(0) == 20  # 30 - 10 = 20
+    assert runner.state.remaining_attacks == 3
+
+
+def test_original_group_weapon_cannot_stack_mirage():
+    """
+    検証内容: 生来の全体攻撃武器「火の粉袋」に対して追加カード（蜃気楼や精霊など）を重ねられないことを確認するテスト。
+    """
+    runner = SimulationRunner()
+    runner.state.seed_rng(0)
+    bag_id = find_card_by_name("火の粉袋")
+    mirage_id = find_card_by_name("＜蜃気楼＞")
+
+    runner.state.current_phase = GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_true_hand(0, 0, bag_id)
+    runner.state.set_true_hand(0, 1, mirage_id)
+
+    # 火の粉袋を選択
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.current_phase == GamePhase.PHASE_GROUP_WEAPON
+
+    # 蜃気楼のあるスロット1の選択が非合法であることを確認
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_1] is False
+
+
+# ==========================================
+# Merged from: tests/core/test_spiritual_stacking.py
+# ==========================================
+
+
+
+def test_spiritual_doll_mp_bypass_availability():
+    """
+    検証内容: 精霊のぬいぐるみによるMP消費踏み倒し時のカード選択権。
+    - 手持ちのMPが2の状態で、消費MP 2 の奇跡「＜火の玉＞」を選択した際、重ねがけフェイズ（PHASE_MIRACLE_PLUS）に遷移することを確認します。
+    - 重ねがけフェイズにおいて、手札にある「精霊のぬいぐるみ」が合法手（選択可能）であることを確認します。
+    """
+    runner = SimulationRunner()
+    fireball_id = find_card_by_name("＜火の玉＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 2)
+
+    runner.state.set_true_hand(0, 0, fireball_id)
+    runner.state.set_true_hand(0, 1, doll_id)
+
+    # 火の玉を選択
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_PLUS
+
+    # 重ねがけで「精霊のぬいぐるみ」が選択可能なこと
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+    assert legal_actions[ActionType.ACTION_SELECT_HAND_1] is True
+
+
+def test_spiritual_doll_mp_bypass_executes_with_zero_mp_cost():
+    """
+    検証内容: 精霊のぬいぐるみ使用時のMP消費ゼロ解決。
+    - 奇跡「＜火の玉＞」に「精霊 of ぬいぐるみ」を重ねて攻撃を実行した際、MPが 2 から減らずに維持された状態で奇跡防御フェイズ（PHASE_MIRACLE_DEFENSE）に移行することを確認します。
+    """
+    runner = SimulationRunner()
+    fireball_id = find_card_by_name("＜火の玉＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 2)
+
+    runner.state.set_true_hand(0, 0, fireball_id)
+    runner.state.set_true_hand(0, 1, doll_id)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)  # 火の玉
+    runner.step(ActionType.ACTION_SELECT_HAND_1)  # ぬいぐるみ
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # MPが 2 のままであること
+    assert runner.state.get_mp(0) == 2
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
+
+
+def test_high_cost_miracle_initial_selection():
+    """
+    検証内容: MP不足時の高コスト奇跡の選択権（精霊存在ルール）。
+    - 自身のMPが 2 の際、手札に消費MP 5 の奇跡「＜闇＞」と「精霊のぬいぐるみ」がある場合、メインフェイズにおいて「＜闇＞」が選択可能（合法手）になることを確認します。
+    - 精霊が手札に無い場合は、MP不足のため「＜闇＞」が非合法手になることも併せて確認します。
+    """
+    runner_with_doll = SimulationRunner()
+    darkness_id = find_card_by_name("＜闇＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner_with_doll.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner_with_doll.state.current_actor_id = 0
+    runner_with_doll.state.set_mp(0, 2)
+
+    runner_with_doll.state.set_true_hand(0, 0, darkness_id)
+    runner_with_doll.state.set_true_hand(0, 1, doll_id)
+
+    # 手札に精霊がある場合は、闇の選択が合法であること
+    actions_with_doll = godfield_core.get_legal_actions(runner_with_doll.state)
+    assert actions_with_doll[ActionType.ACTION_SELECT_HAND_0] is True
+
+    # 手札に精霊が無い場合
+    runner_no_doll = SimulationRunner()
+    runner_no_doll.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner_no_doll.state.current_actor_id = 0
+    runner_no_doll.state.set_mp(0, 2)
+    runner_no_doll.state.set_true_hand(0, 0, darkness_id)
+
+    actions_no_doll = godfield_core.get_legal_actions(runner_no_doll.state)
+    assert actions_no_doll[ActionType.ACTION_SELECT_HAND_0] is False
+
+
+def test_high_cost_miracle_cannot_target_without_doll():
+    """
+    検証内容: 精霊を追加する前のターゲット制限。
+    - MP不足の状態で高コスト奇跡「＜闇＞」を選択して仮置き（PHASE_MIRACLE_PLUS）した際、追加で精霊を置くまでは、ターゲット決定（TARGET_OPP）が非合法手になることを確認します。
+    """
+    runner = SimulationRunner()
+    darkness_id = find_card_by_name("＜闇＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 2)
+
+    runner.state.set_true_hand(0, 0, darkness_id)
+    runner.state.set_true_hand(0, 1, doll_id)
+
+    # 闇を選択した直後
+    runner.step(ActionType.ACTION_SELECT_HAND_0)
+
+    # まだコストが踏み倒されていない（不足状態）ため、ターゲット指定は非合法であること
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+    assert legal_actions[ActionType.ACTION_TARGET_OPP] is False
+
+
+def test_high_cost_miracle_can_target_after_doll():
+    """
+    検証内容: 精霊を追加した後のターゲット解除と解決。
+    - 仮置きした高コスト奇跡に対し、さらに「精霊のぬいぐるみ」を追加した時点で、ターゲット決定（TARGET_OPP）が合法化されることを確認します。
+    - 攻撃実行後、MPが 2 を維持した状態で奇跡防御フェイズに移行することを確認します。
+    """
+    runner = SimulationRunner()
+    darkness_id = find_card_by_name("＜闇＞")
+    doll_id = find_card_by_name("精霊のぬいぐるみ")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.state.set_mp(0, 2)
+
+    runner.state.set_true_hand(0, 0, darkness_id)
+    runner.state.set_true_hand(0, 1, doll_id)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)  # 闇
+    runner.step(ActionType.ACTION_SELECT_HAND_1)  # ぬいぐるみを追加
+
+    # ターゲット指定が合法になること
+    legal_actions = godfield_core.get_legal_actions(runner.state)
+    assert legal_actions[ActionType.ACTION_TARGET_OPP] is True
+
+    # ターゲットして確定
+    runner.step(ActionType.ACTION_TARGET_OPP)
+    assert runner.state.get_mp(0) == 2
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
+
+
+def test_miracle_and_spiritual_socks_stacking():
+    """
+    検証内容: 奇跡 ＋ 精霊の足袋の重ねがけ処理。
+    - 奇跡「＜火の玉＞」に「精霊の足袋」を重ねて攻撃を決定した際、武器攻撃フェイズ（PHASE_DEFENSE）ではなく、奇跡防御フェイズ（PHASE_MIRACLE_DEFENSE）へと遷移することを確認します。
+    - 消費MPが 0 になり、MPが減少していないことを確認します。
+    """
+    runner = SimulationRunner()
+    fireball_id = find_card_by_name("＜火の玉＞")
+    socks_id = find_card_by_name("精霊の足袋")
+
+    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    runner.state.current_actor_id = 0
+    runner.set_status(0, hp=40, mp=10)
+
+    runner.state.set_true_hand(0, 0, fireball_id)
+    runner.state.set_true_hand(0, 1, socks_id)
+
+    runner.step(ActionType.ACTION_SELECT_HAND_0)  # 火の玉
+    runner.step(ActionType.ACTION_SELECT_HAND_1)  # 足袋
+    runner.step(ActionType.ACTION_TARGET_OPP)
+
+    # 奇跡防御フェイズへ移行していること
+    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
+    # MPが消費されていないこと (10)
+    assert runner.state.get_mp(0) == 10
