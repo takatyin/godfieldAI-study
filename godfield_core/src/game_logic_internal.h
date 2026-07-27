@@ -1,4 +1,5 @@
 #pragma once
+#include "rng.h"
 #include "types.h"
 #include <vector>
 #include <random>
@@ -19,9 +20,17 @@ extern std::vector<CardFeatures> g_card_registry;
 extern std::vector<std::string> g_card_names;
 
 /**
- * @brief カードドロー時の確率分布。
+ * @brief カードドローの抽選テーブル。
+ *
+ * drop_rate の重みの分だけカードIDを並べたフラットな配列。抽選は一様乱数1回と
+ * 配列アクセス1回で済む。初期化後は読み取り専用なので全スレッドで共有できる。
  */
-extern std::discrete_distribution<int> g_drop_distribution;
+extern std::vector<int32_t> g_draw_table;
+
+/**
+ * @brief drop_rate の重みから抽選テーブルを構築します（init_game_logic からのみ呼ぶ）。
+ */
+void build_draw_table(const std::vector<int> &weights);
 
 
 // ============================================================================
@@ -69,10 +78,20 @@ struct StagedAttackInfo {
     Element element;
     bool absorption;
     bool deal_same_damage;
-    bool hit;
 };
 
+/**
+ * @brief 仮置きされたカード群から消費MP・攻撃力・属性・吸収などを計算します。
+ *
+ * 乱数を消費しません（命中判定は roll_staged_attack_hits が担当します）。
+ * 観測の更新など、実際に攻撃を解決しない場面から安全に呼べます。
+ */
 StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id);
+
+/**
+ * @brief 仮置きされたカード群の命中判定を行います（乱数を消費するので解決時のみ呼ぶこと）。
+ */
+bool roll_staged_attack_hits(InternalState &state, int player_id);
 void setup_multiple_attacks(InternalState &state, int me, int opp, const StagedAttackInfo &info);
 
 /**
@@ -111,6 +130,7 @@ void add_card_to_hand_slot(InternalState &state, int player_id, int slot_idx, in
 std::pair<int, int> get_exchange_hp_range(int sum);
 std::pair<int, int> get_exchange_mp_range(int sum, int hp);
 DreamGroup get_dream_group(int card_id);
+std::vector<int> get_dream_candidates(int true_card_id);
 DreamGroup calculate_dream_group(int card_id);
 
 /**
@@ -227,6 +247,26 @@ void apply_card_effect_to_target(InternalState &state, int target_id, int card_i
  * （setup_guardian_attack_defense）の双方から参照するため、対象カードをここに一元化しています。
  */
 bool is_absorption_source(int card_id);
+
+/**
+ * @brief 月神が発動しうる奇跡の一覧（テストが奇跡名から指示値を逆引きするために公開）。
+ */
+std::vector<int> get_moon_miracles();
+
+/**
+ * @brief 指定した守護神の5行動に対応するカードID一覧（テストが行動名から指示値を逆引きするために公開）。
+ */
+std::vector<int> get_guardian_action_cards(int guardian);
+
+/**
+ * @brief 終末の時に出る悪魔カードの一覧（テストが悪魔名から指示値を逆引きするために公開）。
+ */
+std::vector<int> get_apocalypse_devils();
+
+/**
+ * @brief HP吸収を持つカードの一覧（テストが全種を網羅するために公開）。
+ */
+std::vector<int> get_absorption_sources();
 
 void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse);
 void apply_curse(InternalState &state, int player_id, CurseType type);

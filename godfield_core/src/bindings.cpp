@@ -2,9 +2,13 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <cstddef>
+#include <stdexcept>
+#include <string>
+#include <vector>
 #include "env_pool.h"
 #include "game_logic.h"
 #include "game_logic_internal.h"
+#include "rng.h"
 #include "types.h"
 
 namespace py = pybind11;
@@ -32,6 +36,11 @@ PYBIND11_MODULE(godfield_core, m) {
     // Bind initialization function
     m.def("init_game_logic", &init_game_logic, "Initialize the global card registry from JSON");
     m.def("get_registry_size", &get_registry_size, "Get number of cards in registry");
+    m.def("draw_card", &draw_card, py::arg("state"),
+          "山札から1枚抽選してカードIDを返します。抽選分布そのものを検証するために公開しています"
+          "（テストが next_draws() で指示している場合はその値が返ります）。");
+    m.def("get_draw_table_size", []() { return g_draw_table.size(); },
+          "抽選テーブルの要素数（drop_rate の重みの総和）。");
     m.def("get_card_name", &get_card_name, "Get card name by ID");
 
     // Bind enums
@@ -184,6 +193,169 @@ PYBIND11_MODULE(godfield_core, m) {
 
     m.attr("CARD_EMPTY") = CARD_EMPTY;
 
+    // ========================================================================
+    // 乱数注入（テスト専用） / Deterministic RNG injection for tests
+    // ========================================================================
+    // 確率で分岐するロジックを「シード総当たり探索」ではなく宣言的にテストするための API。
+    // 本番（学習時）はこれらを一切呼ばないため、g_roll_script は nullptr のままになる。
+    // 直接叩くのではなく tests/core/dsl.py の RngController 経由で使うこと。
+
+    py::enum_<RollKind>(m, "RollKind", "乱数消費点のラベル。どの確率判定を指示するかを表す。")
+        .value("ACCURACY", RollKind::ACCURACY)
+        .value("BOUNCE", RollKind::BOUNCE)
+        .value("MARS_RING", RollKind::MARS_RING)
+        .value("GUARDIAN_LEAVE", RollKind::GUARDIAN_LEAVE)
+        .value("ASCENSION_BOW_HIT", RollKind::ASCENSION_BOW_HIT)
+        .value("SICKNESS_WORSEN", RollKind::SICKNESS_WORSEN)
+        .value("GUARDIAN_ACT", RollKind::GUARDIAN_ACT)
+        .value("GUARDIAN_ACT_CHOICE", RollKind::GUARDIAN_ACT_CHOICE)
+        .value("MOON_MIRACLE", RollKind::MOON_MIRACLE)
+        .value("PHENOMENON", RollKind::PHENOMENON)
+        .value("PHENOMENON_TUB_TARGET", RollKind::PHENOMENON_TUB_TARGET)
+        .value("PHENOMENON_GOLD_MINE", RollKind::PHENOMENON_GOLD_MINE)
+        .value("PHENOMENON_ECLIPSE_G0", RollKind::PHENOMENON_ECLIPSE_G0)
+        .value("PHENOMENON_ECLIPSE_G1", RollKind::PHENOMENON_ECLIPSE_G1)
+        .value("PHENOMENON_MAGNETIC_STORM", RollKind::PHENOMENON_MAGNETIC_STORM)
+        .value("GUARDIAN_POT", RollKind::GUARDIAN_POT)
+        .value("THUMP_THUMP_TEAR", RollKind::THUMP_THUMP_TEAR)
+        .value("DEVIL_FAIRY", RollKind::DEVIL_FAIRY)
+        .value("DEVIL_PRANKSTER", RollKind::DEVIL_PRANKSTER)
+        .value("DECK_DRAW", RollKind::DECK_DRAW)
+        .value("APOCALYPSE_DRAW", RollKind::APOCALYPSE_DRAW)
+        .value("DREAM_DISGUISE", RollKind::DREAM_DISGUISE)
+        .value("DREAM_FAKE_CARD", RollKind::DREAM_FAKE_CARD)
+        .value("MUSHROOM_ACTION", RollKind::MUSHROOM_ACTION)
+        .value("MORTAR_VICTIM", RollKind::MORTAR_VICTIM)
+        .value("PESTLE_TARGET", RollKind::PESTLE_TARGET)
+        .value("DISCARD_RANDOM_ORDER", RollKind::DISCARD_RANDOM_ORDER)
+        .value("DISCARD_ONE_SLOT", RollKind::DISCARD_ONE_SLOT)
+        .value("REVEAL_SLOT", RollKind::REVEAL_SLOT)
+        .value("HAND_REPLACE_SLOT", RollKind::HAND_REPLACE_SLOT)
+        .value("EARTH_DISCARD_SLOT", RollKind::EARTH_DISCARD_SLOT)
+        .value("EARTH_EXCHANGE_HP", RollKind::EARTH_EXCHANGE_HP)
+        .value("EARTH_EXCHANGE_MP", RollKind::EARTH_EXCHANGE_MP)
+        .value("EARTH_SELL_SLOT", RollKind::EARTH_SELL_SLOT);
+
+    // 「範囲の下限／上限」を指示するセンチネル。閾値の向きをテストに書かせないために使う。
+    m.attr("ROLL_MIN") = ROLL_MIN;
+    m.attr("ROLL_MAX") = ROLL_MAX;
+    // 守護神の行動選択の累積閾値。テスト側が「行動Nを狙う代表値」を導出するのに使う。
+    m.attr("GUARDIAN_ACT_CHOICE_THRESHOLDS") = get_array_as_list(GUARDIAN_ACT_CHOICE_THRESHOLDS);
+
+    m.def(
+        "rng_clear_script", &reset_test_script,
+        "仕込んだ指示をすべて破棄し、本番と同じ挙動に戻します（各テストの終わりに必ず呼ぶ）。");
+
+    m.def(
+        "rng_force", [](RollKind kind, int value, bool optional) {
+            RollScript &s = install_test_script();
+            int idx = static_cast<int>(kind);
+            s.values[idx] = {value};
+            s.cursor[idx] = 0;
+            s.sticky[idx] = true;
+            s.optional[idx] = optional;
+        },
+        py::arg("kind"), py::arg("value"), py::arg("optional") = false,
+        "以後その判定が常に value を返すようにします（回数は問わない）。"
+        "optional=True にすると未消費検査の対象外になります"
+        "（手札補充のように、起きるかどうかがテストの主題でない背景固定に使う）。");
+
+    m.def(
+        "rng_script", [](RollKind kind, const std::vector<int> &values, bool repeat_last) {
+            if (values.empty()) throw std::invalid_argument("rng_script: 値が空です");
+            RollScript &s = install_test_script();
+            int idx = static_cast<int>(kind);
+            s.values[idx] = values;
+            s.cursor[idx] = 0;
+            s.sticky[idx] = repeat_last;
+        },
+        py::arg("kind"), py::arg("values"), py::arg("repeat_last") = false,
+        "その判定がちょうどこの順で values 回だけ行われることを指示します。"
+        "回数を超えて判定されると例外になります。"
+        "repeat_last=True にすると、使い切った後は最後の値を繰り返します"
+        "（先頭数回だけ意味を持たせ、残りは無害な値で埋めたい場合に使う）。");
+
+    m.def("get_guardian_action_cards", &get_guardian_action_cards, py::arg("guardian"),
+          "指定した守護神の5行動に対応するカードID一覧（攻撃系6神と海王神のみ。他は空）。"
+          "テストは行動カード名からこの並びのインデックスを逆引きして "
+          "RollKind::GUARDIAN_ACT_CHOICE に指示します。");
+
+    m.attr("APOCALYPSE_TURN") = APOCALYPSE_TURN;
+    m.attr("APOCALYPSE_DEVIL_THRESHOLDS") = get_array_as_list(APOCALYPSE_DEVIL_THRESHOLDS);
+    m.def("get_apocalypse_devils", &get_apocalypse_devils,
+          "終末の時のドローで出る悪魔カードID一覧。APOCALYPSE_DEVIL_THRESHOLDS の"
+          "各区間に対応する。テストは悪魔名からこの並びのインデックスを逆引きして"
+          "RollKind::APOCALYPSE_DRAW に指示します。");
+
+    m.def("get_absorption_sources", &get_absorption_sources,
+          "HP吸収（与えたダメージ分だけ攻撃側が回復する）を持つカードID一覧。"
+          "テストが全種を網羅するために公開しています。");
+
+    m.attr("DREAM_DISGUISE_RATE") = DREAM_DISGUISE_RATE;
+    m.attr("SAW_BOOM_BOOM_ATTACK_COUNT") = SAW_BOOM_BOOM_ATTACK_COUNT;
+    m.attr("SUN_AMULET_REVIVE_HP") = SUN_AMULET_REVIVE_HP;
+    m.attr("ASCENSION_BOW_TRIGGERED_POWER") = ASCENSION_BOW_TRIGGERED_POWER;
+    m.def("get_dream_candidates", &get_dream_candidates, py::arg("card_id"),
+          "夢状態でそのカードが偽装されうる相手のカードID一覧（自分自身は含まない）。"
+          "テストは偽装先のカード名からこの並びのインデックスを逆引きして "
+          "RollKind::DREAM_FAKE_CARD に指示します。");
+
+    m.def("get_moon_miracles", &get_moon_miracles,
+          "月神が発動しうる奇跡のカードID一覧。テストは奇跡名からこの並びの"
+          "インデックスを逆引きして RollKind::MOON_MIRACLE に指示します。");
+
+    m.def(
+        "rng_pick_order", [](RollKind kind, const std::vector<int> &preferred) {
+            RollScript &s = install_test_script();
+            int idx = static_cast<int>(kind);
+            s.order[idx] = preferred;
+            s.order_set[idx] = true;
+        },
+        py::arg("kind"), py::arg("preferred"),
+        "シャッフル系の判定で、指定した値（手札スロット番号など）を先頭から順に並べます。"
+        "残りは候補の元の順序を保つため、指示済みテストは完全に決定的になります。");
+
+    m.def(
+        "rng_forbid_unscripted", [](bool forbid) {
+            install_test_script().forbid_unscripted = forbid;
+        },
+        py::arg("forbid") = true,
+        "指示のない乱数消費が起きた時点で例外にします。"
+        "そのテストが運に一切依存しないことを機械的に証明できます。");
+
+    m.def(
+        "rng_consumed", [](RollKind kind) {
+            return g_roll_script == nullptr ? 0 : g_roll_script->consumed[static_cast<int>(kind)];
+        },
+        py::arg("kind"), "その判定が実際に何回行われたかを返します。");
+
+    m.def(
+        "rng_unconsumed_kinds", []() -> py::list {
+            py::list result;
+            if (g_roll_script == nullptr) return result;
+            const RollScript &s = *g_roll_script;
+            for (int i = 0; i < NUM_ROLL_KINDS; ++i) {
+                // 背景固定として指示されたものは、使われなくても問題にしない
+                if (s.optional[i]) continue;
+                // 値系の判定基準は sticky かどうかで変わる。
+                //  - sticky（force / repeat_last=True）: 末尾は繰り返し用なので使い残して当然。
+                //    「1度も使われなかった」ときだけ指示が空振りしたと見なす。
+                //  - 非sticky（script）: 宣言した回数ぶん必ず使われるべきなので、使い残しは異常。
+                bool value_left =
+                    !s.values[i].empty() &&
+                    (s.sticky[i] ? s.cursor[i] == 0
+                                 : s.cursor[i] < static_cast<int>(s.values[i].size()));
+                // 順序系: 指示したのに1度もシャッフルされなかった
+                bool order_unused = s.order_set[i] && s.consumed[i] == 0;
+                if (value_left || order_unused) {
+                    result.append(std::string(roll_kind_name(static_cast<RollKind>(i))));
+                }
+            }
+            return result;
+        },
+        "指示したのに使われなかった判定の名前一覧を返します。"
+        "空でなければ、テストが意図したコードパスが実行されていません。");
+
     // Bind InternalState
     py::class_<InternalState>(m, "InternalState")
         .def(py::init<>())
@@ -201,7 +373,6 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("pending_attack_power", &InternalState::pending_attack_power)
         .def_readwrite("pending_attack_element", &InternalState::pending_attack_element)
         .def_readwrite("pending_defense_power", &InternalState::pending_defense_power)
-        .def_readwrite("pending_sell_price", &InternalState::pending_sell_price)
         .def_readwrite("pending_absorption", &InternalState::pending_absorption)
         .def_readwrite("pending_deal_same_damage", &InternalState::pending_deal_same_damage)
         .def_readwrite("pending_is_group_attack", &InternalState::pending_is_group_attack)

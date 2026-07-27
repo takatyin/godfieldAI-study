@@ -1,117 +1,147 @@
+"""強化学習エージェントへ渡す観測（Observation）の検証。
+
+【移行メモ】
+従来はカードIDが数値で直書きされており、しかもコメントが実データと食い違って
+いました（`sim.state.set_true_hand(0, 0, 0)  # weapons/bronze-club` とあるが、
+ID 0 は実際には「両替」）。カード名から引くようにして、この種のズレを防ぎます。
+
+フェイズ one-hot の長さやインデックスも GamePhase enum から導出するようにし、
+フェイズを追加したときにテストが黙って別の位置を検証しないようにしています。
+"""
+
 import copy
 
 import numpy as np
 import pytest
 
 import godfield_core
-from tests.core.test_utils import SimulationRunner
+from godfield_core import CurseType, GamePhase
+from tests.core.dsl import Side, card_feature, card_id
+
+# 観測は各値を 1/100 に正規化して渡す（HP 40 -> 0.4）
+NORMALIZE = 100.0
 
 
-def test_observation_basic():
-    # 1. Setup game logic registry and runner
-    sim = SimulationRunner()
+def test_observation_normalizes_status_values(board):
+    """HP・MP・お金が観測へ正規化して渡されることを検証します。"""
+    g = board(
+        p0=Side(hp=40, mp=10, money=20, hand=["deals/exchange", "deals/sell"]),
+        p1=Side(hp=35, mp=15, money=25),
+    )
 
-    # 2. Set statuses
-    sim.set_status(player=0, hp=40, mp=10, money=20)
-    sim.set_status(player=1, hp=35, mp=15, money=25)
+    obs = godfield_core.get_observation(g.state, 0)
 
-    # Let's set some cards
-    # Use actual card IDs (e.g. 0, 1, 2)
-    sim.state.set_true_hand(0, 0, 0)  # weapons/bronze-club
-    sim.state.set_true_hand(0, 1, 1)  # weapons/silver-club
-    sim.state.set_apparent_hand(0, 0, 0)
-    sim.state.set_apparent_hand(0, 1, 1)
+    assert obs.hp_me == pytest.approx(40 / NORMALIZE)
+    assert obs.hp_opp == pytest.approx(35 / NORMALIZE)
+    assert obs.mp_me == pytest.approx(10 / NORMALIZE)
+    assert obs.mp_opp == pytest.approx(15 / NORMALIZE)
+    assert obs.money_me == pytest.approx(20 / NORMALIZE)
+    assert obs.money_opp == pytest.approx(25 / NORMALIZE)
 
-    # 3. Get observation for player 0
-    obs_p0 = godfield_core.get_observation(sim.state, 0)
 
-    assert obs_p0.hp_me == pytest.approx(0.4)
-    assert obs_p0.hp_opp == pytest.approx(0.35)
-    assert obs_p0.mp_me == pytest.approx(0.1)
-    assert obs_p0.mp_opp == pytest.approx(0.15)
-    assert obs_p0.money_me == pytest.approx(0.2)
-    assert obs_p0.money_opp == pytest.approx(0.25)
+def test_observation_exposes_hand_cards_by_slot(board):
+    """手札がスロット順にカードIDとして観測へ載り、空きスロットが -1 になることを検証します。"""
+    g = board(
+        p0=Side(hp=40, hand=["deals/exchange", "deals/sell"]),
+        p1=Side(hp=35),
+    )
 
-    # Hand cards check
-    hand = obs_p0.get_hand_cards()
-    assert hand[0] == 0
-    assert hand[1] == 1
-    assert hand[2] == -1  # Empty
+    hand = godfield_core.get_observation(g.state, 0).get_hand_cards()
 
-    # 4. Check copyability
-    obs_copy = copy.copy(obs_p0)
-    assert obs_copy.hp_me == pytest.approx(0.4)
+    assert hand[0] == card_id("deals/exchange")
+    assert hand[1] == card_id("deals/sell")
+    assert hand[2] == godfield_core.CARD_EMPTY
 
-    # 5. Check numpy conversion
-    arr = obs_p0.to_numpy()
+
+def test_observation_is_copyable_and_convertible_to_numpy(board):
+    """観測がコピー可能で、float32 の1次元配列へ変換できることを検証します。"""
+    g = board(p0=Side(hp=40, mp=10, money=20), p1=Side(hp=35, mp=15, money=25))
+    obs = godfield_core.get_observation(g.state, 0)
+
+    assert copy.copy(obs).hp_me == pytest.approx(40 / NORMALIZE)
+
+    arr = obs.to_numpy()
     assert isinstance(arr, np.ndarray)
     assert arr.dtype == np.float32
-    assert len(arr.shape) == 1
-    assert arr.shape[0] == godfield_core.OBSERVATION_SIZE
-    # Check that array size matches
-    assert arr[0] == pytest.approx(0.4)  # hp_me
-    assert arr[1] == pytest.approx(0.35)  # hp_opp
-
-    # Deleted attributes check
-    assert not hasattr(obs_p0, "pending_card")
-    assert not hasattr(obs_p0, "history_count")
-    assert not hasattr(obs_p0, "player_id")
+    assert arr.shape == (godfield_core.OBSERVATION_SIZE,)
+    # 先頭2要素は hp_me, hp_opp（構造体の並びと一致していること）
+    assert arr[0] == pytest.approx(40 / NORMALIZE)
+    assert arr[1] == pytest.approx(35 / NORMALIZE)
 
 
-def test_observation_fog_masking():
-    sim = SimulationRunner()
-    sim.set_status(player=0, hp=40, mp=10, money=20)
-    sim.set_status(player=1, hp=35, mp=15, money=25)
+@pytest.mark.parametrize("attr", ["pending_card", "history_count", "player_id"])
+def test_observation_does_not_expose_removed_attributes(board, attr):
+    """削除済みの属性が復活していないことを検証します。
 
-    # Put player 0 under Fog curse (Fog is CurseType index 0)
-    sim.state.set_curses(0, godfield_core.CurseType.CURSE_FOG, True)
+    観測のレイアウトは学習側と暗黙に結合しているため、消したはずのフィールドが
+    戻ると気付きにくいバグになります。
+    """
+    g = board(p0=Side(hp=40), p1=Side(hp=40))
+    obs = godfield_core.get_observation(g.state, 0)
 
-    # Get observation for player 0 (who has fog)
-    obs_p0 = godfield_core.get_observation(sim.state, 0)
-    assert obs_p0.hp_me == pytest.approx(0.4)
-    assert obs_p0.hp_opp == pytest.approx(0.0)  # Fogged!
-    assert obs_p0.mp_opp == pytest.approx(0.0)  # Fogged!
-    assert obs_p0.money_opp == pytest.approx(0.0)  # Fogged!
-
-    # Get observation for player 1 (who does NOT have fog)
-    obs_p1 = godfield_core.get_observation(sim.state, 1)
-    assert obs_p1.hp_me == pytest.approx(0.35)
-    assert obs_p1.hp_opp == pytest.approx(0.4)  # Not fogged for player 1!
+    assert not hasattr(obs, attr)
 
 
-def test_observation_custom_features():
-    sim = SimulationRunner()
-    sim.set_status(player=0, hp=40, mp=10, money=10)
-    sim.set_status(player=1, hp=40, mp=10, money=10)
+def test_fog_hides_the_opponent_status_from_the_cursed_player(board):
+    """霧にかかったプレイヤーからは相手のHP・MP・お金が見えなくなることを検証します。
 
-    # Put Wood Shield (ID=118) in hand slot 0
-    sim.state.set_true_hand(0, 0, 118)
-    sim.state.set_apparent_hand(0, 0, 118)
+    霧を持たない側からは通常どおり見えることも併せて確認します（片側だけ隠れる）。
+    """
+    g = board(
+        p0=Side(hp=40, mp=10, money=20, curses=[CurseType.CURSE_FOG]),
+        p1=Side(hp=35, mp=15, money=25),
+    )
 
-    # Set phase to PHASE_DEFENSE
-    sim.state.current_phase = godfield_core.GamePhase.PHASE_DEFENSE
-    sim.state.defender_id = 0
-    sim.state.attacker_id = 1
-    sim.state.pending_attack_power = 30
+    fogged = godfield_core.get_observation(g.state, 0)
+    assert fogged.hp_me == pytest.approx(40 / NORMALIZE)
+    assert fogged.hp_opp == pytest.approx(0.0)
+    assert fogged.mp_opp == pytest.approx(0.0)
+    assert fogged.money_opp == pytest.approx(0.0)
 
-    # Test before staging defense
-    obs0 = godfield_core.get_observation(sim.state, 0)
-    assert obs0.incoming_damage == pytest.approx(0.3)
-    assert obs0.current_staged_defense == pytest.approx(0.0)
+    clear = godfield_core.get_observation(g.state, 1)
+    assert clear.hp_me == pytest.approx(35 / NORMALIZE)
+    assert clear.hp_opp == pytest.approx(40 / NORMALIZE)
 
-    # Phase one-hot size and value check
-    phases = obs0.get_phase_one_hot()
-    assert len(phases) == 18
-    # PHASE_DEFENSE (index 7) should be 1.0
-    assert phases[7] == pytest.approx(1.0)
-    assert sum(phases) == pytest.approx(1.0)
 
-    # Stage the Wood Shield
-    sim.state.set_staged_card(0, 0, 0)
-    sim.state.set_num_staged_cards(0, 1)
+def test_phase_one_hot_matches_the_game_phase_enum(board):
+    """フェイズ one-hot の長さと立つ位置が GamePhase enum と一致することを検証します。
 
-    # Test after staging defense
-    obs1 = godfield_core.get_observation(sim.state, 0)
-    assert obs1.incoming_damage == pytest.approx(0.3)
-    # Wood Shield defense power is 2 (normalized to 0.02)
-    assert obs1.current_staged_defense == pytest.approx(0.02)
+    従来は長さ18とインデックス7が直書きされており、フェイズを追加すると黙って
+    別の位置を検証してしまう状態でした。
+    """
+    g = board(p0=Side(hp=40, hand=["armor/wood-shield"]), p1=Side(hp=40))
+    g.state.current_phase = GamePhase.PHASE_DEFENSE
+    g.state.attacker_id = 1
+    g.state.defender_id = 0
+
+    phases = godfield_core.get_observation(g.state, 0).get_phase_one_hot()
+
+    num_phases = len(GamePhase.__members__)
+    assert len(phases) == num_phases
+    assert phases[int(GamePhase.PHASE_DEFENSE)] == pytest.approx(1.0)
+    assert sum(phases) == pytest.approx(1.0), "one-hot なので合計は1でなければならない"
+
+
+def test_incoming_damage_and_staged_defense_are_reported(board):
+    """飛んできている攻撃力と、仮置き中の防御力が観測へ載ることを検証します。"""
+    armor = "armor/wood-shield"
+    incoming = 30
+    g = board(p0=Side(hp=40, hand=[armor]), p1=Side(hp=40))
+    g.state.current_phase = GamePhase.PHASE_DEFENSE
+    g.state.attacker_id = 1
+    g.state.defender_id = 0
+    g.state.pending_attack_power = incoming
+
+    before = godfield_core.get_observation(g.state, 0)
+    assert before.incoming_damage == pytest.approx(incoming / NORMALIZE)
+    assert before.current_staged_defense == pytest.approx(0.0)
+
+    # 木の盾を仮置きする
+    g.state.set_staged_card(0, 0, 0)
+    g.state.set_num_staged_cards(0, 1)
+
+    after = godfield_core.get_observation(g.state, 0)
+    assert after.incoming_damage == pytest.approx(incoming / NORMALIZE)
+    assert after.current_staged_defense == pytest.approx(
+        card_feature(armor, "defense_power") / NORMALIZE
+    )

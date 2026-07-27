@@ -1,7 +1,12 @@
 
+import pytest
+
 import godfield_core
-from godfield_core import ActionType, CurseType, GamePhase, SicknessType
-from tests.core.test_utils import SimulationRunner, find_card_by_name, find_card_by_type
+from godfield_core import ActionType, CurseType, GamePhase, GuardianType, SicknessType
+from tests.core.dsl import Side, card_feature, card_id, card_name
+
+# 補充ドローで盤面が動かないようにするための無害なカード。
+FILLER = "armor/wood-shield"
 
 # ==========================================
 # Merged from: tests/core/test_transactions.py
@@ -9,711 +14,513 @@ from tests.core.test_utils import SimulationRunner, find_card_by_name, find_card
 
 
 
-def test_exchange_logic_normal():
+EXCHANGE = "deals/exchange"
+
+
+def start_exchange(board, *, hp: int, mp: int, money: int):
+    """両替カードを自分に使い、HP指定フェイズまで進めた局面を返します。"""
+    g = board(
+        p0=Side(hp=hp, mp=mp, money=money, hand=[EXCHANGE]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always("armor/wood-shield")
+    g.select(EXCHANGE)
+    g.target_self()
+    g.expect(phase=GamePhase.PHASE_EXCHANGE_HP)
+    return g
+
+
+def test_exchange_redistributes_the_total_across_hp_mp_and_money(board):
+    """両替が HP・MP・お金の合計を保ったまま再分配することを検証します。"""
+    hp, mp, money = 40, 20, 15
+    total = hp + mp + money
+
+    g = start_exchange(board, hp=hp, mp=mp, money=money)
+
+    g.num(30)  # HP を 30 に
+    g.expect(phase=GamePhase.PHASE_EXCHANGE_MP)
+    g.num(20)  # MP を 20 に（残りがお金になる）
+
+    g.expect(p0_hp=30, p0_mp=20, p0_money=total - 30 - 20, phase=GamePhase.PHASE_MAIN)
+
+
+def test_exchange_hp_choice_is_capped_at_the_total(board):
+    """HPの指定可能な上限が合計値であることを、境界値で検証します。"""
+    hp, mp, money = 40, 20, 15
+    total = hp + mp + money
+
+    g = start_exchange(board, hp=hp, mp=mp, money=money)
+
+    legal = g.legal_actions()
+    assert legal[int(ActionType.ACTION_NUM_0) + total] is True, "合計値ちょうどは指定できる"
+    assert legal[int(ActionType.ACTION_NUM_0) + total + 1] is False, "合計値を超えては指定できない"
+
+    # 指示を消費するため、実際に選んで進めておく
+    g.num(30)
+    g.num(20)
+
+
+def test_exchange_mp_choice_is_capped_at_the_remainder(board):
+    """MPの指定可能な上限が「合計 - 指定済みHP」であることを、境界値で検証します。"""
+    hp, mp, money = 40, 20, 15
+    total = hp + mp + money
+    chosen_hp = 30
+    remainder = total - chosen_hp
+
+    g = start_exchange(board, hp=hp, mp=mp, money=money)
+    g.num(chosen_hp)
+
+    legal = g.legal_actions()
+    assert legal[int(ActionType.ACTION_NUM_0) + remainder] is True, "残額ちょうどは指定できる"
+    assert legal[int(ActionType.ACTION_NUM_0) + remainder + 1] is False, "残額を超えては指定できない"
+
+    g.num(20)
+
+
+def test_exchange_to_zero_hp_is_immediate_death(board):
+    """両替でHPに0を指定すると、その場で敗北が確定することを検証します。
+
+    両替によるHP減少は「ダメージ」ではないので守護神の離脱判定は行われませんが、
+    HPが0になれば死亡判定は通ります。
     """
-    検証内容: 両替 (Exchange) の正常分配フローのテスト。
-    - 両替カードを使用し、HP/MP/Money の合計値を再分配できることを確認します。
-    - 合計値（75）を超える再分配（HP 76 など）が非合法手になることを確認します。
-    - 新しい割り振りを確定させた際、HP/MP/Money が指定通りに更新されることを確認します。
+    g = start_exchange(board, hp=40, mp=20, money=10)
+
+    g.num(0)   # HP を 0 に
+    g.num(20)  # MP を 20 に指定して確定
+
+    g.expect(is_done=True, p0_reward=-1.0)
+
+
+SELL = "deals/sell"
+BUY = "deals/buy"
+POT = "sundries/guardian-pot"  # 価格10の売買テスト用カード
+FILLER = "armor/wood-shield"
+
+
+def test_sell_to_self_pays_and_refunds_the_same_price(board):
+    """自分に売ると、代金を支払ったうえで同額を受け取り、カードも手元に残ることを検証します。
+
+    支払いは お金 -> MP -> HP の順に行われます（execute_money_deduction）。
+    お金が足りない分だけMPが削られ、受け取りはお金で行われるため、
+    差し引きで「MPがお金に変換される」形になります。
     """
-    runner = SimulationRunner()
-    exchange_id = find_card_by_name("両替")
+    price = card_feature(POT, "price")
+    g = board(
+        p0=Side(hp=50, mp=8, money=5, hand=[SELL, POT]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
 
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_hp(0, 40)
-    runner.state.set_mp(0, 20)
-    runner.state.set_money(0, 15)  # 合計 = 75
-    runner.state.set_true_hand(0, 0, exchange_id)
+    g.select(SELL, POT)
+    g.target_self()
 
-    # 両替を使用
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    assert runner.state.current_phase == GamePhase.PHASE_EXCHANGE_HP
-
-    # 合計を超える値は不可
-    actions_hp = godfield_core.get_legal_actions(runner.state)
-    assert actions_hp[ActionType.ACTION_NUM_30] is True
-    assert actions_hp[ActionType.ACTION_NUM_75] is True
-    assert actions_hp[ActionType.ACTION_NUM_76] is False
-
-    # HPを 30 に指定 -> MP指定フェイズへ
-    runner.step(action=ActionType.ACTION_NUM_30)
-    assert runner.state.current_phase == GamePhase.PHASE_EXCHANGE_MP
-
-    # MPの上限は 75 - 30 = 45
-    actions_mp = godfield_core.get_legal_actions(runner.state)
-    assert actions_mp[ActionType.ACTION_NUM_45] is True
-    assert actions_mp[ActionType.ACTION_NUM_46] is False
-
-    # MPを 20 に指定 (残金 25)
-    runner.step(action=ActionType.ACTION_NUM_20)
-
-    # 解決確認
-    assert runner.state.get_hp(0) == 30
-    assert runner.state.get_mp(0) == 20
-    assert runner.state.get_money(0) == 25
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
+    # お金5を使い切り、不足分5をMPから支払い、売却益10を受け取る
+    g.expect(p0_money=price, p0_mp=8 - (price - 5), p0_hp=50)
+    assert card_name(card_id(POT)) in g.hand(0), "自分に売ったカードは手元に残る"
 
 
-def test_exchange_logic_zero_hp_death():
+def test_sell_to_opponent_deducts_money_then_mp(board):
+    """相手に売ると、相手の お金 -> MP の順で代金が引かれ、売り手に代金が入ることを検証します。"""
+    price = card_feature(POT, "price")
+    buyer_money = 4
+    g = board(
+        p0=Side(hp=40, money=0, hand=[SELL, POT]),
+        p1=Side(hp=40, mp=10, money=buyer_money),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(SELL, POT)
+    g.target_opp()
+    g.confirm()  # 相手が受諾
+
+    g.expect(
+        p1_money=0,
+        p1_mp=10 - (price - buyer_money),
+        p0_money=price,
+    )
+
+    # 買い取ったカードが相手の手札に移り、売り手から見えている状態になる
+    slot = g.slot_of(1, POT)
+    assert g.state.get_is_known_to_opp(1, slot) is True
+
+
+def test_sell_to_self_can_bankrupt_and_kill(board):
+    """総資産より高いカードを自分に売ると、支払い切れずに死亡することを検証します。"""
+    price = card_feature(POT, "price")
+    g = board(
+        p0=Side(hp=5, mp=0, money=0, hand=[SELL, POT]),
+        p1=Side(hp=40),
+    )
+    assert 5 < price, "総資産が価格を下回る前提のテスト"
+    g.rng.deck_always(FILLER)
+
+    g.select(SELL, POT)
+    g.target_self()
+
+    g.expect(p0_hp=0, is_done=True, p0_reward=-1.0)
+
+
+def test_sell_to_opponent_can_bankrupt_and_kill(board):
+    """総資産より高いカードを相手に売りつけると、相手が死亡することを検証します。"""
+    sword = "weapons/god-sword"
+    price = card_feature(sword, "price")
+    g = board(
+        p0=Side(hp=40, money=0, hand=[SELL, sword]),
+        p1=Side(hp=10, mp=5, money=5),
+    )
+    assert 10 + 5 + 5 < price, "相手の総資産が価格を下回る前提のテスト"
+    g.rng.deck_always(FILLER)
+
+    g.select(SELL, sword)
+    g.target_opp()
+    g.confirm()
+
+    g.expect(is_done=True, p1_hp=0)
+
+
+def test_sell_reflected_by_super_mirror_forces_the_seller_to_buy_back(board):
+    """売却をスーパーミラーで反射されると、売り手自身が買い戻すことを検証します。"""
+    price = card_feature(POT, "price")
+    g = board(
+        p0=Side(hp=40, money=price, hand=[SELL, POT]),
+        p1=Side(hp=40, money=0, hand=["armor/super-mirror"]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(SELL, POT)
+    g.target_opp()
+    g.expect(phase=GamePhase.PHASE_SELL_SELECT_MIRROR)
+
+    g.select("armor/super-mirror")
+    g.expect(phase=GamePhase.PHASE_SELL_SELECT_MIRROR, actor=0)
+    g.confirm()
+
+    # 売り手が代金を払い、反射した側が受け取る
+    g.expect(p0_money=0, p1_money=price)
+    slot = g.slot_of(0, POT)
+    assert g.state.get_is_known_to_opp(0, slot) is True
+
+
+def test_buy_from_opponent_transfers_card_and_money(board):
+    """相手からカードを購入すると、代金とカードが正しく移動することを検証します。
+
+    購入対象は相手の手札からランダムに1枚公開されるので、どのスロットが出品されるかを
+    指定しています（従来は相手の手札が1枚だけの盤面にして間接的に固定していました）。
     """
-    検証内容: 両替でのHP 0 指定による即死テスト。
-    - 両替でHPの再配分に 0 を指定した場合、両替処理完了時に即座に死亡（is_done = True）となることを確認します。
+    price = card_feature(POT, "price")
+    g = board(
+        p0=Side(hp=40, money=20, hand=[BUY]),
+        p1=Side(hp=40, money=0, hand=[POT, FILLER]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.reveal_slot(0)  # つぼ（スロット0）を出品させる
+
+    g.select(BUY)
+    g.target_opp()
+    g.confirm()  # 相手が反射せず受諾
+
+    # 出品されたカードは公開される
+    assert g.state.get_is_known_to_opp(1, 0) is True
+
+    g.deal_yes()  # 購入する
+
+    g.expect(p0_money=20 - price, p1_money=price)
+    assert g.state.get_true_hand(1, 0) == godfield_core.CARD_EMPTY, "売り手の手札から消える"
+
+    slot = g.slot_of(0, POT)
+    assert g.state.get_is_known_to_opp(0, slot) is True, "買ったカードは相手に見えている"
+
+
+def test_buy_with_a_full_hand_overwrites_the_specified_slot(board):
+    """手札が満杯のときに購入すると、指定したスロットが購入カードで上書きされることを検証します。
+
+    従来は「スロット1〜17のどれか1つがつぼになった」という緩い検証で、
+    どのスロットが潰れるかを制御できていませんでした。
     """
-    runner = SimulationRunner()
-    exchange_id = find_card_by_name("両替")
+    price = card_feature(POT, "price")
+    victim_slot = 9
+    hand = [BUY] + [FILLER] * 17
+    g = board(
+        p0=Side(hp=40, money=20, hand=hand),
+        p1=Side(hp=40, money=0, hand=[POT]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.reveal_slot(0)
+    g.rng.hand_replace_slot(victim_slot)
 
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_hp(0, 40)
-    runner.state.set_mp(0, 20)
-    runner.state.set_money(0, 10)  # 合計 = 70
-    runner.state.set_true_hand(0, 0, exchange_id)
+    g.select(BUY)
+    g.target_opp()
+    g.confirm()
+    g.deal_yes()
 
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-    runner.step(action=ActionType.ACTION_NUM_0)  # HPを 0 に指定
-    runner.step(action=ActionType.ACTION_NUM_20)  # MPを 20 に指定して確定
-
-    # 即死判定
-    assert runner.state.is_done is True
-    assert runner.state.p0_reward == -1.0
+    g.expect(p0_money=20 - price)
+    assert g.state.get_true_hand(0, victim_slot) == card_id(POT), (
+        "指定したスロットが購入カードで上書きされるべきです"
+    )
+    assert len(g.hand(0)) == 18, "手札は18枚に保たれるべきです"
 
 
-def test_sell_to_self():
+# ==========================================
+# 「買う」: 反射・拒否・情報公開
+# ==========================================
+
+BUY = "deals/buy"
+SELL = "deals/sell"
+MIRROR = "armor/super-mirror"
+POT = "sundries/guardian-pot"
+
+
+def test_buy_reflected_by_the_super_mirror_forces_the_caster_to_sell(board):
+    """「買う」を反射されると、撃った側が売り手に回ることを検証します。"""
+    price = card_feature(POT, "price")
+
+    g = board(
+        p0=Side(hp=40, money=0, hand=[BUY, POT]),
+        p1=Side(hp=40, money=price * 2, hand=[MIRROR]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(BUY)
+    g.target_opp()
+
+    g.select(MIRROR)  # P1 が反射
+    g.expect(phase=GamePhase.PHASE_BUY_SELECT_MIRROR, actor=0)
+
+    g.confirm()  # 反射を受け入れる
+
+    # 買い手が P1 に入れ替わる
+    g.expect(phase=GamePhase.PHASE_BUY, actor=1)
+
+    offered = g.state.get_staged_card(0, 0)
+    assert g.state.get_true_hand(0, offered) == card_id(POT), (
+        "「買う」以外の手札が1枚しかないので、必ずつぼが出品される"
+    )
+
+    g.deal_yes()
+
+    # 代金とカードが入れ替わる
+    g.expect(p0_money=price, p1_money=price)
+    assert g.state.get_true_hand(0, offered) == godfield_core.CARD_EMPTY
+
+    bought = [
+        j
+        for j in range(godfield_core.MAX_HAND_SIZE)
+        if g.state.get_true_hand(1, j) == card_id(POT)
+    ]
+    assert len(bought) == 1, "買ったカードが相手の手札に1枚だけ入るべきです"
+    assert g.state.get_is_known_to_opp(1, bought[0]) is True, "買われたカードは公開される"
+
+
+def test_buy_reflection_is_cancelled_when_the_new_seller_has_nothing(board):
+    """反射された「買う」で、売る側に出品できる手札が無ければ自動的に流れることを検証します。"""
+    g = board(
+        p0=Side(hp=40, money=0, hand=[BUY]),   # 「買う」以外に手札が無い
+        p1=Side(hp=40, money=20, hand=[MIRROR]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(BUY)
+    g.target_opp()
+    g.select(MIRROR)
+    g.confirm()
+
+    # 出品できるカードが無いので取引はキャンセルされ、そのままターンが移る
+    g.expect(phase=GamePhase.PHASE_MAIN, actor=1, p0_money=0, p1_money=20)
+
+
+def offer_for_purchase(board, *, p1: Side):
+    """P0 が P1 に「買う」を撃ち、P1 のスロット0 が出品された局面を返します。"""
+    g = board(p0=Side(hp=40, money=20, hand=[BUY]), p1=p1)
+    g.rng.deck_always(FILLER)
+
+    g.select(BUY)
+    g.target_opp()
+    g.confirm()  # P1 は反射せず受諾
+
+    assert g.state.get_is_known_to_opp(1, 0) is True, "出品中は相手に見えている"
+    return g
+
+
+def test_a_refused_card_stays_public_when_it_is_the_only_one_of_its_kind(board):
+    """購入を断られても、公開された情報はそのまま残ることを検証します。"""
+    card = "armor/leather-clothes"
+    g = offer_for_purchase(board, p1=Side(hp=40, money=0, hand=[card]))
+
+    g.deal_no()
+
+    assert g.state.get_is_known_to_opp(1, 0) is True, (
+        "一度見えたカードの情報は、断られても失われない"
+    )
+
+
+def test_a_refused_card_is_hidden_again_when_an_identical_card_is_already_public(board):
+    """同名カードがすでに公開済みなら、断られた側の公開は取り消されることを検証します。
+
+    「革の服がスロット0とスロット1の2枚ある」という情報まで漏らさないための
+    情報量クランプです。
     """
-    検証内容: 自分に対する売却（強制買い戻し）テスト。
-    - 自分の手札のカード（守護封印のつぼ: 価格 10）を自分自身に売却した際、お金が足りない分は MP -> HP の順に消費して支払われることを確認します。
-    - 売却されたカードは自分の手札に維持されることを確認します。
+    card = "armor/leather-clothes"
+    g = offer_for_purchase(
+        board,
+        p1=Side(hp=40, money=0, hand=[card, card], known_to_opp=[1]),
+    )
+
+    g.deal_no()
+
+    assert g.state.get_is_known_to_opp(1, 0) is False, "重複公開は取り消されるべきです"
+    assert g.state.get_is_known_to_opp(1, 1) is True, "元から公開されていた側は残る"
+
+
+def test_a_deployed_miracle_does_not_count_as_a_public_duplicate(board):
+    """展開済みの同名奇跡は「公開済みの重複」に数えないことを検証します。
+
+    展開済みの奇跡は場に出ている別の存在なので、手札のコピーが公開されたままでも
+    情報の重複にはなりません。
     """
-    runner = SimulationRunner()
-    sell_id = find_card_by_name("売る")
-    pot_id = find_card_by_name("守護封印のつぼ")  # 価格 10
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 5)  # お金 5 (5不足)
-    runner.state.set_mp(0, 8)  # MPで5支払う (残り3)
-    runner.state.set_hp(0, 50)
-
-    runner.state.set_true_hand(0, 0, sell_id)
-    runner.state.set_true_hand(0, 1, pot_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # 売る
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)  # つぼを選択
-    runner.step(action=ActionType.ACTION_TARGET_SELF)  # 自分を対象
-
-    # 結果: money = 10 (売却益回収), mp = 3, hp = 50
-    assert runner.state.get_money(0) == 10
-    assert runner.state.get_mp(0) == 3
-    assert runner.state.get_true_hand(0, 1) == pot_id
-
-
-def test_sell_to_opp_accept():
-    """
-    検証内容: 相手に対する売却の正常解決テスト。
-    - 手札のカード（守護封印のつぼ: 価格 10）を相手に売り、相手が受諾（Accept）した際、相手の資産（Money -> MP -> HP）から代金が差し引かれることを確認します。
-    - 売却されたカードが相手の手札の空き枠に移り、かつ相手の画面上で既知（is_known_to_opp = True）になることを確認します。
-    """
-    runner = SimulationRunner()
-    sell_id = find_card_by_name("売る")
-    pot_id = find_card_by_name("守護封印のつぼ")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 0)
-    runner.state.set_money(1, 4)  # 相手のお金 4 (6不足)
-    runner.state.set_mp(1, 10)  # 相手のMP 10 (残り6支払って4)
-
-    runner.state.set_true_hand(0, 0, sell_id)
-    runner.state.set_true_hand(0, 1, pot_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 相手の支払い結果
-    assert runner.state.get_money(1) == 0
-    assert runner.state.get_mp(1) == 4
-    # 自分の売却益
-    assert runner.state.get_money(0) == 10
-
-    # カード移動の確認
-    found = False
-    for j in range(18):
-        if runner.state.get_true_hand(1, j) == pot_id:
-            found = True
-            assert runner.state.get_is_known_to_opp(1, j) is True
-            break
-    assert found is True
-
-
-def test_sell_to_self_death():
-    """
-    検証内容: 自分に対する売却での破産即死テスト。
-    - 全総資産（HP 5, MP 0, Money 0）を下回る価格のカード（つぼ: 価格 10）を自分に売却した際、代金を支払い切れずに死亡（is_done = True, HP = 0）することを確認します。
-    """
-    runner = SimulationRunner()
-    sell_id = find_card_by_name("売る")
-    pot_id = find_card_by_name("守護封印のつぼ")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_hp(0, 5)
-    runner.state.set_mp(0, 0)
-    runner.state.set_money(0, 0)
-
-    runner.state.set_true_hand(0, 0, sell_id)
-    runner.state.set_true_hand(0, 1, pot_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    assert runner.state.is_done is True
-    assert runner.state.get_hp(0) == 0
-    assert runner.state.p0_reward == -1.0
-
-
-def test_sell_to_opp_death():
-    """
-    検証内容: 相手に対する売却による相手の破産即死テスト。
-    - 相手の総資産（HP 10, MP 5, Money 5 = 計20）を超える高額カード（神の剣: 価格 30）を相手に売りつけ、相手が受諾した際、相手が死亡（is_done = True）することを確認します。
-    """
-    runner = SimulationRunner()
-    sell_id = find_card_by_name("売る")
-    god_sword_id = find_card_by_name("神の剣")  # 価格 30
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 0)
-    runner.state.set_hp(1, 10)
-    runner.state.set_mp(1, 5)
-    runner.state.set_money(1, 5)
-
-    runner.state.set_true_hand(0, 0, sell_id)
-    runner.state.set_true_hand(0, 1, god_sword_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 相手が死亡していること
-    assert runner.state.is_done is True
-
-
-def test_sell_to_opp_mirror_reflect():
-    """
-    検証内容: 売却時のスーパーミラー反射と強制買い戻し。
-    - 相手に売却を行おうとした際、相手が「スーパーミラー」で反射した場合、手番が自分（アクター0）に交代し、自分でそのカード（つぼ）を買い取る（受諾する）流れを確認します。
-    """
-    runner = SimulationRunner()
-    sell_id = find_card_by_name("売る")
-    pot_id = find_card_by_name("守護封印のつぼ")
-    super_mirror_id = find_card_by_name("スーパーミラー")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 10)
-    runner.state.set_money(1, 0)
-
-    runner.state.set_true_hand(0, 0, sell_id)
-    runner.state.set_true_hand(0, 1, pot_id)
-    runner.state.set_true_hand(1, 0, super_mirror_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    # 相手がスーパーミラー使用
-    assert runner.state.current_phase == GamePhase.PHASE_SELL_SELECT_MIRROR
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-
-    # 反射されてアクターが自分(0)に交代
-    assert runner.state.current_phase == GamePhase.PHASE_SELL_SELECT_MIRROR
-    assert runner.state.current_actor_id == 0
-
-    # 自分が受諾
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 自分がつぼを買い戻した結果の検証
-    assert runner.state.get_money(0) == 0
-    assert runner.state.get_money(1) == 10
-
-    found = False
-    for j in range(18):
-        if runner.state.get_true_hand(0, j) == pot_id:
-            found = True
-            assert runner.state.get_is_known_to_opp(0, j) is True
-            break
-    assert found is True
-
-
-def test_buy_from_opp_accept():
-    """
-    検証内容: 相手からの購入（Buy）の正常解決テスト。
-    - 自分が「買う」を使用し、相手の手札（つぼ: 価格 10）を購入した際、自分の手持ちのお金から 10 が引かれ、相手に 10 お金が入ることを確認します。
-    - 買い取ったカードが自分の手札に移り、かつ相手の画面上で既知（is_known_to_opp = True）になることを確認します。
-    """
-    runner = SimulationRunner()
-    buy_id = find_card_by_name("買う")
-    pot_id = find_card_by_name("守護封印のつぼ")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 20)
-    runner.state.set_money(1, 0)
-    runner.state.set_true_hand(0, 0, buy_id)
-    runner.state.set_true_hand(1, 0, pot_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 相手の手札が公開状態になる
-    assert runner.state.get_is_known_to_opp(1, 0) is True
-
-    # 購入YES
-    runner.step(action=ActionType.ACTION_DEAL_YES)
-
-    # 代金移動
-    assert runner.state.get_money(0) == 10
-    assert runner.state.get_money(1) == 10
-    assert runner.state.get_true_hand(1, 0) == godfield_core.CARD_EMPTY
-
-    found = False
-    for j in range(18):
-        if runner.state.get_true_hand(0, j) == pot_id:
-            found = True
-            assert runner.state.get_is_known_to_opp(0, j) is True
-            break
-    assert found is True
-
-
-def test_buy_from_opp_full_hand():
-    """
-    検証内容: 手札満杯（18枚）状態でのカード購入テスト。
-    - 自分の手札が 18 枚全て埋まっている状態でカードを購入した際、購入したカード（つぼ）が手札のいずれかの既存スロットの防具と正しく置き換わって保存されることを確認します。
-    """
-    runner = SimulationRunner()
-    buy_id = find_card_by_name("買う")
-    shield_id = find_card_by_name("革の服")
-    pot_id = find_card_by_name("守護封印のつぼ")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 20)
-    runner.state.set_money(1, 0)
-
-    # 手札を埋める (0: 買う, 1~17: 革の服)
-    runner.state.set_true_hand(0, 0, buy_id)
-    for i in range(1, 18):
-        runner.state.set_true_hand(0, i, shield_id)
-
-    runner.state.set_true_hand(1, 0, pot_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-    runner.step(action=ActionType.ACTION_DEAL_YES)
-
-    # スロット1~17のいずれか1つがつぼに置き換わっていること
-    pot_count = 0
-    shield_count = 0
-    for i in range(1, 18):
-        card = runner.state.get_true_hand(0, i)
-        if card == pot_id:
-            pot_count += 1
-        elif card == shield_id:
-            shield_count += 1
-
-    assert pot_count == 1
-    assert shield_count == 16
-
-
-def test_buy_from_opp_mirror_reflect():
-    """
-    検証内容: 購入時のスーパーミラー反射と強制逆購入。
-    - 相手に対して「買う」を使用した際、相手が「スーパーミラー」で反射した場合、手番が相手（アクター1）に交代して、相手が自分の手札から買い取る側に回ることを確認します。
-    """
-    runner = SimulationRunner()
-    buy_id = find_card_by_name("買う")
-    super_mirror_id = find_card_by_name("スーパーミラー")
-    pot_id = find_card_by_name("守護封印のつぼ")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 0)
-    runner.state.set_money(1, 20)
-
-    runner.state.set_true_hand(0, 0, buy_id)
-    runner.state.set_true_hand(0, 1, pot_id)
-    runner.state.set_true_hand(1, 0, super_mirror_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    # 相手がスーパーミラー使用
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # アクターがP0(相手)に交代
-    assert runner.state.current_phase == GamePhase.PHASE_BUY_SELECT_MIRROR
-    assert runner.state.current_actor_id == 0
-
-    # P0が受諾
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # フェイズが PHASE_BUY に移行し、アクターが買い手P1になること
-    assert runner.state.current_phase == GamePhase.PHASE_BUY
-    assert runner.state.current_actor_id == 1
-
-    # 提示されたカードがつぼ（スロット1）であること
-    revealed_idx = runner.state.get_staged_card(0, 0)
-    assert runner.state.get_true_hand(0, revealed_idx) == pot_id
-
-    # 購入決定
-    runner.step(ActionType.ACTION_DEAL_YES)
-
-    # 代金移動とカード移動の確認
-    assert runner.state.get_money(1) == 10
-    assert runner.state.get_money(0) == 10
-    assert runner.state.get_true_hand(0, revealed_idx) == godfield_core.CARD_EMPTY
-
-    found = False
-    for j in range(18):
-        if runner.state.get_true_hand(1, j) == pot_id:
-            found = True
-            assert runner.state.get_is_known_to_opp(1, j) is True
-            break
-    assert found is True
-
-
-def test_buy_from_opp_mirror_reflect_empty_hand_cancel():
-    """
-    検証内容: 購入反射時の売却側手札無しによる自動キャンセル。
-    - 「買う」のみが手札にあり、他が全て空の状態で相手に「買う」を撃ち、スーパーミラーで跳ね返され、受諾した場合に、売る側の手札が存在しないため購入処理が自動的にキャンセル（スキップ）されて手番が終了することを確認します。
-    """
-    runner = SimulationRunner()
-    buy_id = find_card_by_name("買う")
-    super_mirror_id = find_card_by_name("スーパーミラー")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 0)
-    runner.state.set_money(1, 20)
-
-    runner.state.set_true_hand(0, 0, buy_id)
-    for j in range(1, 18):
-        runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
-
-    runner.state.set_true_hand(1, 0, super_mirror_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # スーパーミラー
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 自動的にキャンセルされ、相手(1)のメインフェイズになっていること
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
-
-
-def test_buy_refusal_known_new_card():
-    """
-    検証内容: 購入拒否時の新規カード情報の公開維持テスト。
-    - 新しいカード（革の服: 非公開）の購入を拒否（ACTION_DEAL_NO）した場合でも、そのカードがそのスロットにあるという情報（is_known_to_opp）は公開されたまま（True）維持されることを確認します。
-    """
-    runner = SimulationRunner()
-    buy_id = find_card_by_name("買う")
-    shield_id = find_card_by_name("革の服")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 20)
-    runner.state.set_true_hand(0, 0, buy_id)
-    runner.state.set_true_hand(1, 0, shield_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 公開される
-    assert runner.state.get_is_known_to_opp(1, 0) is True
-
-    # 拒否
-    runner.step(ActionType.ACTION_DEAL_NO)
-    assert runner.state.get_is_known_to_opp(1, 0) is True
-
-
-def test_buy_refusal_known_duplicate_card():
-    """
-    検証内容: 購入拒否時の同種カード重複公開の防止テスト。
-    - 既に手札の別スロット（スロット1）に公開済みの「革の服」がある状態で、新たに非公開の同名カード（スロット0: 革の服）が提示され、それを購入拒否した場合に、スロット0の情報公開フラグが非公開（False）に戻ることを確認します（情報量上限クランプ）。
-    """
-    runner = SimulationRunner()
-    buy_id = find_card_by_name("買う")
-    shield_id = find_card_by_name("革の服")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 20)
-    runner.state.set_true_hand(0, 0, buy_id)
-    runner.state.set_true_hand(1, 0, shield_id)  # 今回の提示スロット (非公開)
-    runner.state.set_true_hand(1, 1, shield_id)  # すでに既知のスロット
-    runner.state.set_is_known_to_opp(1, 1, True)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 提示中は一時的に True
-    assert runner.state.get_is_known_to_opp(1, 0) is True
-
-    # 拒否
-    runner.step(ActionType.ACTION_DEAL_NO)
-    # 重複公開防止ルールにより False に戻る
-    assert runner.state.get_is_known_to_opp(1, 0) is False
-    assert runner.state.get_is_known_to_opp(1, 1) is True
-
-
-def test_buy_refusal_known_deployed_miracle():
-    """
-    検証内容: 購入拒否時の展開中同名奇跡との独立公開テスト。
-    - フィールド上に展開済みの「＜火の玉＞」が存在している状態で、手札の未展開かつ非公開の「＜火の玉＞」が提示され、それを購入拒否した場合、展開済みの情報とは独立して、手札の「＜火の玉＞」の情報公開フラグが公開（True）に維持されることを確認します。
-    """
-    runner = SimulationRunner()
-    buy_id = find_card_by_name("買う")
-    fire_miracle_id = find_card_by_name("＜火の玉＞")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 20)
-    runner.state.set_true_hand(0, 0, buy_id)
-    runner.state.set_true_hand(1, 0, fire_miracle_id)  # 手札（非公開）
-    runner.state.set_true_hand(1, 1, fire_miracle_id)  # 展開済み（既知）
-    runner.state.set_is_deployed(1, 1, True)
-    runner.state.set_is_known_to_opp(1, 1, True)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    assert runner.state.get_is_known_to_opp(1, 0) is True
-
-    # 拒否
-    runner.step(ActionType.ACTION_DEAL_NO)
-
-    # 展開済みのものとは別扱いのため、手札のコピーも True のまま維持される
-    assert runner.state.get_is_known_to_opp(1, 0) is True
-    assert runner.state.get_is_known_to_opp(1, 1) is True
-
-
-def test_attack_observability():
-    """
-    検証内容: 複数枚攻撃時、攻撃確定後も防御解決されるまで攻撃者の staged_cards と is_known_to_opp が維持され、
-    防御側から攻撃内容（どのカードをどの順番で使ったか）が完全に観測できること。
-    """
-    runner = SimulationRunner()
-    bronze_club_id = find_card_by_name("weapons/bronze-club")
-    blowgun_id = find_card_by_name("weapons/blowgun")
-    leather_cap_id = find_card_by_name("armor/leather-cap")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-
-    # P0の手札: [銅のこん棒, 吹き矢, ...]
-    runner.state.set_true_hand(0, 0, bronze_club_id)
-    runner.state.set_true_hand(0, 1, blowgun_id)
-
-    # P1の手札: [革の帽子, ...]
-    runner.state.set_true_hand(1, 0, leather_cap_id)
-
-    # 1. P0が攻撃（銅のこん棒）を選択
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.get_is_known_to_opp(0, 0) is False  # 選択中（ステージング中）は非公開
-
-    # 2. P0が攻撃追加（吹き矢）を選択
-    assert runner.state.current_phase == GamePhase.PHASE_ATTACK_PLUS
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
-    assert runner.state.get_is_known_to_opp(0, 1) is False  # 選択中（ステージング中）は非公開
-
-    # 3. P0がターゲット（P1）を指定して攻撃を確定
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    # 確定した時点で、相手（P1）に公開される
-    assert runner.state.get_is_known_to_opp(0, 0) is True
-    assert runner.state.get_is_known_to_opp(0, 1) is True
-
-    # P1の防御フェイズ（PHASE_DEFENSE）に入る
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 1
-
-    # 【重要】防御中も、攻撃者（P0）の staged_cards がクリアされずに維持されていること
-    assert runner.state.get_num_staged_cards(0) == 2
-    assert runner.state.get_staged_card(0, 0) == 0  # 1枚目に銅のこん棒 (手札スロット0)
-    assert runner.state.get_staged_card(0, 1) == 1  # 2枚目に吹き矢 (手札スロット1)
-
-    # 4. P1が防御（革の帽子）を選択して確定
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.get_is_known_to_opp(1, 0) is False  # 防具選択中も非公開
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 防御解決後はターンが終了（PHASE_END -> 次のメイン）し、両者の staged_cards がクリアされる
-    assert runner.state.get_num_staged_cards(0) == 0
-    assert runner.state.get_num_staged_cards(1) == 0
-
-
-def test_buy_from_self():
-    """
-    検証内容: 自分に対する「買う」の正常解決テスト。
-    - 自分に対して「買う」を使用した場合、取引相手（対戦相手）からの受諾やミラー確認をスキップし、即時に解決されること。
-    - 使用者の手札からランダムに1枚（「買う」カード以外）が相手に対して公開状態（is_known_to_opp = True）になること。
-    - お金やMPの支払いや、カードの移動処理などは一切発生しないこと。
-    """
-    runner = SimulationRunner()
-    buy_id = find_card_by_name("買う")
-    club_id = find_card_by_name("銅のこん棒")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 20)
-    runner.state.set_true_hand(0, 0, buy_id)
-    runner.state.set_true_hand(0, 1, club_id)
-
-    # 1. スロット0の「買う」を選択
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    # 2. 自分自身をターゲットに選択
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    # 自分への「買う」なので、即座に解決されターンが終了し、相手（P1）のメインフェイズ（PHASE_MAIN）に移行すること
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
-    # お金は減っていないこと
-    assert runner.state.get_money(0) == 20
-    # スロット1の「銅のこん棒」が相手に公開（is_known_to_opp = True）されていること
-    assert runner.state.get_is_known_to_opp(0, 1) is True
-
-
-def test_sell_hand_reduction():
-    """
-    検証内容: 「売る」を使用した際の手札総数減少とドロー挙動テスト。
-    - 手札 [売る, カードA, 空き, 空き, ...] の状態でカードAを売り、相手が受諾した際：
-      - 「売る」カードが使われたスロットは、新しいカードが山札から補充（ドロー）されること。
-      - 売却された「カードA」のスロットは空（CARD_EMPTY）になり、ドロー補充されないこと。
-      - その結果、売却後の手札総数（空き枠を除く）が 1 減少すること。
-    """
-    runner = SimulationRunner()
-    sell_id = find_card_by_name("売る")
-    pot_id = find_card_by_name("守護封印のつぼ")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 0)
-    runner.state.set_money(1, 20)  # P1はお金持ち
-
-    # P0の手札: [売る, つぼ, CARD_EMPTY, ...]
-    runner.state.set_true_hand(0, 0, sell_id)
-    runner.state.set_true_hand(0, 1, pot_id)
-    for j in range(2, 18):
-        runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # 売る
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)  # つぼ
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)  # P1が受諾
-
-    # 取引解決により、ターンが終了して次のプレイヤー（P1）のターンに移行すること
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
-
-    # P0のスロット0（「売る」だった場所）には、新しいカードがドロー補充されていること（空ではない）
-    assert runner.state.get_true_hand(0, 0) != godfield_core.CARD_EMPTY
-    # P0のスロット1（売却された「つぼ」の場所）は空（CARD_EMPTY）になっていること（補充されない）
-    assert runner.state.get_true_hand(0, 1) == godfield_core.CARD_EMPTY
-
-    # P0の有効な手札数（空ではないカード）が 1 に減少していることを確認（元は「売る」と「つぼ」の2枚）
-    active_cards_count = sum(1 for j in range(18) if runner.state.get_true_hand(0, j) != godfield_core.CARD_EMPTY)
-    assert active_cards_count == 1
-
-
-def test_sell_mirror_resolution():
-    """
-    検証内容: 「売る」に対するスーパーミラー反射解決時のアセット・手札遷移テスト。
-    - P0が「売る」でカードAをP1に売ろうとした際、P1が「スーパーミラー」で反射し、P0がそれを受諾（Confirm）した時：
-      - お金の受け渡し: 買い手となったP0が代金を支払い（お金 -10）、売り手となったP1が代金を受け取る（お金 +10）こと。
-      - 手札のカード移動: 売却対象のカードAは、買い手となったP0の手札（スロット1）に戻ること（P1には渡らない）。
-      - ドロー補充:
-        - P0の「売る」カードスロット（スロット0）は新しいカードがドロー補充され、手札は [新カード, カードA, 空き...] となること。
-        - P1の「スーパーミラー」スロット（スロット0）も消費され、新しいカードがドロー補充されること。
-    """
-    runner = SimulationRunner()
-    runner.state.seed_rng(0)
-    sell_id = find_card_by_name("売る")
-    pot_id = find_card_by_name("守護封印のつぼ")  # 価格 10
-    mirror_id = find_card_by_name("スーパーミラー")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_money(0, 20)  # P0のお金: 20
-    runner.state.set_money(1, 5)   # P1のお金: 5
-
-    # P0の手札: [売る, つぼ, CARD_EMPTY, ...]
-    runner.state.set_true_hand(0, 0, sell_id)
-    runner.state.set_true_hand(0, 1, pot_id)
-    for j in range(2, 18):
-        runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
-
-    # P1の手札: [スーパーミラー, CARD_EMPTY, ...]
-    runner.state.set_true_hand(1, 0, mirror_id)
-    for j in range(1, 18):
-        runner.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
-
-    # 1. P0が「売る」と「つぼ」を選択してP1をターゲット
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # 売る
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)  # つぼ
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    assert runner.state.current_phase == GamePhase.PHASE_SELL_SELECT_MIRROR
-    assert runner.state.current_actor_id == 1  # P1の意思決定
-
-    # 2. P1が「スーパーミラー」を選択して反射
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)  # スーパーミラー
-
-    # 反射により元の売るカードの提示フェイズ（PHASE_SELL_SELECT_MIRROR）のまま、アクターがP0（元の売り手）に戻ること
-    assert runner.state.current_phase == GamePhase.PHASE_SELL_SELECT_MIRROR
-    assert runner.state.current_actor_id == 0
-
-    # 3. P0が受諾
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # ターンが終了し、次のプレイヤー（P1）のメインフェイズ（PHASE_MAIN）に移行すること
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
-
-    # 4. お金の受け渡しアサーション
-    assert runner.state.get_money(0) == 10  # 20 - 10 = 10 (P0が買い取った)
-    assert runner.state.get_money(1) == 15  # 5 + 10 = 15 (P1が売りつけた)
-
-    # 5. P0の手札状態アサーション
-    # スロット0（「売る」だった場所）には、新しいカードがドロー補充されていること
-    assert runner.state.get_true_hand(0, 0) != godfield_core.CARD_EMPTY
-    assert runner.state.get_true_hand(0, 0) != sell_id
-    # スロット1（「つぼ」だった場所）は、買い取ったつぼが戻って格納されていること
-    assert runner.state.get_true_hand(0, 1) == pot_id
-
-    # 6. P1の手札状態アサーション
-    # P1の手札に「つぼ」は移動していないこと
-    assert pot_id not in [runner.state.get_true_hand(1, j) for j in range(18)]
-    # スロット0（「スーパーミラー」だった場所）は、消費されて新しいカードがドロー補充されていること
-    assert runner.state.get_true_hand(1, 0) != godfield_core.CARD_EMPTY
-    assert runner.state.get_true_hand(1, 0) != mirror_id
+    miracle = "miracles/fireball"
+    g = offer_for_purchase(
+        board,
+        p1=Side(hp=40, mp=20, money=0, hand=[miracle, miracle],
+                deployed=[1], known_to_opp=[1]),
+    )
 
+    g.deal_no()
 
+    assert g.state.get_is_known_to_opp(1, 0) is True, (
+        "展開済みの奇跡とは独立に扱われるべきです"
+    )
+    assert g.state.get_is_known_to_opp(1, 1) is True
+
+
+def test_buying_from_yourself_only_reveals_a_card(board):
+    """自分に「買う」を使うと、手札が1枚公開されるだけで取引は起きないことを検証します。"""
+    club = "weapons/bronze-club"
+    g = board(
+        p0=Side(hp=40, money=20, hand=[BUY, club]),
+        p1=Side(hp=40, money=20),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(BUY)
+    g.target_self()
 
+    # 相手の受諾やミラー確認を経ず、即座に解決してターンが移る
+    g.expect(phase=GamePhase.PHASE_MAIN, actor=1, p0_money=20, p1_money=20)
+    assert g.state.get_is_known_to_opp(0, 1) is True, "手札が1枚公開されるべきです"
+
+
+# ==========================================
+# 「売る」: 手札の増減と反射
+# ==========================================
+
+
+def test_selling_reduces_the_hand_by_one_because_only_the_deal_slot_refills(board):
+    """売却では「売る」のスロットだけが補充され、売ったカードのスロットは空のままになることを検証します。"""
+    refill = "armor/leather-cap"
+    price = card_feature(POT, "price")
+
+    g = board(
+        p0=Side(hp=40, money=0, hand=[SELL, POT]),
+        p1=Side(hp=40, money=price * 2),
+    )
+    g.rng.deck_always(refill)
+
+    g.select(SELL, POT)
+    g.target_opp()
+    g.confirm()  # P1 が受諾
+
+    g.expect(phase=GamePhase.PHASE_MAIN, actor=1)
+
+    assert g.state.get_true_hand(0, 0) == card_id(refill), (
+        "「売る」のスロットは補充されるべきです"
+    )
+    assert g.state.get_true_hand(0, 1) == godfield_core.CARD_EMPTY, (
+        "売ったカードのスロットは補充されないべきです"
+    )
+    assert len(g.hand(0)) == 1, "手札総数が1枚減るべきです"
+
+
+def test_sell_reflected_by_the_super_mirror_makes_the_seller_buy_it_back(board):
+    """「売る」を反射されると、売ろうとした側が自分で買い戻すことを検証します。"""
+    refill = "armor/leather-cap"
+    price = card_feature(POT, "price")
+    p0_money, p1_money = price * 2, price // 2
+
+    g = board(
+        p0=Side(hp=40, money=p0_money, hand=[SELL, POT]),
+        p1=Side(hp=40, money=p1_money, hand=[MIRROR]),
+    )
+    g.rng.deck_always(refill)
+
+    g.select(SELL, POT)
+    g.target_opp()
+    g.expect(phase=GamePhase.PHASE_SELL_SELECT_MIRROR, actor=1)
+
+    g.select(MIRROR)  # P1 が反射
+    g.expect(phase=GamePhase.PHASE_SELL_SELECT_MIRROR, actor=0)
+
+    g.confirm()  # P0 が反射を受け入れる
+
+    g.expect(
+        phase=GamePhase.PHASE_MAIN,
+        actor=1,
+        p0_money=p0_money - price,
+        p1_money=p1_money + price,
+    )
+
+    # つぼは売れずに P0 の手札へ戻る
+    assert g.state.get_true_hand(0, 1) == card_id(POT)
+    assert card_name(card_id(POT)) not in g.hand(1), "相手にカードは渡らない"
+
+    # 使い切ったスロットはどちらも補充される
+    assert g.state.get_true_hand(0, 0) == card_id(refill), "「売る」の補充"
+    assert g.state.get_true_hand(1, 0) == card_id(refill), "スーパーミラーの補充"
+
+
+# ==========================================
+# 攻撃内容の観測可能性
+# ==========================================
+
+
+def test_the_attack_stays_visible_to_the_defender_until_it_resolves(board):
+    """攻撃確定から防御解決までの間、防御側が攻撃内容を完全に観測できることを検証します。"""
+    club = "weapons/bronze-club"
+    blowgun = "weapons/blowgun"
+    cap = "armor/leather-cap"
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[club, blowgun]),
+        p1=Side(hp=40, mp=10, hand=[cap]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(club)
+    assert g.state.get_is_known_to_opp(0, 0) is False, "仮置き中はまだ見えない"
+
+    g.expect(phase=GamePhase.PHASE_ATTACK_PLUS)
+    g.select(blowgun)
+    assert g.state.get_is_known_to_opp(0, 1) is False, "仮置き中はまだ見えない"
+
+    g.target_opp()
+
+    # 確定した時点で、使ったカードが相手に公開される
+    assert g.state.get_is_known_to_opp(0, 0) is True
+    assert g.state.get_is_known_to_opp(0, 1) is True
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1)
+
+    # 防御中も攻撃側の仮置きは維持され、使用順まで観測できる
+    assert g.state.get_num_staged_cards(0) == 2
+    assert g.state.get_staged_card(0, 0) == 0
+    assert g.state.get_staged_card(0, 1) == 1
+
+    g.select(cap)
+    assert g.state.get_is_known_to_opp(1, 0) is False, "防具は仮置き中まだ見えない"
+
+    g.confirm()
+
+    # 解決後は両者の仮置きがクリアされる
+    assert g.state.get_num_staged_cards(0) == 0
+    assert g.state.get_num_staged_cards(1) == 0
 
 
 # ==========================================
@@ -722,397 +529,296 @@ def test_sell_mirror_resolution():
 
 
 
-def test_healing_sundry_smile_drop_exclusivity():
+def test_only_one_sundry_can_be_used_at_a_time(board):
+    """雑貨を1枚仮置きすると、別の雑貨を重ねられなくなることを検証します。"""
+    g = board(
+        p0=Side(hp=10, hand=["sundries/smile-dew", "sundries/romance-fragrance"]),
+        p1=Side(hp=40),
+    )
+
+    g.select("sundries/smile-dew")
+
+    g.expect_illegal(["sundries/romance-fragrance"])
+    g.expect_actions(target_self=True)
+
+
+# HP を回復する雑貨と回復量。combat_resolution.cpp の apply_card_effect_to_target と対応する。
+HP_HEALING_SUNDRIES = [
+    ("sundries/smile-dew", 5),
+    ("sundries/heart-dew", 10),
+    ("sundries/galaxy-geyser", 20),
+]
+
+# MP を回復する雑貨と回復量。
+MP_HEALING_SUNDRIES = [
+    ("sundries/smile-flower", 5),
+    ("sundries/heart-flower", 10),
+    ("sundries/romance-fragrance", 15),
+]
+
+
+@pytest.mark.parametrize(("card", "heal"), HP_HEALING_SUNDRIES)
+def test_hp_healing_sundries_restore_the_documented_amount(board, card, heal):
+    """HP回復雑貨が規定量だけ回復し、ターンが相手へ移ることを検証します。
+
+    従来はスマイルのしずく1種だけを検証していました。
     """
-    検証内容: 雑貨使用時における複数雑貨の同時使用禁止ルール。
-    - メインフェイズで雑貨（スマイルのしずく）を選択した際、手札にある別の雑貨（ロマンスの香木）が非合法手（False）になり、同時使用できないことを確認します。
+    g = board(p0=Side(hp=10, hand=[card]), p1=Side(hp=40))
+    g.rng.deck_always("armor/wood-shield")
+
+    g.attack(card, to_self=True)
+
+    g.expect(p0_hp=10 + heal, actor=1)
+
+
+@pytest.mark.parametrize(("card", "heal"), MP_HEALING_SUNDRIES)
+def test_mp_healing_sundries_restore_the_documented_amount(board, card, heal):
+    """MP回復雑貨が規定量だけ回復することを検証します。"""
+    g = board(p0=Side(hp=10, mp=0, hand=[card]), p1=Side(hp=40))
+    g.rng.deck_always("armor/wood-shield")
+
+    g.attack(card, to_self=True)
+
+    g.expect(p0_mp=heal, actor=1)
+
+
+@pytest.mark.parametrize(("card", "heal"), HP_HEALING_SUNDRIES)
+def test_hp_healing_is_clamped_at_99(board, card, heal):
+    """HP回復が上限99でクランプされることを、全回復雑貨について検証します。"""
+    g = board(p0=Side(hp=98, hand=[card]), p1=Side(hp=40))
+    g.rng.deck_always("armor/wood-shield")
+
+    g.attack(card, to_self=True)
+
+    g.expect(p0_hp=99)
+
+
+@pytest.mark.parametrize(("card", "heal"), MP_HEALING_SUNDRIES)
+def test_mp_healing_is_clamped_at_99(board, card, heal):
+    """MP回復が上限99でクランプされることを、全回復雑貨について検証します。"""
+    g = board(p0=Side(hp=10, mp=98, hand=[card]), p1=Side(hp=40))
+    g.rng.deck_always("armor/wood-shield")
+
+    g.attack(card, to_self=True)
+
+    g.expect(p0_mp=99)
+
+
+def test_heaven_herb_restores_mp_but_inflicts_heaven_sickness(board):
+    """天国草が相手のMPを+20する代償に天国病を与えることを検証します。"""
+    g = board(
+        p0=Side(hp=40, hand=["sundries/heaven-herb"]),
+        p1=Side(hp=40, mp=10, sickness=SicknessType.SICKNESS_NONE),
+    )
+    g.rng.deck_always("armor/wood-shield")
+
+    g.use("sundries/heaven-herb")
+
+    g.expect(p1_mp=30, p1_sickness=SicknessType.SICKNESS_HEAVEN)
+
+
+def test_smile_shell_cures_only_the_lighter_ailments(board):
+    """スマイルの貝がらが風邪と霧・閃光だけを治し、夢と暗雲は残すことを検証します。
+
+    従来は夢が残ることだけを確認していましたが、暗雲も残ることが仕様なので併せて固定します。
     """
-    runner = SimulationRunner()
-    runner.reset_state()
+    g = board(
+        p0=Side(
+            hp=40,
+            sickness=SicknessType.SICKNESS_COLD,
+            curses=[CurseType.CURSE_FOG, CurseType.CURSE_FLASH,
+                    CurseType.CURSE_DARK_CLOUD, CurseType.CURSE_DREAM],
+            hand=["sundries/smile-shell"],
+        ),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always("armor/wood-shield")
 
-    smile_drop_id = find_card_by_name("スマイルのしずく")
-    romance_wood_id = find_card_by_name("ロマンスの香木")
+    g.attack("sundries/smile-shell", to_self=True)
 
-    runner.set_status(0, hp=10, mp=0)
-    runner.set_hand(0, [smile_drop_id, romance_wood_id])
-
-    # スマイルのしずくを選択
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # ロマンスの香木（スロット1）が非合法手になっていることを確認
-    mask = godfield_core.get_legal_actions(runner.state)
-    assert mask[ActionType.ACTION_SELECT_HAND_1] == False
-    assert mask[ActionType.ACTION_TARGET_SELF] == True
+    g.expect(
+        p0_sickness=SicknessType.SICKNESS_NONE,
+        p0_curses={CurseType.CURSE_DARK_CLOUD, CurseType.CURSE_DREAM},
+    )
 
 
-def test_healing_sundry_smile_drop_resolves():
+def test_heart_shell_cures_every_ailment(board):
+    """ハートの貝がらが地獄病と全ての災いを完全に治すことを検証します。"""
+    g = board(
+        p0=Side(
+            hp=40,
+            sickness=SicknessType.SICKNESS_HELL,
+            curses=[CurseType.CURSE_FOG, CurseType.CURSE_FLASH,
+                    CurseType.CURSE_DARK_CLOUD, CurseType.CURSE_DREAM],
+            hand=["sundries/heart-shell"],
+        ),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always("armor/wood-shield")
+
+    g.attack("sundries/heart-shell", to_self=True)
+
+    g.expect(p0_sickness=SicknessType.SICKNESS_NONE, p0_curses=set())
+
+
+def test_guardian_pot_summons_the_specified_guardian(board):
+    """守護封印のつぼで降臨する守護神を指定して検証します。
+
+    従来は「1〜10のいずれか」という緩い検証でした（10種すべての網羅は
+    test_roll_branch_coverage.py が担当します）。
     """
-    検証内容: スマイルのしずくによるHP回復解決テスト。
-    - 自分を対象に「スマイルのしずく」を使用し、HPが +5 回復（10 -> 15）し、ターンが相手に正常に移行することを確認します。
+    g = board(p0=Side(hp=40, guardian=0, hand=["sundries/guardian-pot"]), p1=Side(hp=40))
+    g.rng.deck_always("armor/wood-shield")
+    g.rng.guardian_pot(int(GuardianType.SATURN))
+
+    g.attack("sundries/guardian-pot", to_self=True)
+
+    g.expect(p0_guardian=int(GuardianType.SATURN))
+
+
+def test_sundry_on_opponent_auto_advances_without_a_super_mirror(board):
+    """相手に雑貨を使ったとき、相手がスーパーミラーを持たなければ自動進行対象になることを検証します。"""
+    g = board(
+        p0=Side(hp=40, hand=["sundries/heaven-herb"]),
+        p1=Side(hp=40, hand=["armor/wood-shield"]),
+    )
+
+    g.attack("sundries/heaven-herb")
+
+    g.expect(phase=GamePhase.PHASE_SUNDRY_SELECT_MIRROR, actor=1)
+    assert godfield_core.get_single_legal_action(g.state) == ActionType.ACTION_CONFIRM
+
+
+@pytest.mark.parametrize("heals", [True, False], ids=["HP+10", "HP-10"])
+def test_thump_thump_tear_swings_hp_both_ways(board, heals):
+    """ドキドキ涙のHP増減を両方向とも決定的に検証します。
+
+    従来は `hp in [30, 50]` という OR 条件で、どちらに振れたかを制御も検証も
+    できていませんでした。
     """
-    runner = SimulationRunner()
-    runner.reset_state()
+    g = board(p0=Side(hp=40, guardian=0, hand=["sundries/thump-thump-tear"]), p1=Side(hp=40))
+    g.rng.deck_always("armor/wood-shield")
+    g.rng.thump_thump_tear(heals=heals)
 
-    smile_drop_id = find_card_by_name("スマイルのしずく")
-
-    runner.set_status(0, hp=10, mp=0)
-    runner.set_hand(0, [smile_drop_id])
-
-    runner.perform_attack([0], to_self=True)
-
-    # ターンが相手(1)に移り、HPが15になっていること
-    assert runner.state.current_actor_id == 1
-    assert runner.state.get_hp(0) == 15
-
-
-def test_healing_sundry_romance_wood_resolves():
-    """
-    検証内容: ロマンスの香木によるMP回復解決テスト。
-    - 自分を対象に「ロマンスの香木」を使用し、MPが +15 回復（0 -> 15）することを確認します。
-    """
-    runner = SimulationRunner()
-    runner.reset_state()
-
-    romance_wood_id = find_card_by_name("ロマンスの香木")
-
-    runner.set_status(0, hp=10, mp=0)
-    runner.set_hand(0, [romance_wood_id])
-
-    runner.perform_attack([0], to_self=True)
-
-    # MPが15になっていること
-    assert runner.state.get_mp(0) == 15
-
-
-def test_healing_sundry_hp_clamping():
-    """
-    検証内容: HP回復時の上限値（99）クランプテスト。
-    - HPが 98 の状態で「スマイルのしずく（HP+5）」を使用した際、HPが 99 にクランプされることを確認します。
-    """
-    runner = SimulationRunner()
-    runner.reset_state()
-
-    smile_drop_id = find_card_by_name("スマイルのしずく")
-
-    runner.set_status(0, hp=98, mp=0)
-    runner.set_hand(0, [smile_drop_id])
-
-    runner.perform_attack([0], to_self=True)
-
-    assert runner.state.get_hp(0) == 99
-
-
-def test_healing_sundry_mp_clamping():
-    """
-    検証内容: MP回復時の上限値（99）クランプテスト。
-    - MPが 90 の状態で「ロマンスの香木（MP+15）」を使用した際、MPが 99 にクランプされることを確認します。
-    """
-    runner = SimulationRunner()
-    runner.reset_state()
-
-    romance_wood_id = find_card_by_name("ロマンスの香木")
-
-    runner.set_status(0, hp=10, mp=90)
-    runner.set_hand(0, [romance_wood_id])
-
-    runner.perform_attack([0], to_self=True)
-
-    assert runner.state.get_mp(0) == 99
-
-
-def test_recovery_and_sickness_sundry():
-    """
-    検証内容: 天国草によるMP回復と天国病付与テスト。
-    - 相手に「天国草」を使用し、相手が受諾した際、相手のMPが +20 回復（10 -> 30）し、かつ「天国病」になることを確認します。
-    """
-    runner = SimulationRunner()
-    heaven_herb_id = find_card_by_name("天国草")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(1, 10)
-    runner.state.set_sickness(1, SicknessType.SICKNESS_NONE)
-    runner.state.set_true_hand(0, 0, heaven_herb_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 相手(P1)のステータス変化
-    assert runner.state.get_mp(1) == 30
-    assert runner.state.get_sickness(1) == SicknessType.SICKNESS_HEAVEN
-
-
-def test_smile_shell_curing_sickness_and_curses():
-    """
-    検証内容: スマイルの貝がらによる状態異常/災い治癒テスト。
-    - 「スマイルの貝がら」を使用すると、風邪（SICKNESS_COLD）および霧（CURSE_FOG）が治療される（治癒）ことを確認します。
-    - スマイルでは治らない「夢（CURSE_DREAM）」が治癒されずに残ることを確認します。
-    """
-    runner = SimulationRunner()
-    smile_shell_id = find_card_by_name("スマイルの貝がら")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_sickness(0, SicknessType.SICKNESS_COLD)
-    runner.state.set_curses(0, CurseType.CURSE_FOG, True)
-    runner.state.set_curses(0, CurseType.CURSE_DREAM, True)
-
-    runner.state.set_true_hand(0, 0, smile_shell_id)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    assert runner.state.get_sickness(0) == SicknessType.SICKNESS_NONE
-    assert runner.state.get_curses(0, CurseType.CURSE_FOG) == False
-    assert runner.state.get_curses(0, CurseType.CURSE_DREAM) == True
-
-
-def test_heart_shell_curing_sickness_and_curses():
-    """
-    検証内容: ハートの貝がらによる全状態異常/全災い治癒テスト。
-    - 「ハートの貝がら」を使用すると、最高度の異常である「地獄病（SICKNESS_HELL）」およびすべての災い（霧、閃光、暗雲、夢）が完全に治癒されることを確認します。
-    """
-    runner = SimulationRunner()
-    heart_shell_id = find_card_by_name("ハートの貝がら")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_sickness(0, SicknessType.SICKNESS_HELL)
-    for c in [
-        CurseType.CURSE_FOG,
-        CurseType.CURSE_FLASH,
-        CurseType.CURSE_DARK_CLOUD,
-        CurseType.CURSE_DREAM,
-    ]:
-        runner.state.set_curses(0, c, True)
-
-    runner.state.set_true_hand(0, 0, heart_shell_id)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    assert runner.state.get_sickness(0) == SicknessType.SICKNESS_NONE
-    for c in [
-        CurseType.CURSE_FOG,
-        CurseType.CURSE_FLASH,
-        CurseType.CURSE_DARK_CLOUD,
-        CurseType.CURSE_DREAM,
-    ]:
-        assert runner.state.get_curses(0, c) == False
-
-
-def test_guardian_pot_dwells_guardian():
-    """
-    検証内容: 守護封印のつぼによる守護神 Dwelling テスト。
-    - 「守護封印のつぼ」を使用した際、自分の守護神スロットに 1 〜 10 のいずれかの有効な守護神IDが宿ることを確認します。
-    """
-    runner = SimulationRunner()
-    pot_id = find_card_by_name("守護封印のつぼ")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_guardian(0, 0)
-    runner.state.set_true_hand(0, 0, pot_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    # 守護神IDが1から10の範囲で割り振られていること
-    assert 1 <= runner.state.get_guardian(0) <= 10
-
-
-def test_sundry_without_super_mirror_auto_advances():
-    """
-    検証内容: 相手が雑貨（毒）を使用し、自分にスーパーミラーがない場合。
-    - get_single_legal_action が ACTION_CONFIRM を返して自動進行（オートスキップ）すること。
-    """
-    runner = SimulationRunner()
-    poison_id = find_card_by_name("天国草")
-    shield_id = find_card_by_name("木の盾")
-
-    runner.set_status(0, hp=40)
-    runner.set_status(1, hp=40)
-    runner.state.set_true_hand(0, 0, poison_id)
-    runner.state.set_true_hand(1, 0, shield_id)
-
-    # P0がP1に「毒」を対象
-    runner.perform_attack([0])
-
-    # フェイズは PHASE_SUNDRY_SELECT_MIRROR で、P1にスーパーミラーはない
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
-    assert runner.state.current_actor_id == 1
-
-    # スーパーミラーがないため get_single_legal_action は ACTION_CONFIRM を返し自動進行対象であること
-    assert godfield_core.get_single_legal_action(runner.state) == ActionType.ACTION_CONFIRM
-
-
-def test_thump_tear_random_healing_or_damage():
-    """
-    検証内容: ドキドキ涙による確率的HP増減テスト。
-    - 「ドキドキ涙」を使用した際、結果としてHPが +10（50）または -10（30）のいずれかに確率変動することを確認します。
-    """
-    runner = SimulationRunner()
-    tear_id = find_card_by_name("ドキドキ涙")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_hp(0, 40)
-    runner.state.set_true_hand(0, 0, tear_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    # 30 または 50 になっていること
-    assert runner.state.get_hp(0) in [30, 50]
-
-
-def test_broom_self_target_discard():
-    """
-    検証内容: 夜空のホウキによる自己手札破棄とドロー補充。
-    - 手札 [木刀, 木の盾, ホウキ] の状態で自分に「夜空のホウキ」を使用。
-    - ホウキ以外の他カード（木刀、木の盾）が破棄され、CARD_EMPTY になることを確認します。
-    - ターン終了時のドロー補充により、ホウキのスロット（スロット2）のみに新しいカードが入ることを確認します。
-    """
-    runner = SimulationRunner()
-    broom_id = find_card_by_name("夜空のホウキ")
-    dummy_a = find_card_by_type("weapon")
-    dummy_b = find_card_by_type("defense")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 20)
-
-    # 手札初期化
-    for i in range(18):
-        runner.state.set_true_hand(0, i, godfield_core.CARD_EMPTY)
-        runner.state.set_is_used(0, i, False)
-        runner.state.set_is_deployed(0, i, False)
-
-    runner.state.set_true_hand(0, 0, dummy_a)
-    runner.state.set_true_hand(0, 1, dummy_b)
-    runner.state.set_true_hand(0, 2, broom_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_2)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    # 他カードが破棄されていること
-    assert runner.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY
-    assert runner.state.get_true_hand(0, 1) == godfield_core.CARD_EMPTY
-
-    # スロット2のみ新規カードがドローされていること
-    assert runner.state.get_true_hand(0, 2) != godfield_core.CARD_EMPTY
-    assert runner.state.get_true_hand(0, 2) != broom_id
-
-
-def test_goddess_soap_miracle_discard():
-    """
-    検証内容: 女神の石けんによる相手の展開中奇跡の破棄。
-    - 相手（P1）が展開している奇跡に対し、自分が「女神の石けん」を使用した際、相手の展開中の奇跡が破棄されて手札スロットが CARD_EMPTY になることを確認します。
-    """
-    runner = SimulationRunner()
-    soap_id = find_card_by_name("女神の石けん")
-    miracle_a = find_card_by_type("miracle")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 20)
-
-    # 相手のスロット5に奇跡を展開
-    runner.state.set_true_hand(1, 5, miracle_a)
-    runner.state.set_is_deployed(1, 5, True)
-    runner.state.set_true_hand(0, 0, soap_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 展開中奇跡が解除されていること
-    assert runner.state.get_true_hand(1, 5) == godfield_core.CARD_EMPTY
-    assert runner.state.get_is_deployed(1, 5) == False
-
-
-def test_sundry_logic_self_target():
-    """
-    検証内容: 雑貨の自分対象時の即時適用テスト。
-    - 自分を対象に雑貨（天国草）を使用した際、ミラー確認フェイズをスキップして即座に解決され、相手のメインフェイズに遷移することを確認します。
-    """
-    runner = SimulationRunner()
-    sundry_id = find_card_by_name("天国草")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 10)
-    runner.state.set_true_hand(0, 0, sundry_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    # ミラー確認を経ず即解決
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
-    assert runner.state.get_mp(0) > 10
-
-
-def test_sundry_logic_opp_target_accept():
-    """
-    検証内容: 相手対象時の雑貨受諾テスト。
-    - 相手を対象に雑貨（天国草）を使用した際、一度ミラー確認フェイズ（PHASE_SUNDRY_SELECT_MIRROR）に遷移することを確認します。
-    - 相手が受諾（CONFIRM）した時点で、効果（MP回復）が相手に適用されることを確認します。
-    """
-    runner = SimulationRunner()
-    sundry_id = find_card_by_name("天国草")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(1, 10)
-    runner.state.set_true_hand(0, 0, sundry_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    # ミラー選択フェイズへ
-    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
-    assert runner.state.current_actor_id == 1
-
-    # 相手が受諾
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 解決されて相手のMPが回復していること
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
-    assert runner.state.get_mp(1) > 10
-
-
-def test_sundry_logic_opp_target_mirror_reflect():
-    """
-    検証内容: 相手対象時の雑貨ミラー反射テスト。
-    - 相手を対象に雑貨を使用し、相手が「スーパーミラー」で反射した場合、反射フェイズのままアクターが自分（0）に戻ることを確認します。
-    - 自分が受諾（CONFIRM）した時点で、効果が本来の使用者の自分自身に跳ね返って適用されることを確認します。
-    """
-    runner = SimulationRunner()
-    sundry_id = find_card_by_name("天国草")
-    super_mirror_id = find_card_by_name("スーパーミラー")
-
-    runner.state.current_phase = GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 10)
-    runner.state.set_mp(1, 10)
-
-    runner.state.set_true_hand(0, 0, sundry_id)
-    runner.state.set_true_hand(1, 0, super_mirror_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    # 相手がスーパーミラー使用
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-
-    # アクターが自分(0)に交代
-    assert runner.state.current_phase == GamePhase.PHASE_SUNDRY_SELECT_MIRROR
-    assert runner.state.current_actor_id == 0
-
-    # 自分が受諾
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 自分のMPが回復し、相手のMPは10のまま維持されていること
-    assert runner.state.get_mp(0) > 10
-    assert runner.state.get_mp(1) == 10
+    g.attack("sundries/thump-thump-tear", to_self=True)
+
+    g.expect(p0_hp=50 if heals else 30)
+
+
+def test_nocturnal_broom_discards_the_rest_of_your_hand(board):
+    """夜空のホウキが自分の他の手札をすべて捨てさせ、自分のスロットだけ補充されることを検証します。"""
+    broom = "sundries/nocturnal-broom"
+    refill = "armor/leather-cap"
+
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["weapons/wooden-sword", "armor/wood-shield", broom]),
+        p1=Side(hp=40, mp=20),
+    )
+    g.rng.deck_always(refill)
+
+    g.select(broom)
+    g.target_self()
+
+    assert g.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY, "他の手札は捨てられる"
+    assert g.state.get_true_hand(0, 1) == godfield_core.CARD_EMPTY, "他の手札は捨てられる"
+    assert g.state.get_true_hand(0, 2) == card_id(refill), (
+        "ホウキを使ったスロットだけが補充される"
+    )
+
+
+def test_goddess_soap_discards_the_opponents_deployed_miracle(board):
+    """女神の石けんが相手の展開済み奇跡を破棄することを検証します。"""
+    soap = "sundries/goddess-s-soap"
+    miracle = "miracles/fireball"
+
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[soap]),
+        p1=Side(hp=40, mp=20, hand=[None, None, None, None, None, miracle], deployed=[5]),
+    )
+    g.rng.deck_always(FILLER)
+
+    assert g.state.get_is_deployed(1, 5) is True, "展開済みの状態を作れていない"
+
+    g.select(soap)
+    g.target_opp()
+    g.confirm()  # 相手が反射せず受諾
+
+    assert g.state.get_true_hand(1, 5) == godfield_core.CARD_EMPTY
+    assert g.state.get_is_deployed(1, 5) is False
+
+
+HEAVEN_HERB = "sundries/heaven-herb"
+HEAVEN_HERB_MP_GAIN = 20  # 効果量そのものは test_heaven_herb_restores_mp_but_inflicts_heaven_sickness で検証
+
+
+def test_a_sundry_on_yourself_resolves_immediately(board):
+    """自分を対象にした雑貨がミラー確認を経ず即座に解決されることを検証します。"""
+    mp = 10
+    g = board(
+        p0=Side(hp=40, mp=mp, hand=[HEAVEN_HERB]),
+        p1=Side(hp=40, mp=mp),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(HEAVEN_HERB)
+    g.target_self()
+
+    # 天国草は「MPを全回復し天国病にする」雑貨
+    g.expect(
+        phase=GamePhase.PHASE_MAIN,
+        actor=1,
+        p0_mp=mp + HEAVEN_HERB_MP_GAIN,
+        p0_sickness=SicknessType.SICKNESS_HEAVEN,
+        p1_mp=mp,
+        p1_sickness=SicknessType.SICKNESS_NONE,
+    )
+
+
+def test_a_sundry_on_the_opponent_waits_for_their_answer(board):
+    """相手を対象にした雑貨がミラー確認フェイズを挟み、受諾で相手に適用されることを検証します。"""
+    mp = 10
+    g = board(
+        p0=Side(hp=40, mp=mp, hand=[HEAVEN_HERB]),
+        p1=Side(hp=40, mp=mp),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(HEAVEN_HERB)
+    g.target_opp()
+    g.expect(phase=GamePhase.PHASE_SUNDRY_SELECT_MIRROR, actor=1)
+
+    g.confirm()  # 相手が受諾
+
+    g.expect(
+        phase=GamePhase.PHASE_MAIN,
+        actor=1,
+        p0_mp=mp,
+        p0_sickness=SicknessType.SICKNESS_NONE,
+        p1_mp=mp + HEAVEN_HERB_MP_GAIN,
+        p1_sickness=SicknessType.SICKNESS_HEAVEN,
+    )
+
+
+def test_a_reflected_sundry_comes_back_to_its_user(board):
+    """雑貨をスーパーミラーで反射されると、効果が使用者自身に返ることを検証します。"""
+    mp = 10
+    g = board(
+        p0=Side(hp=40, mp=mp, hand=[HEAVEN_HERB]),
+        p1=Side(hp=40, mp=mp, hand=[MIRROR]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(HEAVEN_HERB)
+    g.target_opp()
+
+    g.select(MIRROR)  # 相手が反射
+    g.expect(phase=GamePhase.PHASE_SUNDRY_SELECT_MIRROR, actor=0)
+
+    g.confirm()  # 自分が受け入れる
+
+    g.expect(
+        p0_mp=mp + HEAVEN_HERB_MP_GAIN,
+        p0_sickness=SicknessType.SICKNESS_HEAVEN,
+        p1_mp=mp,
+        p1_sickness=SicknessType.SICKNESS_NONE,
+    )

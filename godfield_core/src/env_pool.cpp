@@ -58,7 +58,7 @@ void EnvPool::reset_env(int env_id, int seed) {
     for (int p=0; p<2; ++p) {
         for (int h=0; h<MAX_HAND_SIZE; ++h) {
             if (h < 9) {
-                states_[env_id].true_hand[p][h] = draw_card(states_[env_id].rng);
+                states_[env_id].true_hand[p][h] = draw_card(states_[env_id]);
             } else {
                 states_[env_id].true_hand[p][h] = CARD_EMPTY; // Empty slot
             }

@@ -18,7 +18,7 @@ void init_game_logic(const pybind11::list &cards);
  * Draws a random card ID from the initialized game logic registry.
  * Throws an exception if init_game_logic has not been called.
  */
-int draw_card(std::mt19937& rng);
+int draw_card(InternalState& state);
 
 /**
  * Registry accessors for python side testing and observation building

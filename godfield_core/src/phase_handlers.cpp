@@ -97,20 +97,36 @@ StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
     info.attack_power = total_atk;
     info.element = has_processed ? current_element : ELEM_NONE;
 
-    info.hit = true;
-    for (int card_id : card_ids) {
+    return info;
+}
+
+/**
+ * @brief 仮置きされた武器・奇跡の命中判定を行います（乱数を消費します）。
+ *
+ * この判定は evaluate_staged_attack から意図的に分離しています。以前は
+ * evaluate_staged_attack の中で判定していたため、
+ *   - 仮置きのたびに呼ばれる update_staged_pending_info（観測へ攻撃力・属性を
+ *     反映するだけのプレビュー）でも判定が行われ、その結果は捨てられていた
+ *   - 自分自身を対象にする解決（命中判定を使わない経路）でも判定が行われていた
+ * ため、1回の攻撃で命中判定が2回転がり、消費される乱数の量が仮置き・解除の
+ * 回数に依存していました。最終的な命中率は変わりませんが、「攻撃力を計算すると
+ * 乱数が進む」という非純粋性は、プレビューと実結果が食い違う実装を招きやすいので
+ * 解決時にだけ判定するようにしています。
+ *
+ * @param player_id 攻撃側のプレイヤーID。
+ * @return 命中したなら true。暗雲がかかっている相手への攻撃は判定せず必中。
+ */
+bool roll_staged_attack_hits(InternalState &state, int player_id) {
+    for (int card_id : get_staged_card_ids(state, player_id)) {
         if (card_id == CARD_EMPTY) continue;
         const CardFeatures &f = g_card_registry[card_id];
         if (f.accuracy < 100 && !state.curses[1 - player_id][CURSE_TYPE_DARK_CLOUD]) {
-            std::uniform_int_distribution<int> dist(0, 99);
-            if (dist(state.rng) >= f.accuracy) {
-                info.hit = false;
-                break;
+            if (roll_range(state, RollKind::ACCURACY, 0, 99) >= f.accuracy) {
+                return false;
             }
         }
     }
-
-    return info;
+    return true;
 }
 
 
@@ -137,19 +153,7 @@ void update_staged_pending_info(InternalState &state, int player_id) {
         state.pending_is_group_attack = is_group;
     }
 
-    // 1. 売却価格計算
-    int sell_price = 0;
-    bool has_sell = false;
-    for (int cid : card_ids) {
-        if (cid == ID_SELL) {
-            has_sell = true;
-        } else if (cid != CARD_EMPTY) {
-            sell_price += g_card_registry[cid].price;
-        }
-    }
-    state.pending_sell_price = (has_sell || state.current_phase == GamePhase::PHASE_SELL_SELECT) ? sell_price : 0;
-
-    // 2. 防御力計算
+    // 防御力計算
     int def_power = 0;
     for (int cid : card_ids) {
         if (cid == CARD_EMPTY) continue;
@@ -203,7 +207,7 @@ static void process_ring_defense_effects(InternalState &state, int me, int opp, 
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
         int card_id = state.true_hand[me][state.staged_cards[me][i]];
         if (card_id == ID_MARS_RING) {
-            int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
+            int roll = roll_range(state, RollKind::MARS_RING, 0, 99);
             if (roll < MARS_RING_RATE && state.num_pending_counters < 10) {
                 int idx = state.num_pending_counters++;
                 state.pending_counter_attacker[idx] = me;
@@ -298,7 +302,7 @@ void setup_multiple_attacks(InternalState &state, int me, int opp, const StagedA
             mirage_count++;
         }
     }
-    int base_attacks = has_saw_boom_boom ? 2 : 1;
+    int base_attacks = has_saw_boom_boom ? SAW_BOOM_BOOM_ATTACK_COUNT : 1;
     int total_attacks = base_attacks * std::max(1, mirage_count);
 
     state.remaining_attacks = total_attacks;
@@ -437,7 +441,7 @@ void step_phase_main_target_select(InternalState &state, ActionType action, int 
                         }
                     }
                     if (!candidates.empty()) {
-                        std::shuffle(candidates.begin(), candidates.end(), state.rng);
+                        shuffle_by_value(state, RollKind::REVEAL_SLOT, candidates);
                         state.is_known_to_opp[me][candidates[0]] = true;
                     }
                     state.num_staged_cards[me] = 0;
@@ -556,11 +560,12 @@ static void step_phase_group_attack(InternalState &state, ActionType action, int
         StagedAttackInfo info = evaluate_staged_attack(state, me);
         state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
 
-        if (!info.hit) {
+        if (!roll_staged_attack_hits(state, me)) {
             push_event(state, me, EventType::ATTACK_MISS, first_card, target, 0.0f);
             state.current_phase = GamePhase::PHASE_END;
         } else {
-            push_event(state, me, EventType::ATTACK_HIT, first_card, target, info.attack_power);
+            push_event(state, me, EventType::ATTACK_HIT, first_card, target,
+                       static_cast<float>(info.attack_power));
             if (is_weapon) {
                 setup_multiple_attacks(state, me, target, info);
             }
@@ -735,7 +740,7 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
             state.mp[me] = std::clamp(state.mp[me] - total_mp_cost, 0, 99);
             bool success = true;
             if (react_type == REACTION_BOUNCE) {
-                int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
+                int roll = roll_range(state, RollKind::BOUNCE, 0, 99);
                 success = (roll < BOUNCE_SUCCESS_RATE);
             }
             if (success) {
@@ -790,7 +795,7 @@ void step_phase_miracle_plus(InternalState &state, ActionType action, int me, in
         StagedAttackInfo info = evaluate_staged_attack(state, me);
         state.mp[me] = std::clamp(state.mp[me] - info.mp_cost, 0, 99);
 
-        if (!info.hit) {
+        if (!roll_staged_attack_hits(state, me)) {
             state.current_phase = GamePhase::PHASE_END;
         } else {
             state.pending_attack_power = info.attack_power;
@@ -872,7 +877,7 @@ void step_phase_buy_select_mirror(InternalState &state, ActionType action, int m
         }
         
         if (!candidates.empty()) {
-            std::shuffle(candidates.begin(), candidates.end(), state.rng);
+            shuffle_by_value(state, RollKind::REVEAL_SLOT, candidates);
             int revealed_idx = candidates[0];
             confirm_card(state, me, revealed_idx);
             state.is_known_to_opp[me][revealed_idx] = true;
@@ -984,7 +989,7 @@ void step_phase_buy(InternalState &state, ActionType action, int me, int opp) {
                     }
                 }
                 if (!candidates.empty()) {
-                    std::shuffle(candidates.begin(), candidates.end(), state.rng);
+                    shuffle_by_value(state, RollKind::HAND_REPLACE_SLOT, candidates);
                     int replace_idx = candidates[0];
                     clear_hand_slot(state, buyer, replace_idx);
                     add_card_to_hand_slot(state, buyer, replace_idx, card_id, false);

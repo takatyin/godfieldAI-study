@@ -1,404 +1,335 @@
+"""visualizer が手札に表示するラベル（power_label / 仮置き合計バッジ）の検証。
+
+【移行メモ】
+表示ラベルの数値部分がすべて直書きでした（'¥4' '守3' '攻12' '+攻10'）。
+カードの性能を変えるとラベルも変わるはずですが、どちらが正しいのか
+コードから読めません。数値はカードマスタから引き、テストが検証するのは
+「どの場面でどの数値が選ばれるか」という表示ルールに絞りました。
+
+局面の組み立ても、フェイズや仮置き状態を直接代入していた箇所を実際の操作に
+置き換えています（`set_num_staged_cards` などを手で設定すると、その状態が
+本当に発生しうるのかが検証されないため）。
+"""
+
+import pytest
+
 import godfield_core
-from tests.core.test_utils import SimulationRunner, find_card_by_name
+from godfield_core import GamePhase
+from tests.core.dsl import Side, card_feature, card_id
 from visualizer.constants import CARDS_BY_ID
-from visualizer.presenter import compute_smart_action_label, compute_staged_total_badge, serialize_observation
+from visualizer.presenter import (
+    compute_smart_action_label,
+    compute_staged_total_badge,
+    serialize_observation,
+)
+
+FILLER = "armor/wood-shield"
+
+ACTION_CONFIRM = 18
+ACTION_DEAL_NO = 19
+ACTION_DISCARD = 21
 
 
-def test_visualize_card_power_label_sell_mode():
+def view(g, player: int) -> dict:
+    """指定プレイヤーの視点で、visualizer に渡る表示用データを組み立てます。"""
+    obs = godfield_core.get_observation(g.state, player)
+    return serialize_observation(obs, player_id=player, state=g.state)
+
+
+def label_of(data: dict, card: str, where: str = "hand") -> str:
+    """表示データから指定カードの power_label を取り出します。"""
+    cid = card_id(card)
+    for entry in data[where]:
+        if entry["id"] == cid:
+            return entry["power_label"]
+    raise AssertionError(f"{where} に {card} がありません: {data[where]}")
+
+
+# ============================================================================
+# 売却モード: 価格を表示する
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "item",
+    [FILLER, "armor/ogre-s-gauntlet"],
+    ids=["安いカード", "高いカード"],
+)
+def test_the_sell_phase_shows_the_price_of_every_card(board, item):
+    """売却フェイズでは、種別を問わず手札のカードに価格が表示されることを検証します。"""
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["deals/sell", item]),
+        p1=Side(hp=40, mp=20),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select("deals/sell")
+    g.expect(phase=GamePhase.PHASE_SELL_SELECT)
+
+    assert label_of(view(g, 0), item) == f"¥{card_feature(item, 'price')}"
+
+
+def test_the_price_label_only_appears_while_selling(board):
+    """価格ラベルが売却フェイズ以外では出ないことを検証します。"""
+    item = "armor/ogre-s-gauntlet"
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["deals/sell", item]),
+        p1=Side(hp=40, mp=20),
+    )
+    g.rng.deck_always(FILLER)
+
+    # メインフェイズでは価格ではなく本来の性能が出る
+    assert label_of(view(g, 0), item) == f"守{card_feature(item, 'defense_power')}"
+
+    g.select("deals/sell")
+    assert label_of(view(g, 0), item) == f"¥{card_feature(item, 'price')}"
+
+
+def test_the_card_being_used_as_the_sell_trigger_shows_no_price(board):
+    """出品に使っている「売る」自身には価格が出ず、手札に残る同名カードには出ることを検証します。"""
+    sell = "deals/sell"
+    price = card_feature(sell, "price")
+
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[sell, sell]),
+        p1=Side(hp=40, mp=20),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select_slots(0)  # 1枚目をトリガーとして使う
+    g.expect(phase=GamePhase.PHASE_SELL_SELECT)
+
+    data = view(g, 0)
+    assert data["hand"][0]["power_label"] == "", "使用中の「売る」に価格は出さない"
+    assert data["hand"][1]["power_label"] == f"¥{price}", "手札に残る「売る」には価格を出す"
+
+    # 2枚目を商品として出品すると、仮置きの合計バッジに商品の価格が出る
+    g.select_slots(1)
+
+    data = view(g, 0)
+    assert data["hand"][0]["power_label"] == ""
+    assert data["hand"][1]["power_label"] == ""
+    assert len(data["staged"]) == 2
+    assert data["staged"][0]["power_label"] == "", "トリガーの「売る」には価格を出さない"
+    assert data["staged"][1]["power_label"] == f"¥{price}", "商品には価格を出す"
+    assert data["staged_total_badge"]["label"] == f"¥{price}"
+
+
+def test_the_sell_trigger_can_be_any_slot(board):
+    """トリガーに使う「売る」がスロット0でなくても表示が正しいことを検証します。
+
+    実装がスロット0を特別扱いしていないかの確認です。
     """
-    検証内容: 売却モード中において、全カードタイプ（武器・防具・雑貨・奇跡等）の
-    power_label に価格（例: '¥4'）が正しく付与されることをテスト。
-    """
-    runner = SimulationRunner()
+    sell = "deals/sell"
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[sell, sell]),
+        p1=Side(hp=40, mp=20),
+    )
+    g.rng.deck_always(FILLER)
 
-    wood_shield_id = find_card_by_name("armor/wood-shield") # price=4
-    ogre_gauntlet_id = find_card_by_name("armor/ogre-s-gauntlet") # price=15
+    g.select_slots(1)  # 2枚目をトリガーにする
 
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, wood_shield_id)
-    runner.state.set_true_hand(0, 1, ogre_gauntlet_id)
-
-    # 売却フェイズ PHASE_SELL_SELECT に遷移させる
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_SELL_SELECT
-    runner.state.current_actor_id = 0
-
-    obs = godfield_core.get_observation(runner.state, 0)
-    data = serialize_observation(obs, player_id=0, state=runner.state)
-
-    hand = data["hand"]
-    # 木の盾 (price=4) -> '¥4'
-    assert hand[0]["power_label"] == "¥4"
-    # 鬼の小手 (price=15) -> '¥15'
-    assert hand[1]["power_label"] == "¥15"
+    data = view(g, 0)
+    assert data["hand"][0]["power_label"] == f"¥{card_feature(sell, 'price')}"
+    assert data["hand"][1]["power_label"] == ""
+    assert len(data["staged"]) == 1
+    assert data["staged"][0]["power_label"] == ""
 
 
-def test_visualize_reaction_shields_1st_vs_2nd_card():
-    """
-    検証内容: 奇跡防御フェイズにおいて、
-    - 1枚目のリアクション防具（スカイガントレット）は '弾く' と表示されること。
-    - 2枚目に重ね出し、または他防具の後に出すと '守3' (防御力) にフォールバックされること。
-    """
-    runner = SimulationRunner()
-
-    fire_miracle_id = find_card_by_name("miracles/flame")
-    sky_gauntlet_id = find_card_by_name("armor/sky-gauntlet") # reaction: bounce, def: 3
-    sky_boots_id = find_card_by_name("armor/sky-boots") # reaction: bounce, def: 1
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, fire_miracle_id)
-    runner.state.set_true_hand(1, 0, sky_gauntlet_id)
-    runner.state.set_true_hand(1, 1, sky_boots_id)
-
-    # P0が＜炎＞でP1に奇跡攻撃
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-
-    # 1. まだ何も仮置きしていない状態：スカイガントレット(手札0)は '弾く'
-    obs1 = godfield_core.get_observation(runner.state, 1)
-    data1 = serialize_observation(obs1, player_id=1, state=runner.state)
-    assert data1["hand"][0]["power_label"] == "弾く"
-
-    # P1が先にスカイガントレット(スロット0)を選択・仮置き
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # 2. スカイガントレットが1枚目に置かれた状態：2枚目となるスカイブーツ(手札に残るスロット1)は '守1'
-    obs2 = godfield_core.get_observation(runner.state, 1)
-    data2 = serialize_observation(obs2, player_id=1, state=runner.state)
-
-    sky_boots_in_hand = next(c for c in data2["hand"] if c["id"] == sky_boots_id)
-    assert sky_boots_in_hand["power_label"] == "守1"
+# ============================================================================
+# リアクション防具: 「弾く」と表示されるのはそれが実際に効く場面だけ
+# ============================================================================
 
 
-def test_visualize_reaction_shield_physical_vs_miracle_defense():
-    """
-    検証内容:
-    - 物理防御フェイズ (PHASE_DEFENSE) ではスカイガントレットは物理を弾けないため '守3' と表示されること。
-    - 奇跡防御フェイズ (PHASE_MIRACLE_DEFENSE) でのみ '弾く' と表示されること。
-    """
-    runner = SimulationRunner()
+def test_a_reaction_armor_shows_bounce_only_as_the_first_card(board):
+    """リアクション防具が「弾く」と出るのは1枚目のときだけであることを検証します。"""
+    first, second = "armor/sky-gauntlet", "armor/sky-boots"
 
-    sword_id = find_card_by_name("weapons/plate-of-strike") # 物理攻撃
-    sky_gauntlet_id = find_card_by_name("armor/sky-gauntlet") # reaction: bounce, def: 3
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["miracles/flame"]),
+        p1=Side(hp=40, mp=20, hand=[first, second]),
+    )
+    g.rng.deck_always(FILLER)
 
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
+    g.attack("miracles/flame")
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE, actor=1)
 
-    runner.state.set_true_hand(0, 0, sword_id)
-    runner.state.set_true_hand(1, 0, sky_gauntlet_id)
+    # まだ何も置いていないので、リアクションとして働ける
+    assert label_of(view(g, 1), first) == "弾く"
 
-    # P0が物理攻撃
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+    g.select(first)
 
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-
-    # 物理防御フェイズ：スカイガントレットは物理を弾けないため '守3' と表示！
-    obs = godfield_core.get_observation(runner.state, 1)
-    data = serialize_observation(obs, player_id=1, state=runner.state)
-    assert data["hand"][0]["power_label"] == "守3"
+    # 2枚目はリアクションにならないので、防御力の表示に戻る
+    assert label_of(view(g, 1), second) == f"守{card_feature(second, 'defense_power')}"
 
 
-def test_visualize_spiritual_zero_mp_label():
-    """
-    検証内容: 精霊系カード（精霊の杖等）は:
-    - 仮置き場に何も置かれていない時や奇跡以外が置かれている時は標準ラベル（例: '攻12'）が表示されること。
-    - 仮置き場の最後のカードが奇跡（＜炎＞等）である時（奇跡プラスフェイズ）にのみ '消費0' のラベルが表示されること。
-    """
-    runner = SimulationRunner()
+def test_a_miracle_only_reaction_armor_shows_its_defense_against_a_physical_attack(board):
+    """奇跡にしか効かないリアクション防具が、物理攻撃では防御力表示になることを検証します。"""
+    armor = "armor/sky-gauntlet"
 
-    fire_miracle_id = find_card_by_name("miracles/flame")
-    spirit_staff_id = find_card_by_name("weapons/spiritual-staff")
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["weapons/plate-of-strike"]),
+        p1=Side(hp=40, mp=20, hand=[armor]),
+    )
+    g.rng.deck_always(FILLER)
 
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
+    g.attack("weapons/plate-of-strike")
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1)
 
-    runner.state.set_true_hand(0, 0, fire_miracle_id)
-    runner.state.set_true_hand(0, 1, spirit_staff_id)
-
-    # 1. 仮置き場が空の状態（PHASE_MAIN）：精霊の杖は '攻12' と表示！
-    obs1 = godfield_core.get_observation(runner.state, 0)
-    data1 = serialize_observation(obs1, player_id=0, state=runner.state)
-    staff_card_main = next(c for c in data1["hand"] if c["id"] == spirit_staff_id)
-    assert staff_card_main["power_label"] == "攻12"
-
-    # 2. P0が＜炎＞(スロット0)を仮置きして奇跡プラスフェイズに遷移
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # 3. 仮置き場の最後が奇跡＜炎＞となった状態：精霊の杖が '消費0' に変化！
-    obs2 = godfield_core.get_observation(runner.state, 0)
-    data2 = serialize_observation(obs2, player_id=0, state=runner.state)
-    staff_card_plus = next(c for c in data2["hand"] if c["id"] == spirit_staff_id)
-    assert staff_card_plus["power_label"] == "消費0"
+    assert label_of(view(g, 1), armor) == f"守{card_feature(armor, 'defense_power')}"
 
 
-def test_visualize_attack_plus_labels():
-    """
-    検証内容: 攻撃プラスフェイズ (PHASE_ATTACK_PLUS) において、
-    ちからの粉 (+攻10) や 鬼の小手 (+攻10/防御兼) や ＜オーラ＞ (2倍)、＜蜃気楼＞ (全体) の
-    power_label が正確に算出されるかをテスト。
-    """
-    runner = SimulationRunner()
-
-    sword_id = find_card_by_name("weapons/plate-of-strike") # 物理攻撃
-    powder_id = find_card_by_name("sundries/strength-powder") # +攻10
-    aura_id = find_card_by_name("miracles/aura") # 2倍
-    mirage_id = find_card_by_name("miracles/mirage") # 全体
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, sword_id)
-    runner.state.set_true_hand(0, 1, powder_id)
-    runner.state.set_true_hand(0, 2, aura_id)
-    runner.state.set_true_hand(0, 3, mirage_id)
-
-    # P0が打撃の鉄板を出して攻撃プラスフェイズへ移行
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
-
-    obs = godfield_core.get_observation(runner.state, 0)
-    data = serialize_observation(obs, player_id=0, state=runner.state)
-
-    # 手札の各プラスアイテムの表示ラベルを確認
-    powder_card = next(c for c in data["hand"] if c["id"] == powder_id)
-    aura_card = next(c for c in data["hand"] if c["id"] == aura_id)
-    mirage_card = next(c for c in data["hand"] if c["id"] == mirage_id)
-
-    assert powder_card["power_label"] == "+攻10"
-    assert aura_card["power_label"] == "2倍"
-    assert mirage_card["power_label"] == "全体"
+# ============================================================================
+# フェイズによって役割が変わるカード
+# ============================================================================
 
 
-def test_visualize_dual_use_cards_defense_badge():
-    """
-    検証内容: ソードシールドや打撃の鉄板などの攻撃・防御両用カードを
-    防御フェイズで仮置きした際、合計バッジ (compute_staged_total_badge) に
-    防御力が正しく合算されて表示されるかをテスト。
-    """
-    runner = SimulationRunner()
+def test_a_spiritual_card_shows_zero_cost_only_while_a_miracle_is_staged(board):
+    """精霊系カードが「消費0」と出るのは、奇跡を仮置きしている間だけであることを検証します。"""
+    staff = "weapons/spiritual-staff"
 
-    sword_id = find_card_by_name("weapons/plate-of-strike") # ATK 5
-    sword_shield_id = find_card_by_name("weapons/sword-shield") # Def 10, Atk 5
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["miracles/flame", staff]),
+        p1=Side(hp=40, mp=20),
+    )
+    g.rng.deck_always(FILLER)
 
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
+    # 仮置き場が空なら、本来の攻撃力が出る
+    assert label_of(view(g, 0), staff) == f"攻{card_feature(staff, 'attack_power')}"
 
-    runner.state.set_true_hand(0, 0, sword_id)
-    runner.state.set_true_hand(1, 0, sword_shield_id)
+    g.select("miracles/flame")
+    g.expect(phase=GamePhase.PHASE_MIRACLE_PLUS)
 
-    # P0が攻撃
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)
+    assert label_of(view(g, 0), staff) == "消費0"
 
-    # P1がソードシールド(スロット0)を仮置き
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
 
-    # 仮置き合計バッジの算出結果を確認
-    obs = godfield_core.get_observation(runner.state, 1)
-    staged_cids = [cid for cid in obs.get_staged_cards() if cid != -1]
-    staged_info = [CARDS_BY_ID.get(cid) for cid in staged_cids]
+def test_a_dual_use_armor_switches_from_defense_to_plus_attack(board):
+    """攻守兼用の防具が、攻撃プラスフェイズで防御力表示から攻撃力表示に切り替わることを検証します。"""
+    helm = "armor/ogre-s-helm"
 
-    badge = compute_staged_total_badge(staged_info, player_id=1, game_state=runner.state)
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["weapons/plate-of-strike", helm]),
+        p1=Side(hp=40, mp=20),
+    )
+    g.rng.deck_always(FILLER)
+
+    # メインでは単体攻撃に使えないので、防具として見せる
+    g.expect(phase=GamePhase.PHASE_MAIN)
+    assert label_of(view(g, 0), helm) == f"守{card_feature(helm, 'defense_power')}"
+
+    g.select("weapons/plate-of-strike")
+    g.expect(phase=GamePhase.PHASE_ATTACK_PLUS)
+
+    assert label_of(view(g, 0), helm) == f"+攻{card_feature(helm, 'attack_power')}"
+
+
+def test_the_attack_plus_phase_labels_each_kind_of_booster(board):
+    """攻撃プラスフェイズで、加算・倍化・全体化がそれぞれ区別して表示されることを検証します。"""
+    powder = "sundries/strength-powder"
+    aura = "miracles/aura"
+    mirage = "miracles/mirage"
+
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["weapons/plate-of-strike", powder, aura, mirage]),
+        p1=Side(hp=40, mp=20),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select("weapons/plate-of-strike")
+    g.expect(phase=GamePhase.PHASE_ATTACK_PLUS)
+
+    data = view(g, 0)
+    assert label_of(data, powder) == f"+攻{card_feature(powder, 'attack_power')}"
+    assert label_of(data, aura) == "2倍"
+    assert label_of(data, mirage) == "全体"
+
+
+@pytest.mark.parametrize(
+    ("weapon", "expected_prefix"),
+    [
+        ("weapons/blowgun", "+攻"),       # 武器かつプラス武器
+        ("weapons/wooden-sword", "攻"),   # 通常武器のみ
+    ],
+    ids=["プラス武器を兼ねる", "通常武器のみ"],
+)
+def test_the_main_phase_marks_which_weapons_can_be_stacked(board, weapon, expected_prefix):
+    """メインフェイズで、重ねがけできる武器が「+攻」として区別されることを検証します。"""
+    g = board(p0=Side(hp=40, mp=20, hand=[weapon]), p1=Side(hp=40, mp=20))
+    g.rng.deck_always(FILLER)
+
+    g.expect(phase=GamePhase.PHASE_MAIN)
+    assert label_of(view(g, 0), weapon) == f"{expected_prefix}{card_feature(weapon, 'attack_power')}"
+
+
+def test_a_dual_use_weapon_contributes_its_defense_to_the_staged_badge(board):
+    """武器を防御に使ったとき、仮置き合計バッジに防御力が計上されることを検証します。"""
+    sword_shield = "weapons/sword-shield"
+
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["weapons/plate-of-strike"]),
+        p1=Side(hp=40, mp=20, hand=[sword_shield]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack("weapons/plate-of-strike")
+    g.select(sword_shield)
+
+    obs = godfield_core.get_observation(g.state, 1)
+    staged = [CARDS_BY_ID.get(cid) for cid in obs.get_staged_cards() if cid != -1]
+
+    badge = compute_staged_total_badge(staged, player_id=1, game_state=g.state)
     assert badge is not None
-    assert badge["label"] == "守10"
+    assert badge["label"] == f"守{card_feature(sword_shield, 'defense_power')}"
 
 
-def test_visualize_smart_action_labels():
-    """
-    検証内容: アクションID（ターゲット選択、購入、確定、売却等）における
-    コンテキスト対応スマートラベル (compute_smart_action_label) をテスト。
-    """
-    runner = SimulationRunner()
-
-    # 1. 購入フェイズ PHASE_BUY
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_BUY
-    label = compute_smart_action_label(18, [], runner.state)
-    assert label == "買う"
-
-    # 2. 売却選択フェイズ PHASE_SELL_SELECT
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_SELL_SELECT
-    label = compute_smart_action_label(18, [], runner.state)
-    assert label == "承諾"
-
-    # 3. 捨てるアクション
-    label = compute_smart_action_label(21, [], runner.state)
-    assert label == "捨てる"
-
-    # 4. 取引可否・受諾/拒否アクション (アクション19)
-    # PHASE_BUY では「買わない」
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_BUY
-    label = compute_smart_action_label(19, [], runner.state)
-    assert label == "買わない"
-
-    # PHASE_BUY_SELECT_MIRROR
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_BUY_SELECT_MIRROR
-    # 手札をステージしていない（受け入れる）
-    assert compute_smart_action_label(19, [], runner.state) == "受け入れる"
-    # ミラーをステージしている（はね返す）
-    dummy_mirror = [{"name": "スーパーミラー", "id": 1}]
-    assert compute_smart_action_label(19, dummy_mirror, runner.state) == "はね返す"
-
-    # PHASE_SELL_SELECT_MIRROR
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_SELL_SELECT_MIRROR
-    assert compute_smart_action_label(19, [], runner.state) == "受け入れる"
-    assert compute_smart_action_label(19, dummy_mirror, runner.state) == "はね返す"
-
-    # PHASE_SUNDRY_SELECT_MIRROR
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
-    assert compute_smart_action_label(19, [], runner.state) == "受け入れる"
-    assert compute_smart_action_label(19, dummy_mirror, runner.state) == "はね返す"
+# ============================================================================
+# 確定ボタンの文言
+#
+# ここは局面の遷移ではなく「フェイズ名と仮置き内容からどの文言を選ぶか」という
+# 純粋な写像の検証なので、フェイズを直接指定しています。
+# ============================================================================
 
 
-def test_visualize_ogre_helm_phase_labels():
-    """
-    検証内容: 防具タイプ兼攻撃プラスカードである「鬼のかぶと」(Def 7, Atk 10, timing: atk_defence_phase, atk_plus_phase) が:
-    - PHASE_MAIN（メインフェイズ・最初の手番）では '守7' と表示されること。
-    - PHASE_ATTACK_PLUS（攻撃プラスフェイズ）に遷移したタイミングで初めて '+攻10' に切り替わること。
-    """
-    runner = SimulationRunner()
-
-    sword_id = find_card_by_name("weapons/plate-of-strike") # 物理攻撃
-    ogre_helm_id = find_card_by_name("armor/ogre-s-helm") # Def 7, Atk 10 (+攻10)
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, sword_id)
-    runner.state.set_true_hand(0, 1, ogre_helm_id)
-
-    # 1. PHASE_MAIN フェイズ（手番開始時）：鬼のかぶとは単体攻撃としては使えないため '守7' と表示！
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-    obs1 = godfield_core.get_observation(runner.state, 0)
-    data1 = serialize_observation(obs1, player_id=0, state=runner.state)
-
-    ogre_card_main = next(c for c in data1["hand"] if c["id"] == ogre_helm_id)
-    assert ogre_card_main["power_label"] == "守7"
-
-    # 2. P0が打撃の鉄板を出して PHASE_ATTACK_PLUS へ遷移
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
-
-    # PHASE_ATTACK_PLUS フェイズ：鬼のかぶとが '+攻10' に表示変化！
-    obs2 = godfield_core.get_observation(runner.state, 0)
-    data2 = serialize_observation(obs2, player_id=0, state=runner.state)
-
-    ogre_card_plus = next(c for c in data2["hand"] if c["id"] == ogre_helm_id)
-    assert ogre_card_plus["power_label"] == "+攻10"
-
-def test_visualize_main_phase_weapon_plus():
-    """
-    検証内容: メインフェイズ中の武器カードのラベル。
-    - 吹き矢（weapons/blowgun）は武器であり武器プラスでもあるので、メインフェイズ中に '+攻6' と表示されることを確認。
-    - 木刀（weapons/wooden-sword）は通常の武器（武器プラスではない）なので、メインフェイズ中に '攻1' と表示されることを確認。
-    """
-    runner = SimulationRunner()
-
-    blowgun_id = find_card_by_name("weapons/blowgun")
-    wooden_sword_id = find_card_by_name("weapons/wooden-sword")
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, blowgun_id)
-    runner.state.set_true_hand(0, 1, wooden_sword_id)
-
-    # 1. PHASE_MAIN フェイズ（手番開始時）
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-    obs = godfield_core.get_observation(runner.state, 0)
-    data = serialize_observation(obs, player_id=0, state=runner.state)
-
-    # 吹き矢は '+攻1'
-    blowgun_card = next(c for c in data["hand"] if c["id"] == blowgun_id)
-    assert blowgun_card["power_label"] == "+攻1"
-
-    # 木刀は '攻1'
-    wooden_sword_card = next(c for c in data["hand"] if c["id"] == wooden_sword_id)
-    assert wooden_sword_card["power_label"] == "攻1"
+@pytest.mark.parametrize(
+    ("phase", "expected"),
+    [
+        (GamePhase.PHASE_BUY, "買う"),
+        (GamePhase.PHASE_SELL_SELECT, "承諾"),
+    ],
+    ids=["購入フェイズ", "売却フェイズ"],
+)
+def test_the_confirm_button_is_named_after_the_phase(board, phase, expected):
+    """確定ボタンの文言がフェイズごとに変わることを検証します。"""
+    g = board(phase=phase)
+    assert compute_smart_action_label(ACTION_CONFIRM, [], g.state) == expected
 
 
-def test_visualize_sell_multiple_sell_cards():
-    """
-    検証内容: 手札に複数枚の「売る」カードがある場合、売却フェイズ(PHASE_SELL_SELECT)において、
-    売却対象となる「売る」カードの売却価格（¥2）が正しくラベルに表示されることを確認。
-    """
-    runner = SimulationRunner()
+def test_the_discard_button_keeps_its_name(board):
+    """「捨てる」はフェイズによらず同じ文言であることを検証します。"""
+    g = board(phase=GamePhase.PHASE_SELL_SELECT)
+    assert compute_smart_action_label(ACTION_DISCARD, [], g.state) == "捨てる"
 
-    sell_card_id = find_card_by_name("売る")
 
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
+def test_the_refusal_button_is_named_after_the_deal(board):
+    """購入フェイズでの拒否が「買わない」と表示されることを検証します。"""
+    g = board(phase=GamePhase.PHASE_BUY)
+    assert compute_smart_action_label(ACTION_DEAL_NO, [], g.state) == "買わない"
 
-    # プレイヤー0の手札に「売る」を2枚セット
-    runner.state.set_true_hand(0, 0, sell_card_id)
-    runner.state.set_true_hand(0, 1, sell_card_id)
 
-    # 1. PHASE_MAIN フェイズ（売るカード使用前）：価格ラベルは表示されない（""）
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    obs = godfield_core.get_observation(runner.state, 0)
-    data = serialize_observation(obs, player_id=0, state=runner.state)
+@pytest.mark.parametrize(
+    "phase",
+    [
+        GamePhase.PHASE_BUY_SELECT_MIRROR,
+        GamePhase.PHASE_SELL_SELECT_MIRROR,
+        GamePhase.PHASE_SUNDRY_SELECT_MIRROR,
+    ],
+    ids=["買う", "売る", "雑貨"],
+)
+def test_the_mirror_button_reflects_whether_a_mirror_is_staged(board, phase):
+    """反射確認フェイズで、スーパーミラーを置いているかどうかで文言が変わることを検証します。"""
+    g = board(phase=phase)
 
-    sell_card_0 = data["hand"][0]
-    sell_card_1 = data["hand"][1]
-    assert sell_card_0["power_label"] == ""
-    assert sell_card_1["power_label"] == ""
+    assert compute_smart_action_label(ACTION_DEAL_NO, [], g.state) == "受け入れる"
 
-    # 2. PHASE_SELL_SELECT フェイズ（売るカード選択中）：価格ラベルが表示される（"¥5"）
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_SELL_SELECT
-    obs_sell = godfield_core.get_observation(runner.state, 0)
-    data_sell = serialize_observation(obs_sell, player_id=0, state=runner.state)
-
-    sell_card_0_sell = data_sell["hand"][0]
-    sell_card_1_sell = data_sell["hand"][1]
-    assert sell_card_0_sell["power_label"] == "¥5"
-    assert sell_card_1_sell["power_label"] == "¥5"
-
-    # 3. 1枚目の「売る」カードが選択状態（使用中）の場合：そのカードの価格ラベルは非表示になり、もう1枚の「売る」には価格が表示されること
-    runner.state.set_is_used(0, 0, True) # 1枚目をステージング（使用中）にする
-    runner.state.set_num_staged_cards(0, 1)
-    runner.state.set_staged_card(0, 0, 0) # 0番目の手札スロットがステージングされている
-    obs_used = godfield_core.get_observation(runner.state, 0)
-    data_used = serialize_observation(obs_used, player_id=0, state=runner.state)
-
-    sell_card_0_used = data_used["hand"][0]
-    sell_card_1_used = data_used["hand"][1]
-    assert sell_card_0_used["power_label"] == ""  # 使用中の「売る」は非表示
-    assert sell_card_1_used["power_label"] == "¥5" # 未使用の「売る」は ¥5 と表示される
-
-    # 4. 2枚ともステージング（使用中）された場合：
-    # - 手札のカードのラベルは両方とも ""
-    # - ステージリストの1枚目（トリガー）は ""、2枚目（商品）は "¥5"
-    # - pending_badge（合計売値）は "¥5"
-    runner.state.set_is_used(0, 1, True)
-    runner.state.set_num_staged_cards(0, 2)
-    runner.state.set_staged_card(0, 1, 1) # 1番目の手札スロットがステージングされている
-    obs_both = godfield_core.get_observation(runner.state, 0)
-    data_both = serialize_observation(obs_both, player_id=0, state=runner.state)
-
-    assert data_both["hand"][0]["power_label"] == ""
-    assert data_both["hand"][1]["power_label"] == ""
-
-    assert len(data_both["staged"]) == 2
-    assert data_both["staged"][0]["power_label"] == ""   # トリガー
-    assert data_both["staged"][1]["power_label"] == "¥5"  # 商品
-
-    assert data_both["staged_total_badge"] is not None
-    assert data_both["staged_total_badge"]["label"] == "¥5"
-
-    # 5. 手札の2枚目（スロット1）の「売る」のみがトリガーとしてステージングされた場合：
-    # - 手札のスロット1（使用中）は ""、スロット0（未使用の「売る」）は "¥5" と表示されること
-    # - ステージリストの1枚目（トリガー）は "" と表示されること
-    runner.state.set_is_used(0, 0, False)
-    runner.state.set_is_used(0, 1, True)
-    runner.state.set_num_staged_cards(0, 1)
-    runner.state.set_staged_card(0, 0, 1) # スロット1が最初にステージング（トリガー）されている
-    obs_slot1 = godfield_core.get_observation(runner.state, 0)
-    data_slot1 = serialize_observation(obs_slot1, player_id=0, state=runner.state)
-
-    assert data_slot1["hand"][0]["power_label"] == "¥5" # 未使用の「売る」は ¥5
-    assert data_slot1["hand"][1]["power_label"] == ""   # 使用中の「売る」は非表示
-    assert len(data_slot1["staged"]) == 1
-    assert data_slot1["staged"][0]["power_label"] == ""  # トリガーの「売る」は非表示
+    mirror = [CARDS_BY_ID[card_id("armor/super-mirror")]]
+    assert compute_smart_action_label(ACTION_DEAL_NO, mirror, g.state) == "はね返す"

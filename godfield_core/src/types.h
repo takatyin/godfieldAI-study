@@ -356,7 +356,6 @@ struct alignas(64) InternalState {
     int pending_attack_power;       // 現在保留中の攻撃力
     Element pending_attack_element; // 現在保留中の攻撃の属性
     int pending_defense_power;      // 現在保留中の防御力
-    int pending_sell_price;         // 現在保留中の売却価格
     bool pending_absorption;        // 現在保留中の攻撃がHP吸収を持つか
     bool pending_deal_same_damage;  // 現在保留中の攻撃が自傷効果（邪神の大剣）を持つか
     bool pending_is_group_attack;   // 現在保留中の攻撃が全体攻撃であるか

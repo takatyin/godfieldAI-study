@@ -2,185 +2,152 @@
 
 守護神は「ダメージを受けてHPが減少した」際に GUARDIAN_LEAVE_RATE の確率で離脱します。
 この判定は相手からの攻撃を受けた場合だけでなく、自分自身へのダメージ
-（奇跡の自己攻撃、終末の時に引いた悪魔カードなど）でも同様に行われる必要があります。
+（奇跡の自己攻撃、雑貨によるHP減少、終末の時に引いた悪魔カードなど）でも
+同様に行われる必要があります。
 
-ここでは自傷ダメージ経路でも離脱判定が「確率的に」実行されること
-（＝必ず離脱するのでもなく、判定自体がスキップされるのでもないこと）を検証します。
+【移行メモ】
+従来は「離脱するシード」「離脱しないシード」をそれぞれ最大5000回探索していました。
+探索対象が2つの確率（例: ドキドキ涙の±10 と 離脱判定）の同時成立だったため、
+探索が空振りするとテスト自体が例外で落ちる構造でもありました。
+現在は各判定を直接指示するので、探索も同時成立の運任せも不要です。
 """
 
+import pytest
+
 import godfield_core
-from godfield_core import ActionType
-from tests.core.test_utils import SimulationRunner, find_card_by_name
+from godfield_core import GuardianType, RollKind
+from tests.core.dsl import Side, card_feature
 
-GUARDIAN_NONE = 0
-GUARDIAN_MARS = 1
+MARS = int(GuardianType.MARS)
+NONE = int(GuardianType.NONE)
 
-SEED_SEARCH_LIMIT = 5000
-
-
-def _setup_miracle_self_attack(sim: SimulationRunner, seed: int):
-    """HP40・守護神ありのP0が、自分自身へ＜滝＞(命中率100%, ATK25)を撃つ盤面を作ります。"""
-    waterfall_id = find_card_by_name("＜滝＞")
-
-    sim.reset_state()
-    sim.state.seed_rng(seed)
-    sim.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    sim.state.current_actor_id = 0
-    sim.state.set_hp(0, 40)
-    sim.state.set_mp(0, 40)
-    sim.state.set_guardian(0, GUARDIAN_MARS)
-    sim.state.set_guardian(1, GUARDIAN_NONE)  # 相手の守護神行動によるノイズを排除
-    sim.set_hand(0, [waterfall_id])
+FILLER = "armor/wood-shield"
 
 
-def _resolve_miracle_self_attack(sim: SimulationRunner):
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    sim.step(ActionType.ACTION_TARGET_SELF)
+@pytest.mark.parametrize("leaves", [True, False], ids=["離脱する", "残留する"])
+def test_miracle_self_attack_triggers_the_guardian_leave_roll(board, leaves):
+    """奇跡を自分自身に撃ってHPが減った場合も、守護神の離脱判定が行われることを検証します。
 
-
-def _find_seed_for_miracle_self_attack(want_leave: bool) -> int:
-    """自己攻撃で守護神が離脱する（またはしない）シードを探します。"""
-    sim = SimulationRunner()
-    for seed in range(SEED_SEARCH_LIMIT):
-        _setup_miracle_self_attack(sim, seed)
-        _resolve_miracle_self_attack(sim)
-
-        # 自傷ダメージが実際に入っていることを前提条件として確認
-        if sim.state.get_hp(0) >= 40:
-            continue
-
-        did_leave = sim.state.get_guardian(0) == GUARDIAN_NONE
-        if did_leave == want_leave:
-            return seed
-
-    raise ValueError(f"Could not find a seed with guardian_leave={want_leave} for miracle self-attack")
-
-
-def test_miracle_self_attack_can_trigger_guardian_leave():
+    ＜滝＞は命中率100%・ATK25 の無属性奇跡。相手の守護神は置かず、
+    相手のターン終了行動によるノイズを排除しています。
     """
-    検証内容: 奇跡を自分自身に撃った際の守護神離脱判定。
-    - 自分に＜滝＞(ATK25)を撃ってHPが減少した場合、守護神の離脱判定が行われ、
-      判定に当たったシードでは守護神が離脱（GUARDIAN_NONE）することを確認します。
+    power = card_feature("miracles/waterfall", "attack_power")
+    g = board(
+        p0=Side(hp=40, mp=40, guardian=MARS, hand=["miracles/waterfall"]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.guardian_leave(leaves=leaves)
+    g.attack("miracles/waterfall", to_self=True)
+
+    g.expect(p0_hp=40 - power, p0_guardian=NONE if leaves else MARS)
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) == 1
+
+
+@pytest.mark.parametrize("leaves", [True, False], ids=["離脱する", "残留する"])
+def test_thump_thump_tear_hp_loss_triggers_the_guardian_leave_roll(board, leaves):
+    """ドキドキ涙で HP-10 を引いた場合も守護神の離脱判定が行われることを検証します。
+
+    攻撃由来でないHP減少でも「ダメージ」として扱われることの確認です。
     """
-    seed = _find_seed_for_miracle_self_attack(want_leave=True)
+    g = board(
+        p0=Side(hp=40, guardian=MARS, hand=["sundries/thump-thump-tear"]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.thump_thump_tear(heals=False)  # HP-10 を引かせる
+    g.rng.guardian_leave(leaves=leaves)
+    g.attack("sundries/thump-thump-tear", to_self=True)
+    g.confirm()
 
-    sim = SimulationRunner()
-    _setup_miracle_self_attack(sim, seed)
-    _resolve_miracle_self_attack(sim)
-
-    assert sim.state.get_hp(0) == 15  # 40 - 25
-    assert sim.state.get_guardian(0) == GUARDIAN_NONE
+    g.expect(p0_hp=30, p0_guardian=NONE if leaves else MARS)
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) == 1
 
 
-def test_miracle_self_attack_guardian_leave_is_probabilistic():
+def test_thump_thump_tear_healing_does_not_roll_for_guardian_leave(board):
+    """ドキドキ涙が HP+10 を引いた場合は離脱判定そのものが行われないことを検証します。
+
+    従来は「-10 を引いた」シードだけを探しており、+10 側は検証されていませんでした。
     """
-    検証内容: 自傷ダメージによる守護神離脱が確率判定であることの確認。
-    - 離脱判定に外れたシードでは、HPが減少していても守護神が残留することを確認します。
-    - これにより、離脱が「必ず起きる」実装になっていないことを保証します。
+    g = board(
+        p0=Side(hp=40, guardian=MARS, hand=["sundries/thump-thump-tear"]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.thump_thump_tear(heals=True)
+    g.attack("sundries/thump-thump-tear", to_self=True)
+    g.confirm()
+
+    g.expect(p0_hp=50, p0_guardian=MARS)
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) == 0
+
+
+@pytest.mark.parametrize(
+    ("devil", "damage"),
+    [
+        ("devils/small-devil", 10),
+        ("devils/medium-devil", 20),
+        ("devils/large-devil", 30),
+    ],
+    ids=["小悪魔10", "中悪魔20", "大悪魔30"],
+)
+@pytest.mark.parametrize("leaves", [True, False], ids=["離脱する", "残留する"])
+def test_apocalypse_devil_damage_triggers_the_guardian_leave_roll(board, devil, damage, leaves):
+    """終末の時に引いた悪魔の自傷ダメージでも守護神の離脱判定が行われることを検証します。
+
+    従来は小悪魔・中悪魔・大悪魔のどれが出たかを区別せず「HPが減った」ことしか
+    見ていませんでした（そもそも探索でどれが出るか制御できなかった）。
     """
-    seed = _find_seed_for_miracle_self_attack(want_leave=False)
+    g = board(
+        p0=Side(hp=90, guardian=MARS, hand=[]),  # 大悪魔30でも死なないHP
+        p1=Side(hp=90),
+        turn=150,  # APOCALYPSE_TURN
+    )
+    g.rng.deck_always(FILLER)
+    # 悪魔を引くと効果適用後に再ドローされるので、最後は通常抽選で終わらせる
+    g.rng.apocalypse_draws(devil, None)
+    g.rng.guardian_leave(leaves=leaves)
+    g.pray()
 
-    sim = SimulationRunner()
-    _setup_miracle_self_attack(sim, seed)
-    _resolve_miracle_self_attack(sim)
-
-    assert sim.state.get_hp(0) == 15  # 40 - 25
-    assert sim.state.get_guardian(0) == GUARDIAN_MARS
+    g.expect(p0_hp=90 - damage, p0_guardian=NONE if leaves else MARS)
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) == 1
 
 
-def _setup_thump_thump_tear(sim: SimulationRunner, seed: int):
-    """守護神ありのP0が、自分自身へ「ドキドキ涙」を使う盤面を作ります。
+def test_apocalypse_charity_fairy_does_not_roll_for_guardian_leave(board):
+    """めぐみの妖精はHPが増えるだけなので離脱判定が行われないことを検証します。"""
+    g = board(
+        p0=Side(hp=90, mp=0, money=0, guardian=MARS, hand=[]),
+        p1=Side(hp=90),
+        turn=150,
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.apocalypse_draws("devils/charity-fairy", None)
+    g.rng.force(RollKind.DEVIL_FAIRY, 0)  # HP+10 を選ばせる
+    g.pray()
 
-    ドキドキ涙はHPが+10か-10のいずれかにランダムで振れる雑貨です。
+    g.expect(p0_hp=99, p0_guardian=MARS)  # 90+10 は上限99でクランプ
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) == 0
+
+
+def test_apocalypse_normal_draw_skips_the_devil_table(board):
+    """終末の時でも悪魔の区間に入らなければ通常の山札抽選になることを検証します。"""
+    g = board(p0=Side(hp=90, guardian=MARS, hand=[]), p1=Side(hp=90), turn=150)
+    g.rng.deck_always(FILLER)
+    g.rng.apocalypse_draws(None)
+    g.pray()
+
+    g.expect(p0_hp=90, p0_guardian=MARS, p0_hand=[FILLER])
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) == 0
+
+
+def test_apocalypse_devil_table_matches_the_cpp_thresholds():
+    """悪魔の一覧と閾値が C++ から取得できていることを確認します。
+
+    テストにインデックスや確率値を直書きすると、C++ 側の配分を変えたときに
+    別の悪魔を黙って検証してしまいます。
     """
-    tear_id = find_card_by_name("sundries/thump-thump-tear")
-
-    sim.reset_state()
-    sim.state.seed_rng(seed)
-    sim.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    sim.state.current_actor_id = 0
-    sim.state.set_hp(0, 40)
-    sim.state.set_guardian(0, GUARDIAN_MARS)
-    sim.state.set_guardian(1, GUARDIAN_NONE)
-    sim.set_hand(0, [tear_id])
-
-
-def _find_seed_for_thump_thump_tear_leave() -> int:
-    """ドキドキ涙がHP-10を引き、かつ守護神が離脱するシードを探します。"""
-    sim = SimulationRunner()
-    for seed in range(SEED_SEARCH_LIMIT):
-        _setup_thump_thump_tear(sim, seed)
-        sim.step(ActionType.ACTION_SELECT_HAND_0)
-        sim.step(ActionType.ACTION_TARGET_SELF)
-
-        if sim.state.get_hp(0) != 30:  # HP-10 を引いたケースのみ対象
-            continue
-        if sim.state.get_guardian(0) == GUARDIAN_NONE:
-            return seed
-
-    raise ValueError("Could not find a seed where the thump thump tear triggers guardian leave")
-
-
-def test_thump_thump_tear_hp_loss_can_trigger_guardian_leave():
-    """
-    検証内容: 雑貨「ドキドキ涙」によるHP減少でも守護神の離脱判定が行われること。
-    - ドキドキ涙はHPが±10に振れる雑貨で、-10を引いた場合はダメージとして扱われます。
-    - 攻撃由来でなくHPが減った場合でも、守護神の離脱判定が走ることを確認します。
-    """
-    seed = _find_seed_for_thump_thump_tear_leave()
-
-    sim = SimulationRunner()
-    _setup_thump_thump_tear(sim, seed)
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    sim.step(ActionType.ACTION_TARGET_SELF)
-
-    assert sim.state.get_hp(0) == 30  # 40 - 10
-    assert sim.state.get_guardian(0) == GUARDIAN_NONE
-
-
-def _setup_apocalypse_devil_draw(sim: SimulationRunner, seed: int):
-    """終末の時（ターン150以降）に、空きスロットへドローするP0の盤面を作ります。
-
-    終末の時のドローでは一定確率で悪魔カードが引かれ、即時に自傷ダメージが入ります。
-    """
-    sim.reset_state()
-    sim.state.seed_rng(seed)
-    sim.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    sim.state.current_actor_id = 0
-    sim.state.current_turn = 150  # APOCALYPSE_TURN
-    sim.state.set_hp(0, 90)  # 大悪魔(30)でも死亡しないHP
-    sim.state.set_guardian(0, GUARDIAN_MARS)
-    sim.state.set_guardian(1, GUARDIAN_NONE)
-    sim.set_hand(0, [])  # 手札を空にしてドロー枠を確保
-
-
-def _find_seed_for_devil_self_damage() -> int:
-    """終末の時のドローで悪魔を引き、かつ守護神が離脱するシードを探します。"""
-    sim = SimulationRunner()
-    for seed in range(SEED_SEARCH_LIMIT):
-        _setup_apocalypse_devil_draw(sim, seed)
-        sim.step(ActionType.ACTION_PRAY)
-
-        # 悪魔による自傷ダメージが入ったケースのみを対象にする
-        if sim.state.get_hp(0) >= 90:
-            continue
-        if sim.state.get_guardian(0) == GUARDIAN_NONE:
-            return seed
-
-    raise ValueError("Could not find a seed where an apocalypse devil draw triggers guardian leave")
-
-
-def test_apocalypse_devil_damage_can_trigger_guardian_leave():
-    """
-    検証内容: 終末の時に引いた悪魔カードの自傷ダメージによる守護神離脱判定。
-    - 終末の時のドローで悪魔を引くとHPが即時に減少しますが、この自傷ダメージでも
-      守護神の離脱判定が行われることを確認します。
-    """
-    seed = _find_seed_for_devil_self_damage()
-
-    sim = SimulationRunner()
-    _setup_apocalypse_devil_draw(sim, seed)
-    sim.step(ActionType.ACTION_PRAY)
-
-    assert sim.state.get_hp(0) < 90  # 悪魔による自傷ダメージが入っている
-    assert sim.state.get_guardian(0) == GUARDIAN_NONE
+    devils = godfield_core.get_apocalypse_devils()
+    thresholds = godfield_core.APOCALYPSE_DEVIL_THRESHOLDS
+    assert len(devils) == len(thresholds)
+    assert thresholds == sorted(thresholds), "閾値は昇順である必要があります"
+    assert thresholds[-1] <= 100

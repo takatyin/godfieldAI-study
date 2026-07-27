@@ -9,6 +9,33 @@ constexpr int ASCENSION_BOW_HIT_RATE = 75;
 constexpr int SICKNESS_WORSEN_RATE = 5;
 constexpr int GUARDIAN_ACT_RATE = 25;
 
+// 守護神が行動する際、5種の行動のどれを選ぶかの累積閾値（0..99 の抽選値と比較する）。
+// roll < 30 なら行動1、roll < 55 なら行動2 ... のように先頭から判定する。
+// テスト側はこの表から「行動 N を狙う代表値」を導出するため、閾値をここ以外に書かないこと。
+constexpr int GUARDIAN_ACT_CHOICE_COUNT = 5;
+constexpr int GUARDIAN_ACT_CHOICE_THRESHOLDS[GUARDIAN_ACT_CHOICE_COUNT] = {30, 55, 75, 90, 100};
+
+// 終末の時（APOCALYPSE_TURN 以降）のドローで悪魔カードが出る累積確率（%）。
+// 0..100 の抽選値と先頭から比較し、どれにも当たらなければ通常の山札抽選になる。
+// 対応するカードは combat_resolution.cpp の APOCALYPSE_DEVILS が持つ。
+// テスト側はこの表から「狙った悪魔を引く代表値」を導出するため、閾値をここ以外に書かないこと。
+constexpr int APOCALYPSE_DEVIL_COUNT = 5;
+constexpr int APOCALYPSE_DEVIL_THRESHOLDS[APOCALYPSE_DEVIL_COUNT] = {7, 12, 15, 20, 25};
+
+// 夢状態でドローしたカードが偽装される確率（%）。残りはそのまま正しく見える。
+// 偽装される場合は同じ夢グループの「自分以外」のカードから一様に選ばれるため、
+// 「見た目が変わっていないこと」は夢がかかっていない証拠にはならない。
+constexpr int DREAM_DISGUISE_RATE = 50;
+
+// のこぶんぶんが持つ基本攻撃回数。＜蜃気楼＞の枚数がこれに乗算される。
+constexpr int SAW_BOOM_BOOM_ATTACK_COUNT = 2;
+
+// 太陽のお守りで復活したときのHP。
+constexpr int SUN_AMULET_REVIVE_HP = 10;
+
+// 昇天弓がターン終了時に発射されるときの攻撃力（手札上の攻撃力とは別物）。
+constexpr int ASCENSION_BOW_TRIGGERED_POWER = 30;
+
 // Observation 配列次元 / Observation Array Dimensions
 constexpr int NUM_SICKNESS_TYPES = 5;
 constexpr int NUM_CURSE_TYPES = 4;
@@ -26,6 +53,11 @@ constexpr int APOCALYPSE_TURN = 150;   // 終末の時が発動するターン�
 // 実測では決着の中央値が17ターン、最長でも109ターンで、300を超える対戦は観測されていない。
 // 学習させたい膠着局面（150ターン以降）が 0.5〜0.83 に散る値として300を採用している。
 constexpr int TURN_PROGRESS_SCALE_TURNS = 300;
+
+// カードドローの抽選テーブル（drop_rate の重み分だけカードIDを展開した配列）の上限。
+// 実データでは合計 500 要素（2KB）で L1 に収まる。極端な drop_rate を設定した際に
+// メモリを食い潰さないための安全弁で、超えた場合は init_game_logic が例外を投げる。
+constexpr int MAX_DRAW_TABLE_ENTRIES = 1 << 20;
 
 enum ActionType {
     ACTION_SELECT_HAND_0 = 0,

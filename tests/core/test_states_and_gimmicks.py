@@ -1,508 +1,344 @@
 # ==========================================
 # Merged from: tests/core/test_special_gimmicks.py
 # ==========================================
-import numpy as np
 import pytest
 
 import godfield_core
-from tests.core.test_utils import SimulationRunner, find_card_by_name
+from godfield_core import GamePhase
+from tests.core.dsl import (
+    Side,
+    all_cards,
+    card_feature,
+    card_id,
+    card_name,
+    cards_where,
+    dream_candidates,
+)
 
-# Observation オフセット定数 (Observation struct)
-# float hp_me, hp_opp (0, 1)
-# float mp_me, mp_opp (2, 3)
-# float money_me, money_opp (4, 5)
-# float sickness_me[5], sickness_opp[5] (6-10, 11-15)
-# float curses_me[4], curses_opp[4] (16-19, 20-23)
-# float guardian_me[11], guardian_opp[11] (24-34, 35-45)
-# float incoming_damage (46)
-# float current_staged_defense (47)
-# float is_apocalypse (48)
-# float phase_one_hot[18] (49-66)
-# int hand_cards[18] (67-84)
-# int staged_cards[18] (85-102)
-# int opponent_hand_cards[18] (103-120)
-# int opponent_staged_cards[18] (121-138)
-# GameEvent history[64] (139-458)
-# int history_head (459)
-# float action_mask[122] (460-581)
+FILLER = "armor/wood-shield"
+
+GROUP_WEAPONS = cards_where(type="weapon", is_group_attack=True)
 
 
-def parse_obs(obs_flat):
-    obs = {}
-    obs["hp_me"] = obs_flat[0]
-    obs["hp_opp"] = obs_flat[1]
-    obs["mp_me"] = obs_flat[2]
-    obs["mp_opp"] = obs_flat[3]
-    obs["money_me"] = obs_flat[4]
-    obs["money_opp"] = obs_flat[5]
+@pytest.mark.parametrize(
+    "group_weapon", GROUP_WEAPONS, ids=[card_name(c) for c in GROUP_WEAPONS]
+)
+def test_earth_guardian_group_attack_opens_a_defense_phase(board, group_weapon):
+    """地球神が全体攻撃武器を引いても、防御フェイズが正しく立ち上がることを検証します。
 
-    obs["sickness_me"] = obs_flat[6:11]
-    obs["sickness_opp"] = obs_flat[11:16]
-    obs["curses_me"] = obs_flat[16:20]
-    obs["curses_opp"] = obs_flat[20:24]
-    obs["guardian_me"] = obs_flat[24:35]
-    obs["guardian_opp"] = obs_flat[35:46]
+    従来は地球神が全体攻撃武器を引くまで最大20000回シードを探索していました。
+    どの全体攻撃武器を引いたかは制御できず、20000回で見つからなければテスト自体が
+    失敗する構造でした。しかも「たまたま最初に見つかった1種類」しか検証されません。
 
-    obs["hand_cards"] = obs_flat[69:87].astype(np.int32)
-    obs["staged_cards"] = obs_flat[87:105].astype(np.int32)
-    obs["opponent_hand_cards"] = obs_flat[105:123].astype(np.int32)
-    obs["opponent_staged_cards"] = obs_flat[123:141].astype(np.int32)
-
-    obs["action_mask"] = obs_flat[462 : 462 + 122]
-    return obs
-
-
-def test_earth_guardian_group_attack_fix():
+    現在は引くカードを名指しできるので、カードマスタにある全体攻撃武器を
+    全種類まわしています。
     """
-    検証内容: 地球神が全体攻撃武器を使用した際、フェイズが正常に PHASE_DEFENSE に遷移すること。
-    """
-    found = False
-    weapon_attack_count = 0
+    earth = int(godfield_core.GuardianType.EARTH)
 
-    # 20000回シードを探索
-    for seed in range(20000):
-        sim = SimulationRunner()
-        sim.state.seed_rng(seed)
-        sim.set_status(player=0, hp=40, mp=10, money=10)
-        sim.set_status(player=1, hp=40, mp=10, money=10)
-        sim.state.set_guardian(1, 9)  # (プレイヤー1)の守護神を地球神(9)にする
+    g = board(
+        p0=Side(hp=99, mp=10, money=10, hand=[FILLER]),
+        p1=Side(hp=99, mp=10, money=10, guardian=earth, hand=[FILLER]),
+    )
+    g.rng.guardian_act(acts=True)
+    # 山札は「P0の祈るドロー」「地球神のドロー」の順に消費される
+    g.rng.next_draws(FILLER, group_weapon, then=FILLER)
+    if card_feature(group_weapon, "accuracy", 100) < 100:
+        g.rng.hits(always=True)
 
-        # 祈ることでターンを終了させ、PHASE_END を自動進行させる
-        sim.step(godfield_core.ActionType.ACTION_PRAY)
+    g.pray()
 
-        # 地球神が攻撃を使用して PHASE_DEFENSE に入ったか確認
-        if sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE:
-            weapon_attack_count += 1
-            if sim.state.pending_is_group_attack:
-                # 一般武器と異なり、全体武器を地球神が引いた場合も PHASE_DEFENSE でアクターが自分になっていること
-                assert sim.state.current_actor_id == 0
-                assert sim.state.attacker_id == 1
-                assert sim.state.defender_id == 0
-                found = True
-                break
-
-    print(f"Total Earth Guardian weapon attacks observed: {weapon_attack_count} in 2000 runs")
-    assert found, f"全体攻撃武器を地球神が使用するシードが見つかりませんでした (武器攻撃回数: {weapon_attack_count})"
+    g.expect(phase=godfield_core.GamePhase.PHASE_DEFENSE, actor=0, attacker=1, defender=0)
+    assert g.state.pending_is_group_attack is True
+    assert g.state.pending_attack_source_id == group_weapon
 
 
-def test_observation_money_and_mask():
-    """
-    検証内容: 所持金(money)が Observation に代入され、action_mask が get_legal_actions の結果と一致すること。
+def env_pool_observation(state):
+    """EnvPool に状態を流し込み、観測バッファを1環境分だけ取り出します。
+
+    観測レイアウトが EnvPool のバッファ経由でも壊れていないことを確認するための経路です。
+    従来はここでバイトオフセット（obs_flat[462:584] など）を直書きしていましたが、
+    Observation の構造を変えると黙って別の領域を読むため、C++ が公開している
+    サイズ定数から算出するようにしています。
     """
     env = godfield_core.EnvPool(1)
     env.reset(42)
+    env.set_state(0, state)
+    return env.get_observations()
 
+
+def test_env_pool_observation_matches_get_legal_actions():
+    """EnvPool 経由の観測に載る action_mask が get_legal_actions と一致することを検証します。
+
+    観測バッファのレイアウトがズレると、学習側が別の位置を合法手マスクとして
+    読んでしまい、無効な行動を選び続けることになります。
+    """
     state = godfield_core.InternalState()
     godfield_core.clear_state(state)
     state.current_actor_id = 0
     state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-
     state.set_hp(0, 40)
     state.set_hp(1, 40)
-    state.set_money(0, 35)  # me
-    state.set_money(1, 75)  # opp
+    state.set_money(0, 35)
+    state.set_money(1, 75)
 
-    # 祈る(ACTION_PRAY)はメインフェイズで合法
-    # 展開されていない奇跡等は非合法
-    env.set_state(0, state)
-    obs_flat = env.get_observations()
-    obs = parse_obs(obs_flat)
+    obs_flat = env_pool_observation(state)
 
-    assert obs["money_me"] == pytest.approx(0.35)
-    assert obs["money_opp"] == pytest.approx(0.75)
+    # money は先頭付近の固定位置（hp_me, hp_opp, mp_me, mp_opp, money_me, money_opp）
+    assert obs_flat[4] == pytest.approx(0.35)
+    assert obs_flat[5] == pytest.approx(0.75)
 
-    # 手動で get_legal_actions を取得してマスクと一致するかアサート
-    expected_mask = godfield_core.get_legal_actions(state)
-    for i in range(122):
-        assert obs["action_mask"][i] == (1.0 if expected_mask[i] else 0.0)
+    # action_mask は観測特徴量の末尾に置かれている
+    mask_start = godfield_core.OBSERVATION_FEATURE_SIZE - godfield_core.ACTION_SPACE_SIZE
+    mask = obs_flat[mask_start : mask_start + godfield_core.ACTION_SPACE_SIZE]
+
+    expected = godfield_core.get_legal_actions(state)
+    for i in range(godfield_core.ACTION_SPACE_SIZE):
+        assert mask[i] == (1.0 if expected[i] else 0.0), f"action_mask[{i}] が一致しません"
 
 
-def test_observation_fog_masking():
+def test_fog_hides_the_opponent_hand_from_the_cursed_player(board):
+    """霧にかかると、相手の公開済み手札も見えなくなることを検証します。
+
+    ステータスのマスキングは test_observation.py が検証しています。
+    ここでは手札のマスキングを扱います。
     """
-    検証内容: 自分が霧(FOG)状態の時、相手のステータス情報が Observation 上で 0.0f にマスクされること。
+    revealed = "weapons/bronze-club"
+    g = board(
+        p0=Side(hp=40, mp=10, money=30),
+        p1=Side(hp=50, mp=20, money=60, hand=[revealed], known_to_opp=[0]),
+    )
+
+    # 霧が無ければ、公開されている相手の手札が見える
+    clear = godfield_core.get_observation(g.state, 0)
+    assert clear.get_opponent_hand_cards()[0] == card_id(revealed)
+
+    # 霧をかけると見えなくなる
+    g.state.set_curses(0, godfield_core.CurseType.CURSE_FOG, True)
+    fogged = godfield_core.get_observation(g.state, 0)
+    assert fogged.get_opponent_hand_cards()[0] == 0, "霧の下では相手の手札は隠される"
+
+
+def test_dream_masks_only_newly_drawn_cards(board):
+    """夢状態では、既に持っている手札は変化せず、新たに引いたカードだけが偽装されることを検証します。"""
+    real = "weapons/bronze-club"
+    fake = "weapons/saw-boom-boom"
+    g = board(p0=Side(hp=40, hand=[real]), p1=Side(hp=40))
+
+    # 夢が無い状態では真のカードが見える
+    assert godfield_core.get_observation(g.state, 0).get_hand_cards()[0] == card_id(real)
+
+    # 夢をかけても、既に持っている手札は変化しない
+    g.state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
+    assert godfield_core.get_observation(g.state, 0).get_hand_cards()[0] == card_id(real)
+
+    # 夢状態で新たに引いたカードだけが偽装される
+    g.state.set_true_hand(0, 1, card_id(real))
+    g.state.set_is_confirmed(0, 1, False)
+    g.state.set_apparent_hand(0, 1, card_id(fake))
+
+    obs = godfield_core.get_observation(g.state, 0)
+    assert obs.get_hand_cards()[1] == card_id(fake), "見かけ上は偽装カードになる"
+    assert g.state.get_true_hand(0, 1) == card_id(real), "真のカードは変わらない"
+
+
+@pytest.mark.parametrize(
+    ("hp_before", "hp_after", "is_done", "why"),
+    [
+        # 1撃目でHP0 -> お守りで復活(10) -> 自傷でHP0 -> お守りは既に消費済みで死亡
+        (14, 0, True, "1撃目で死んで復活し、自傷で再度死ぬ"),
+        # 1撃目ではHP6で生存（復活なし） -> 自傷でHP0 -> お守りで復活して生存
+        (20, 10, False, "1撃目は耐え、自傷で死んでお守りで復活する"),
+    ],
+    ids=["HP14で死亡", "HP20で生存"],
+)
+def test_evil_broadsword_self_harm_and_amulet_timing(board, hp_before, hp_after, is_done, why):
+    """邪神の大剣を自分に使った際の、自傷ダメージと太陽のお守りの発動タイミングを検証します。
+
+    邪神の大剣は与えたダメージと同じだけ自分も受けるため、自分に使うと同じ威力を
+    2回連続で受けます。お守りは1枚しかないので、1撃目で死ぬか2撃目で死ぬかによって
+    最終的な生死が変わります。この境界が実装の要点です。
     """
-    env = godfield_core.EnvPool(1)
-    env.reset(42)
+    sword = "weapons/evil-broadsword"
+    damage = card_feature(sword, "attack_power")
+    assert hp_before <= damage * 2, "2撃で死にうる体力である前提のテスト"
 
-    state = godfield_core.InternalState()
-    godfield_core.clear_state(state)
-    state.current_actor_id = 0
-    state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    g = board(
+        p0=Side(hp=hp_before, hand=[sword, "sundries/sun-amulet"]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+    g.attack(sword, to_self=True)
 
-    state.set_hp(0, 40)
-    state.set_hp(1, 50)
-    state.set_mp(0, 10)
-    state.set_mp(1, 20)
-    state.set_money(0, 30)
-    state.set_money(1, 60)
-    state.set_true_hand(1, 0, find_card_by_name("weapons/bronze-club"))
-    # 相手の手札の1枚目が公開状態
-    state.set_is_known_to_opp(1, 0, True)
-
-    # 霧がかかっていない時 ➡ 相手のステータスが見える
-    env.set_state(0, state)
-    obs = parse_obs(env.get_observations())
-    assert obs["hp_opp"] == pytest.approx(0.50)
-    assert obs["mp_opp"] == pytest.approx(0.20)
-    assert obs["money_opp"] == pytest.approx(0.60)
-    assert obs["opponent_hand_cards"][0] == find_card_by_name("weapons/bronze-club")
-
-    # 自分(0)に霧を付与 ➡ 相手の情報がマスクされて見えなくなる(0.0)
-    state.set_curses(0, godfield_core.CurseType.CURSE_FOG, True)
-    env.set_state(0, state)
-    obs = parse_obs(env.get_observations())
-    assert obs["hp_opp"] == 0.0
-    assert obs["mp_opp"] == 0.0
-    assert obs["money_opp"] == 0.0
-    assert obs["opponent_hand_cards"][0] == 0
+    g.expect(p0_hp=hp_after, is_done=is_done)
+    # お守りはどちらの経路でも消費される
+    assert card_name(card_id("sundries/sun-amulet")) not in g.hand(0)
+    if not is_done:
+        g.expect(actor=1, phase=GamePhase.PHASE_MAIN)
 
 
-def test_observation_dream_masking():
+VENUS = int(godfield_core.GuardianType.VENUS)
+
+
+def venus_action(board, action_card: str, *, p0=None, p1=None):
+    """P1 の金星神が指定の行動を発動し、P0 に選択が回ってきた局面を作ります。
+
+    従来は PHASE_SUNDRY_SELECT_MIRROR を手で組み立てていましたが、実経路を通すことで
+    「その局面が実際に発生しうるか」も同時に検証されます。
     """
-    検証内容: 自分が夢(DREAM)状態の時、すでに持っている手札は変化せず、
-    夢状態で新たにドローしたカードのみが同じDreamGroupの偽装カードに見えること。
+    g = board(
+        p0=p0 if p0 is not None else Side(hp=40, money=10, hand=["armor/leather-clothes"]),
+        p1=p1 if p1 is not None else Side(hp=40, money=10, guardian=VENUS),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.guardian_action_card(VENUS, action_card)
+    g.discard("armor/leather-clothes")
+    g.expect(phase=godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR, actor=0)
+    return g
+
+
+@pytest.mark.parametrize("reflected", [False, True], ids=["受諾する", "反射する"])
+def test_venus_bribe_gives_money_to_whoever_accepts(board, reflected):
+    """わいろが「受け入れた側」にお金を与えることを、反射の有無で検証します。"""
+    hand = ["armor/leather-clothes"] + (["armor/super-mirror"] if reflected else [])
+    g = venus_action(
+        board, "gurdians/bribe",
+        p0=Side(hp=40, money=10, hand=hand),
+    )
+    amount = g.state.pending_attack_power
+    assert amount > 0, "わいろの金額が0ならこのテストは何も検証していない"
+
+    if reflected:
+        g.select("armor/super-mirror")
+        g.expect(phase=godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR, actor=1)
+        g.take_hit()
+        # 反射されたので、発動した側（金星神の持ち主）が受け取る
+        g.expect(p0_money=10, p1_money=10 + amount)
+    else:
+        g.take_hit()
+        g.expect(p0_money=10 + amount, p1_money=10)
+
+
+@pytest.mark.parametrize("reflected", [False, True], ids=["受諾する", "反射する"])
+def test_venus_fine_takes_money_from_whoever_accepts(board, reflected):
+    """罰金が「受け入れた側」からお金を徴収し、もう一方に渡ることを検証します。"""
+    hand = ["armor/leather-clothes"] + (["armor/super-mirror"] if reflected else [])
+    g = venus_action(
+        board, "gurdians/fine",
+        p0=Side(hp=40, money=10, hand=hand),
+    )
+    amount = g.state.pending_attack_power
+    assert amount > 0, "罰金の金額が0ならこのテストは何も検証していない"
+
+    if reflected:
+        g.select("armor/super-mirror")
+        g.expect(phase=godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR, actor=1)
+        g.take_hit()
+        # 反射されたので、発動した側が徴収される
+        g.expect(p0_money=10 + amount, p1_money=10 - amount)
+    else:
+        g.take_hit()
+        g.expect(p0_money=10 - amount, p1_money=10 + amount)
+
+
+GALE_SWORD = "weapons/severe-gale-sword"  # ATK13・命中率100%・風邪を付与
+AURA = "miracles/aura"
+FEVER_MASK = "armor/fever-mask"  # DEF10・被弾時に熱病を付与
+SUN_AMULET = "sundries/sun-amulet"
+
+# ターン終了時の病気による増減（エンジン側の定数）
+SICKNESS_TURN_END_DELTA = {
+    godfield_core.SicknessType.SICKNESS_FEVER: -2,
+    godfield_core.SicknessType.SICKNESS_HELL: -5,
+    godfield_core.SicknessType.SICKNESS_HEAVEN: +5,
+}
+
+
+def severe_gale_with_two_auras_power() -> int:
+    """激烈疾風剣に＜オーラ＞を2枚重ねた攻撃力（オーラは1枚ごとに2倍）。"""
+    return card_feature(GALE_SWORD, "attack_power") * 2 * 2
+
+
+@pytest.mark.parametrize(
+    ("num_masks", "expected_sickness"),
+    [
+        # 激烈疾風剣が風邪を与えたあと、熱狂仮面が1枚ごとに熱病を重ねて病気が1段階ずつ進む
+        (1, godfield_core.SicknessType.SICKNESS_FEVER),
+        (2, godfield_core.SicknessType.SICKNESS_HELL),
+        (3, godfield_core.SicknessType.SICKNESS_HEAVEN),
+    ],
+    ids=["仮面1枚->熱病", "仮面2枚->地獄病", "仮面3枚->天国病"],
+)
+def test_fever_masks_escalate_the_sickness_one_step_each(board, num_masks, expected_sickness):
+    """熱狂仮面を重ねるごとに病気が1段階ずつ悪化することを検証します。
+
+    激烈疾風剣が風邪を与え、そこへ熱狂仮面が熱病を重ねます。すでに病気の相手に
+    同等以下の病気を与えると1段階進む、という規則がこのテストの主題です。
+
+    HPは「攻撃力 - 仮面の防御力合計」を受けたあと、ターン終了時に病気ぶんの
+    増減が入ります。従来は 55 / 62 / 82 という結果の数値が直書きされており、
+    どう計算されるのか読めませんでした。
     """
-    env = godfield_core.EnvPool(1)
-    env.reset(42)
+    power = severe_gale_with_two_auras_power()
+    guard = card_feature(FEVER_MASK, "defense_power") * num_masks
+    expected_hp = 99 - (power - guard) + SICKNESS_TURN_END_DELTA[expected_sickness]
 
-    state = godfield_core.InternalState()
-    godfield_core.clear_state(state)
-    state.current_actor_id = 0
-    state.current_phase = godfield_core.GamePhase.PHASE_MAIN
+    g = board(
+        p0=Side(hp=99, mp=50, money=10, hand=[FEVER_MASK] * num_masks),
+        p1=Side(hp=40, mp=50, money=10, hand=[GALE_SWORD, AURA, AURA]),
+        actor=1,
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.sickness_worsen(False)  # ターン終了時の追加悪化は起こさない
 
-    state.set_hp(0, 40)
-    state.set_hp(1, 40)
+    g.select_slots(0, 1, 2)  # 激烈疾風剣 + オーラ + オーラ
+    g.target_opp()
+    g.select_slots(*range(num_masks))
+    g.confirm()
 
-    card_id = find_card_by_name("weapons/bronze-club")
-    # set_true_handは、見かけ上の手札(apparent_hand)の設定と確定(is_confirmed = True)も同時に行う
-    state.set_true_hand(0, 0, card_id)
-
-    # 夢がかかっていない時 ➡ 真のカードIDが見える
-    env.set_state(0, state)
-    obs = parse_obs(env.get_observations())
-    assert obs["hand_cards"][0] == card_id
-
-    # 自分(0)に夢を付与 ➡ すでに持っている手札は変化しない
-    state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
-    env.set_state(0, state)
-    obs = parse_obs(env.get_observations())
-    assert obs["hand_cards"][0] == card_id
-
-    # 夢状態で新たにドローする ➡ 夢グループ（通常武器）内のいずれかのカードに偽装される
-    # ドローしたカードが武器（銅のこん棒）の場合
-    state.set_true_hand(0, 1, card_id)
-    # 未確定状態にし、偽装を設定
-    state.set_is_confirmed(0, 1, False)
-    state.set_apparent_hand(0, 1, find_card_by_name("weapons/saw-boom-boom"))  # 偽装
-
-    env.set_state(0, state)
-    obs = parse_obs(env.get_observations())
-    assert obs["hand_cards"][1] == find_card_by_name("weapons/saw-boom-boom")
-    # 真のカードはまだ見えない
-    assert state.get_true_hand(0, 1) == card_id
+    g.expect(p0_sickness=expected_sickness, p0_hp=expected_hp)
 
 
-def test_evil_broadsword_self_harm_hp14():
+def test_four_fever_masks_cause_a_fatal_seizure(board):
+    """熱狂仮面4枚では天国病を超えて発作が起き、即死することを検証します。"""
+    g = board(
+        p0=Side(hp=99, mp=50, money=10, hand=[FEVER_MASK] * 4),
+        p1=Side(hp=40, mp=50, money=10, hand=[GALE_SWORD, AURA, AURA]),
+        actor=1,
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select_slots(0, 1, 2)
+    g.target_opp()
+    g.select_slots(0, 1, 2, 3)
+    g.confirm()
+
+    g.expect(p0_hp=0)
+
+
+def test_seizure_death_is_survivable_with_the_sun_amulet(board):
+    """発作死しても太陽のお守りがあれば復活し、天国病の回復も適用されることを検証します。
+
+    復活後のHP10に、ターン終了時の天国病回復が乗って15になります。
     """
-    検証内容: HP 14 の状態で自分に「邪神の大剣」を使用した場合。
-    - 最初の14ダメージでHPが0になり、「太陽のお守り」を即座に消費してHP 10で復活する。
-    - その後、自傷（反射）ダメージの14を受けて再度HPが0になり、死亡（HP 0）することを確認します。
-    """
-    runner = SimulationRunner()
-    broadsword_id = find_card_by_name("邪神の大剣")
-    amulet_id = find_card_by_name("太陽のお守り")
+    heaven_heal = SICKNESS_TURN_END_DELTA[godfield_core.SicknessType.SICKNESS_HEAVEN]
+    g = board(
+        p0=Side(hp=99, mp=50, money=10, hand=[FEVER_MASK] * 4 + [SUN_AMULET]),
+        p1=Side(hp=40, mp=50, money=10, hand=[GALE_SWORD, AURA, AURA]),
+        actor=1,
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.sickness_worsen(False)
 
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_hp(0, 14)
+    g.select_slots(0, 1, 2)
+    g.target_opp()
+    g.select_slots(0, 1, 2, 3)
+    g.confirm()
 
-    # 手札設定: [邪神の大剣, 太陽のお守り, ...]
-    runner.state.set_true_hand(0, 0, broadsword_id)
-    runner.state.set_true_hand(0, 1, amulet_id)
-    for j in range(2, 18):
-        runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
-
-    # 1. 邪神の大剣を選択
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    # 2. 自分を対象
-    runner.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    # 死亡していること
-    assert runner.state.get_hp(0) == 0
-    assert runner.state.is_done is True
-    # 太陽のお守りが消費されていること
-    assert runner.state.get_true_hand(0, 1) == godfield_core.CARD_EMPTY
-
-
-def test_evil_broadsword_self_harm_hp20():
-    """
-    検証内容: HP 20 の状態で自分に「邪神の大剣」を使用した場合。
-    - 最初の14ダメージではHP 6となる（死亡しないため復活はおきない）。
-    - その後、自傷の14ダメージを受けてHP 0となり、ここで「太陽のお守り」を消費してHP 10で復活（生存）することを確認します。
-    """
-    runner = SimulationRunner()
-    broadsword_id = find_card_by_name("邪神の大剣")
-    amulet_id = find_card_by_name("太陽のお守り")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_hp(0, 20)
-
-    # 手札設定
-    runner.state.set_true_hand(0, 0, broadsword_id)
-    runner.state.set_true_hand(0, 1, amulet_id)
-    for j in range(2, 18):
-        runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
-
-    # 1. 邪神の大剣を選択
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    # 2. 自分を対象
-    runner.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    # HP 10 で復活し生存していること
-    assert runner.state.get_hp(0) == 10
-    assert runner.state.is_done is False
-    # ターンが終了して P1 のターンになっていること
-    assert runner.state.current_actor_id == 1
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-
-
-def test_venus_bribe_resolution_and_mirror():
-    """
-    検証内容: 金星神の「わいろ」の効果解決と、スーパーミラーでの反射。
-    - 通常解決: Bribe（5お金）を受けた側がそのまま受諾（Confirm）すると、受諾側がお金 +5 を得る。
-    - 反射解決: Bribeを受けた側がスーパーミラーで反射すると、元の発動者側が受諾側になり、そちらがお金 +5 を得る。
-    """
-    bribe_id = find_card_by_name("わいろ")
-    mirror_id = find_card_by_name("スーパーミラー")
-
-    # Case A: 通常解決
-    runner_a = SimulationRunner()
-    runner_a.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
-    runner_a.state.current_actor_id = 1
-    runner_a.state.attacker_id = 0
-    runner_a.state.defender_id = 1
-    runner_a.state.pending_attack_source_id = bribe_id
-    runner_a.state.pending_attack_power = 5
-
-    runner_a.state.set_money(0, 10)
-    runner_a.state.set_money(1, 10)
-
-    # P1が確認 (受諾)
-    runner_a.step(godfield_core.ActionType.ACTION_CONFIRM)
-
-    # 解決後、P1（defender）がお金を5貰い、P0は変化なし
-    assert runner_a.state.get_money(1) == 15
-    assert runner_a.state.get_money(0) == 10
-
-    # Case B: スーパーミラーでの反射解決
-    runner_b = SimulationRunner()
-    runner_b.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
-    runner_b.state.current_actor_id = 1
-    runner_b.state.attacker_id = 0
-    runner_b.state.defender_id = 1
-    runner_b.state.pending_attack_source_id = bribe_id
-    runner_b.state.pending_attack_power = 5
-
-    runner_b.state.set_money(0, 10)
-    runner_b.state.set_money(1, 10)
-    # P1の手札にスーパーミラーを設定
-    runner_b.state.set_true_hand(1, 0, mirror_id)
-    for j in range(1, 18):
-        runner_b.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
-
-    # P1がスーパーミラーを選択して反射 (即座にアクターがP0に入れ替わる)
-    runner_b.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # ロールが入れ替わり、P0が防衛アクターになること
-    assert runner_b.state.current_phase == godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
-    assert runner_b.state.current_actor_id == 0
-    assert runner_b.state.attacker_id == 1
-    assert runner_b.state.defender_id == 0
-
-    # P0が受諾 (確認)
-    runner_b.step(godfield_core.ActionType.ACTION_CONFIRM)
-
-    # 反射されたため、P0（元の発動者）がお金を5貰い、P1は変化なし
-    assert runner_b.state.get_money(0) == 15
-    assert runner_b.state.get_money(1) == 10
-
-
-def test_venus_fine_resolution_and_mirror():
-    """
-    検証内容: 金星神の「罰金」の効果解決と、スーパーミラーでの反射。
-    - 通常解決: Fine（3お金没収）を受けた側が受諾すると、受諾側がお金 -3（足りない分はMP/HP）となり、発動者側がお金 +3 を得る。
-    - 反射解決: Fineを受けた側がスーパーミラーで反射すると、元の発動者側が没収の対象になり、反射側がお金 +3 を得る。
-    """
-    fine_id = find_card_by_name("罰金")
-    mirror_id = find_card_by_name("スーパーミラー")
-
-    # Case A: 通常解決
-    runner_a = SimulationRunner()
-    runner_a.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
-    runner_a.state.current_actor_id = 1
-    runner_a.state.attacker_id = 0
-    runner_a.state.defender_id = 1
-    runner_a.state.pending_attack_source_id = fine_id
-    runner_a.state.pending_attack_power = 3
-
-    runner_a.state.set_money(0, 10)
-    runner_a.state.set_money(1, 10)
-
-    runner_a.step(godfield_core.ActionType.ACTION_CONFIRM)
-
-    # P1が没収されてP0が回収すること
-    assert runner_a.state.get_money(1) == 7
-    assert runner_a.state.get_money(0) == 13
-
-    # Case B: 反射解決
-    runner_b = SimulationRunner()
-    runner_b.state.current_phase = godfield_core.GamePhase.PHASE_SUNDRY_SELECT_MIRROR
-    runner_b.state.current_actor_id = 1
-    runner_b.state.attacker_id = 0
-    runner_b.state.defender_id = 1
-    runner_b.state.pending_attack_source_id = fine_id
-    runner_b.state.pending_attack_power = 3
-
-    runner_b.state.set_money(0, 10)
-    runner_b.state.set_money(1, 10)
-    # P1の手札にスーパーミラーを設定
-    runner_b.state.set_true_hand(1, 0, mirror_id)
-    for j in range(1, 18):
-        runner_b.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
-
-    # P1がスーパーミラーを選択して反射 (即座にアクターがP0に入れ替わる)
-    runner_b.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # P0が受諾
-    runner_b.step(godfield_core.ActionType.ACTION_CONFIRM)
-
-    # 反射によりP0が罰金を支払われ、P1がそれを受け取ること
-    assert runner_b.state.get_money(0) == 7
-    assert runner_b.state.get_money(1) == 13
-
-
-def test_verify_fever_mask_transition():
-    # 激烈疾風剣 のカードIDを取得
-    gale_id = find_card_by_name("激烈疾風剣")
-    aura_id = find_card_by_name("＜オーラ＞")
-    mask_id = find_card_by_name("熱狂仮面")
-    amulet_id = find_card_by_name("太陽のお守り")
-
-    sickness_names = {
-        godfield_core.SicknessType.SICKNESS_NONE: "なし",
-        godfield_core.SicknessType.SICKNESS_COLD: "風邪",
-        godfield_core.SicknessType.SICKNESS_FEVER: "熱病",
-        godfield_core.SicknessType.SICKNESS_HELL: "地獄病",
-        godfield_core.SicknessType.SICKNESS_HEAVEN: "天国病",
-    }
-
-    # 各枚数での結果を格納
-    results = {}
-
-    for num_masks in range(1, 5):
-        runner = SimulationRunner()
-        runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-        runner.state.current_actor_id = 1
-
-        # P0のHPを99にしてダメージで死なないようにする（ただし発作では死ぬ）
-        runner.state.set_hp(0, 99)
-        runner.state.set_hp(1, 40)
-        runner.state.set_mp(0, 50)
-        runner.state.set_mp(1, 50)
-        runner.state.set_money(0, 10)
-        runner.state.set_money(1, 10)
-
-        # P1の手札を設定 (激烈疾風剣, ＜オーラ＞, ＜オーラ＞)
-        runner.state.set_true_hand(1, 0, gale_id)
-        runner.state.set_true_hand(1, 1, aura_id)
-        runner.state.set_true_hand(1, 2, aura_id)
-        for j in range(3, 18):
-            runner.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
-
-        # P0の手札を設定 (熱狂仮面 x num_masks)
-        for i in range(num_masks):
-            runner.state.set_true_hand(0, i, mask_id)
-        for j in range(num_masks, 18):
-            runner.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
-
-        # P1が激烈疾風剣 + ＜オーラ＞ + ＜オーラ＞ を選択して攻撃
-        runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)  # 激烈疾風剣
-        runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_1)  # ＜オーラ＞
-        runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_2)  # ＜オーラ＞
-        runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)     # 相手をターゲット
-
-        # P0が熱狂仮面をすべて選択してConfirm
-        for i in range(num_masks):
-            runner.step(godfield_core.ActionType(int(godfield_core.ActionType.ACTION_SELECT_HAND_0) + i))
-        runner.step(godfield_core.ActionType.ACTION_CONFIRM)
-
-        results[num_masks] = (runner.state.get_hp(0), runner.state.get_sickness(0))
-
-    # 4つ + お守り
-    runner_amulet = SimulationRunner()
-    runner_amulet.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner_amulet.state.current_actor_id = 1
-    runner_amulet.state.set_hp(0, 99)
-    runner_amulet.state.set_hp(1, 40)
-    runner_amulet.state.set_mp(0, 50)
-    runner_amulet.state.set_mp(1, 50)
-    runner_amulet.state.set_money(0, 10)
-    runner_amulet.state.set_money(1, 10)
-
-    runner_amulet.state.set_true_hand(1, 0, gale_id)
-    runner_amulet.state.set_true_hand(1, 1, aura_id)
-    runner_amulet.state.set_true_hand(1, 2, aura_id)
-    for j in range(3, 18):
-        runner_amulet.state.set_true_hand(1, j, godfield_core.CARD_EMPTY)
-
-    for i in range(4):
-        runner_amulet.state.set_true_hand(0, i, mask_id)
-    runner_amulet.state.set_true_hand(0, 4, amulet_id)
-    for j in range(5, 18):
-        runner_amulet.state.set_true_hand(0, j, godfield_core.CARD_EMPTY)
-
-    runner_amulet.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    runner_amulet.step(godfield_core.ActionType.ACTION_SELECT_HAND_1)
-    runner_amulet.step(godfield_core.ActionType.ACTION_SELECT_HAND_2)
-    runner_amulet.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-
-    for i in range(4):
-        runner_amulet.step(godfield_core.ActionType(int(godfield_core.ActionType.ACTION_SELECT_HAND_0) + i))
-    runner_amulet.step(godfield_core.ActionType.ACTION_CONFIRM)
-
-    # 結果をコンソールに出力
-    print("\n=== Sickness Transition Verification Results ===")
-    for k, (hp, sick) in results.items():
-        print(f"Masks: {k} | HP: {hp} | Sickness: {sickness_names[sick]}")
-    print(f"Masks: 4 + Amulet | HP: {runner_amulet.state.get_hp(0)} | Sickness: {sickness_names[runner_amulet.state.get_sickness(0)]}")
-    print("================================================\n")
-
-    # アサーションチェック (ユーザーの指定通りになるか)
-    # 1つ: 風邪 -> 熱病 -> 熱病 (Cold then Fever resolves to Fever)
-    # ダメージ 52 - 10 = 42。ターン終了時の熱病ダメージ 2。HP 99 - 42 - 2 = 55
-    assert results[1][1] == godfield_core.SicknessType.SICKNESS_FEVER
-    assert results[1][0] == 55
-
-    # 2つ: 風邪 -> 熱病 -> 地獄病 (Cold then Fever then Fever resolves to Hell)
-    # ダメージ 52 - 20 = 32。ターン終了時の地獄病ダメージ 5。HP 99 - 32 - 5 = 62
-    assert results[2][1] == godfield_core.SicknessType.SICKNESS_HELL
-    assert results[2][0] == 62
-
-    # 3つ: 風邪 -> 熱病 -> 地獄病 -> 天国病
-    # ダメージ 52 - 30 = 22。ターン終了時の天国病回復 5。HP 99 - 22 + 5 = 82
-    assert results[3][1] == godfield_core.SicknessType.SICKNESS_HEAVEN
-    assert results[3][0] == 82
-
-    # 4つ: 発作で死亡 (HP 0)
-    assert results[4][0] == 0
-
-    # 4つ + お守り: HP 10 で復活、さらに天国病回復 5 で HP 15。天国病状態
-    assert runner_amulet.state.get_hp(0) == 15
-    assert runner_amulet.state.get_sickness(0) == godfield_core.SicknessType.SICKNESS_HEAVEN
-
-
-
+    g.expect(
+        p0_hp=10 + heaven_heal,
+        p0_sickness=godfield_core.SicknessType.SICKNESS_HEAVEN,
+        is_done=False,
+    )
 
 
 # ==========================================
@@ -511,189 +347,166 @@ def test_verify_fever_mask_transition():
 
 
 
-def test_dream_draw_groups():
+DREAM = godfield_core.CurseType.CURSE_DREAM
+
+# 夢状態でドローしたカードは、50%はそのまま正しく見え、残る50%は同じ夢グループの
+# 「自分以外」のカードに見える。どちらの場合も未確定（is_confirmed=False）なので、
+# 「見た目が変わっていないこと」は夢がかかっていない証拠にはならない。
+
+
+def draw_under_dream(g, player: int, slot: int, card: str, *, disguised: bool, as_card=None):
+    """夢状態のプレイヤーが `card` をドローした状況を作ります。"""
+    g.rng.dream(card, disguised=disguised, as_card=as_card)
+    g.state.add_card_to_hand_slot(player, slot, card_id(card), True)  # is_drawn=True
+
+
+def test_dream_draw_is_unconfirmed_and_disguised_within_the_group(board):
+    """夢状態でドローしたカードが未確定になり、同じ夢グループのカードに偽装されることを検証します。"""
+    real = "weapons/bronze-club"
+    g = board(p0=Side(hp=40, curses=[DREAM], hand=[]), p1=Side(hp=40))
+
+    draw_under_dream(g, 0, 0, real, disguised=True)
+
+    assert g.state.get_is_confirmed(0, 0) is False, "夢状態のドローは未確定になる"
+    assert g.state.get_true_hand(0, 0) == card_id(real), "真の手札は引いたカードのまま"
+
+    apparent_id = g.state.get_apparent_hand(0, 0)
+    assert apparent_id != card_id(real), "偽装される側では必ず自分以外のカードになる"
+
+    # 偽装先は必ず同じ夢グループ（ここでは単体・リアクションなしの通常武器）
+    apparent = next(c for c in all_cards() if c["id"] == apparent_id)
+    assert apparent.get("type") == "weapon"
+    assert not apparent.get("is_group_attack")
+    assert not apparent.get("reaction_type")
+
+
+def test_dream_disguise_never_picks_the_card_itself(board):
+    """偽装先の候補に元のカード自身が含まれないことを、候補一覧を全走査して検証します。
+
+    自分自身が候補に混ざっていると「正しく見える確率」が 50% を超えてしまいます。
     """
-    検証内容: 夢状態でのドローが、正しい夢グループ内のカードに偽装されること。
+    for real in ["weapons/bronze-club", "armor/leather-clothes", "sundries/sun-amulet"]:
+        candidates = dream_candidates(real)
+        assert candidates, f"{real} は夢グループを持つはずです"
+        assert card_id(real) not in candidates, f"{real} の偽装先候補に自分自身が入っています"
+
+
+def test_dream_draw_can_look_exactly_like_the_true_card(board):
+    """偽装されなかった場合、見た目は真のカードのまま・未確定のままであることを検証します。
+
+    「見た目が変わっていること」は夢状態の判定条件にできません。夢がかかっているか
+    どうかは is_confirmed で判断する必要があります。
     """
-    sim = SimulationRunner()
-    sim.set_status(0, hp=40, mp=0, money=0)
-    sim.set_status(1, hp=40, mp=0, money=0)
+    real = "weapons/bronze-club"
+    g = board(p0=Side(hp=40, curses=[DREAM], hand=[]), p1=Side(hp=40))
 
-    # 夢状態にする
-    sim.state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
+    draw_under_dream(g, 0, 0, real, disguised=False)
 
-    # 通常武器 (銅のこん棒) を手札スロット0にドロー
-    club_id = find_card_by_name("銅のこん棒")
-    sim.state.add_card_to_hand_slot(0, 0, club_id, True)  # is_drawn=True
-
-    # 未確定状態になっていること
-    assert not sim.state.get_is_confirmed(0, 0)
-
-    # 見た目のカードは元のカードと異なる可能性があるが、同じ通常武器グループであること
-    apparent_id = sim.state.get_apparent_hand(0, 0)
-    assert apparent_id != godfield_core.CARD_EMPTY
-
-    # 偽装カードの属性を検証 (通常武器グループは timing == ['main_atk_phase'] かつ is_group == false かつ reaction == none)
-    assert godfield_core.get_card_name(apparent_id) != "両替"
-
-    # 奇跡 (＜火の玉＞) を手札スロット1にドロー -> 奇跡は夢の影響を受けず、即座に確定する
-    fireball_id = find_card_by_name("＜火の玉＞")
-    sim.state.add_card_to_hand_slot(0, 1, fireball_id, True)
-    assert sim.state.get_is_confirmed(0, 1)
-    assert sim.state.get_apparent_hand(0, 1) == fireball_id
+    assert g.state.get_apparent_hand(0, 0) == card_id(real), "偽装されなければ見た目は変わらない"
+    assert g.state.get_is_confirmed(0, 0) is False, "見た目が同じでも未確定であることに変わりはない"
+    assert g.rng.consumed(godfield_core.RollKind.DREAM_FAKE_CARD) == 0, (
+        "偽装されない場合は偽装先の抽選自体が起きない"
+    )
 
 
-def test_dream_finalization_success():
-    """
-    検証内容: 夢状態で偽装されたカードを使用し、真のカードも合法だった場合、正常に確定して実行されること。
-    """
-    sim = SimulationRunner()
-    sim.set_status(0, hp=40, mp=0, money=0)
-    sim.set_status(1, hp=40, mp=0, money=0)
+def test_miracles_are_not_disguised_by_dream(board):
+    """奇跡は夢の影響を受けず、ドローしても即座に確定することを検証します。"""
+    miracle = "miracles/fireball"
+    g = board(p0=Side(hp=40, curses=[DREAM], hand=[]), p1=Side(hp=40))
 
-    sim.state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
+    g.state.add_card_to_hand_slot(0, 0, card_id(miracle), True)
 
-    # 真のカード: パンチ (通常武器、攻撃力3)
-    punch_id = find_card_by_name("パンチ")
-    sim.state.add_card_to_hand_slot(0, 0, punch_id, True)
-
-    # 見た目を 銅のこん棒 (通常武器) に偽装設定
-    bronze_club = find_card_by_name("銅のこん棒")
-    sim.state.set_apparent_hand(0, 0, bronze_club)
-    sim.state.set_is_confirmed(0, 0, False)
-
-    # 1. 銅のこん棒を使用 (手札スロット0を選択して仮置き)
-    # ACTION_SELECT_HAND_0 = 10
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # PHASE_ATTACK_PLUS に遷移していること
-    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
-    assert sim.state.get_num_staged_cards(0) == 1
-    assert sim.state.get_staged_card(0, 0) == 0
-    # まだ確定していないこと
-    assert not sim.state.get_is_confirmed(0, 0)
-
-    # 2. ターゲットを相手に選択して攻撃を確定 (ACTION_TARGET_OPP = 2)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-
-    # 攻撃確定によりカードが確定し、真のパンチ (攻撃力3) の攻撃として処理されること
-    assert sim.state.get_is_confirmed(0, 0)
-    assert sim.state.get_apparent_hand(0, 0) == punch_id
-    assert sim.state.get_true_hand(0, 0) == punch_id
-
-    # 防御フェイズに遷移
-    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert sim.state.pending_attack_power == 3
+    assert g.state.get_is_confirmed(0, 0) is True
+    assert g.state.get_apparent_hand(0, 0) == card_id(miracle)
 
 
-def test_dream_finalization_failure():
-    """
-    検証内容: 夢状態で偽装されたカードを使用し、真のカードが現在のフェイズで非合法だった場合、
-    仮置きがクリアされて手札に戻り、フェイズがメインに戻ること。
-    """
-    sim = SimulationRunner()
-    sim.set_status(0, hp=40, mp=0, money=0)
-    sim.set_status(1, hp=40, mp=0, money=0)
+def test_dream_card_is_finalized_when_the_true_card_is_playable(board):
+    """偽装されたカードを使い、真のカードもそのフェイズで合法なら確定して実行されることを検証します。"""
+    real, fake = "weapons/punch", "weapons/bronze-club"
+    g = board(p0=Side(hp=40, curses=[DREAM], hand=[]), p1=Side(hp=40))
 
-    sim.state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
+    g.state.add_card_to_hand_slot(0, 0, card_id(real), False)
+    g.state.set_apparent_hand(0, 0, card_id(fake))
+    g.state.set_is_confirmed(0, 0, False)
 
-    # 真のカード: 木の盾 (防具)
-    shield_id = find_card_by_name("木の盾")
-    sim.state.add_card_to_hand_slot(0, 0, shield_id, True)
+    g.select_slots(0)
+    g.expect(phase=godfield_core.GamePhase.PHASE_ATTACK_PLUS)
+    assert g.state.get_is_confirmed(0, 0) is False, "仮置きの時点ではまだ確定しない"
 
-    # 見た目を 銅のこん棒 (通常武器) に偽装
-    bronze_club = find_card_by_name("銅のこん棒")
-    sim.state.set_apparent_hand(0, 0, bronze_club)
-    sim.state.set_is_confirmed(0, 0, False)
+    g.target_opp()
 
-    # 1. 銅のこん棒 (スロット0) を使用して仮置き
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # 仮置きされ、攻撃追加フェイズへ遷移
-    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
-    assert sim.state.get_num_staged_cards(0) == 1
-
-    # 2. 相手ターゲットを選択 (ACTION_TARGET_OPP = 2)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-
-    # 木の盾での攻撃は非合法であるため、仮置きがクリアされ、確定した状態で手札に残り、メインフェイズに戻ること
-    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-    assert sim.state.get_num_staged_cards(0) == 0
-    assert sim.state.get_is_confirmed(0, 0)
-    assert sim.state.get_apparent_hand(0, 0) == shield_id
-    assert sim.state.get_true_hand(0, 0) == shield_id
+    # 確定し、偽装先ではなく真のカードの攻撃力で解決される
+    assert g.state.get_is_confirmed(0, 0) is True
+    assert g.state.get_apparent_hand(0, 0) == card_id(real)
+    g.expect(
+        phase=godfield_core.GamePhase.PHASE_DEFENSE,
+        pending_power=card_feature(real, "attack_power"),
+    )
+    assert card_feature(real, "attack_power") != card_feature(fake, "attack_power"), (
+        "真偽で攻撃力が異なる組み合わせでないと、確定処理を検証できない"
+    )
 
 
-def test_dream_buy_confirmation():
-    """
-    検証内容: 「買う」の対象にされたカードは、買われたかどうかにかかわらず確定すること。
-    """
-    sim = SimulationRunner()
-    sim.set_status(0, hp=40, mp=0, money=50)
-    sim.set_status(1, hp=40, mp=0, money=50)
+def test_dream_card_returns_to_hand_when_the_true_card_is_illegal(board):
+    """真のカードがそのフェイズで非合法なら、仮置きが取り消されて確定した状態で手札に戻ることを検証します。"""
+    real, fake = "armor/wood-shield", "weapons/bronze-club"
+    g = board(p0=Side(hp=40, curses=[DREAM], hand=[]), p1=Side(hp=40))
 
-    # プレイヤー1 (相手) は夢状態
-    sim.state.set_curses(1, godfield_core.CurseType.CURSE_DREAM, True)
+    g.state.add_card_to_hand_slot(0, 0, card_id(real), False)
+    g.state.set_apparent_hand(0, 0, card_id(fake))
+    g.state.set_is_confirmed(0, 0, False)
 
-    # 相手のスロット0に通常武器をドロー (偽装)
-    club_id = find_card_by_name("銅のこん棒")
-    sim.state.add_card_to_hand_slot(1, 0, club_id, True)
-    sim.state.set_apparent_hand(1, 0, find_card_by_name("銀のこん棒"))
-    sim.state.set_is_confirmed(1, 0, False)
+    g.select_slots(0)
+    g.expect(phase=godfield_core.GamePhase.PHASE_ATTACK_PLUS)
 
-    # プレイヤー0 (自分) のスロット0に「買う」を設定
-    buy_id = find_card_by_name("買う")
-    sim.state.add_card_to_hand_slot(0, 0, buy_id, False)
+    g.target_opp()
 
-    # 1. プレイヤー0が「買う」を使用 (スロット0を選択)
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # 2. プレイヤー0が相手 (プレイヤー1) をターゲットに選択 (ACTION_TARGET_OPP = 2)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-
-    # PHASE_BUY_SELECT_MIRROR に移行
-    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_BUY_SELECT_MIRROR
-    assert sim.state.current_actor_id == 1
-
-    # 3. 相手 (プレイヤー1) が受諾する (ACTION_CONFIRM)
-    sim.step(godfield_core.ActionType.ACTION_CONFIRM)
-
-    # この時点で、相手の提示された手札スロットが確定していること！
-    offered_idx = sim.state.get_staged_card(1, 0)
-    assert offered_idx == 0
-    assert sim.state.get_is_confirmed(1, offered_idx)
-    assert sim.state.get_apparent_hand(1, offered_idx) == club_id
-    assert sim.state.get_true_hand(1, offered_idx) == club_id
+    # 防具では攻撃できないので、仮置きが解除されメインフェイズに戻る
+    g.expect(phase=godfield_core.GamePhase.PHASE_MAIN)
+    assert g.state.get_num_staged_cards(0) == 0
+    assert g.state.get_is_confirmed(0, 0) is True, "正体が露見したので確定する"
+    assert g.state.get_apparent_hand(0, 0) == card_id(real)
 
 
-def test_dream_cure_restores_apparent_hand():
-    """検証内容: すっきり歌などの解除カードによって夢が治った際、手札が元の本物の見た目に戻ること。"""
-    sim = SimulationRunner()
-    sim.set_status(0, hp=40, mp=10, money=0)
-    sim.set_status(1, hp=40, mp=10, money=0)
+def test_card_offered_for_purchase_is_finalized(board):
+    """「買う」の対象にされたカードは、実際に買われたかに関わらず確定することを検証します。"""
+    real, fake = "weapons/bronze-club", "weapons/silver-club"
+    g = board(
+        p0=Side(hp=40, money=50, hand=["deals/buy"]),
+        p1=Side(hp=40, money=50, curses=[DREAM], hand=[]),
+    )
+    g.rng.deck_always(FILLER)
 
-    # プレイヤー0を夢状態にする
-    sim.state.set_curses(0, godfield_core.CurseType.CURSE_DREAM, True)
+    g.state.add_card_to_hand_slot(1, 0, card_id(real), False)
+    g.state.set_apparent_hand(1, 0, card_id(fake))
+    g.state.set_is_confirmed(1, 0, False)
 
-    # 手札を設定
-    bronze_club = find_card_by_name("weapons/bronze-club")
-    song_id = find_card_by_name("miracles/song")
+    g.select("deals/buy")
+    g.target_opp()
+    g.expect(phase=godfield_core.GamePhase.PHASE_BUY_SELECT_MIRROR, actor=1)
 
-    sim.state.add_card_to_hand_slot(0, 0, bronze_club, True) # ドローなので夢に偽装される
-    sim.state.add_card_to_hand_slot(0, 1, song_id, False)
+    g.confirm()  # 相手が反射せず受諾
 
-    # 最初は偽装されていることを確認
-    assert sim.state.get_is_confirmed(0, 0) is False
-    assert sim.state.get_apparent_hand(0, 0) != bronze_club
+    offered = g.state.get_staged_card(1, 0)
+    assert offered == 0
+    assert g.state.get_is_confirmed(1, offered) is True, "出品されたカードは確定する"
+    assert g.state.get_apparent_hand(1, offered) == card_id(real)
 
-    # すっきり歌を使用
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_1)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
 
-    # 夢が解除され、手札が本物に戻っていることを確認
-    assert sim.state.get_curses(0, godfield_core.CurseType.CURSE_DREAM) is False
-    assert sim.state.get_is_confirmed(0, 0) is True
-    assert sim.state.get_apparent_hand(0, 0) == bronze_club
+def test_curing_dream_restores_the_true_appearance(board):
+    """夢が解除されると、偽装されていた手札が本来の見た目に戻ることを検証します。"""
+    real = "weapons/bronze-club"
+    g = board(p0=Side(hp=40, mp=10, curses=[DREAM], hand=[None, "miracles/song"]), p1=Side(hp=40))
+    g.rng.deck_always(FILLER)
+
+    draw_under_dream(g, 0, 0, real, disguised=True)
+    assert g.state.get_apparent_hand(0, 0) != card_id(real)
+
+    g.attack("miracles/song", to_self=True)
+
+    g.expect(p0_curses=set())
+    assert g.state.get_is_confirmed(0, 0) is True
+    assert g.state.get_apparent_hand(0, 0) == card_id(real), "本物の見た目に戻る"
 
 
 # ==========================================
@@ -702,83 +515,61 @@ def test_dream_cure_restores_apparent_hand():
 
 
 
-def test_mushroom_outbreak_auto_advance():
+def run_mushroom_outbreak(board, *, preloaded_turns: int = 0):
+    """「きのこ大発生」を発生させ、ご乱心が終わるまで自動進行させた局面を返します。
+
+    `preloaded_turns` に値を入れると、すでにご乱心中の状態から重ねて発生させた
+    ケースを再現できます。
     """
-    検証内容: 「運命のひも」によって「きのこ大発生」がトリガーされた際、
-    即座に全自動で6ターン（ご乱心状態）が進行し、ターン数が6進むこと、
-    およびご乱心終了後に通常の操作受付（mushroom_turns = 0）に戻ることを検証する。
-    """
-    string_of_fate_id = find_card_by_name("運命のひも")
+    start_turn = 10
+    g = board(
+        p0=Side(hp=40, mp=10, money=10, hand=["sundries/string-of-fate"]),
+        p1=Side(hp=40, mp=10, money=10),
+        turn=start_turn,
+        mushroom_turns=preloaded_turns,
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(godfield_core.PhenomenonType.MUSHROOM)
+    g.rng.force(godfield_core.RollKind.MUSHROOM_ACTION, 0)  # 常に先頭の合法手を選ぶ
 
-    # きのこ大発生（現象インデックス 2）を発生させるシードを探索
-    target_seed = -1
-    for seed in range(100):
-        runner = SimulationRunner()
-        runner.reset_state()
-        runner.state.seed_rng(seed)
-        runner.state.current_turn = 10
-        runner.state.current_actor_id = 0
-        runner.set_status(player=0, hp=40, mp=10, money=10)
-        runner.set_status(player=1, hp=40, mp=10, money=10)
+    g.attack("sundries/string-of-fate", to_self=True)
+    return g, start_turn
 
-        # 運命のひもを持たせる
-        runner.state.set_true_hand(0, 0, string_of_fate_id)
 
-        # 運命のひもを使用する (選択 ➡ ターゲット自己)
-        runner.perform_attack([0], to_self=True)
+def test_mushroom_outbreak_auto_advances_six_turns(board):
+    """きのこ大発生でご乱心の6ターンが自動進行し、通常操作に戻ることを検証します。"""
+    g, start_turn = run_mushroom_outbreak(board)
 
-        # もし「きのこ大発生」がトリガーされた場合、内部で mushroom_turns が 6 にセットされた後、
-        # ターン終了処理でデクリメントされつつ自動進行するため、
-        # 最終的に現在のターンが 10 + 6 = 16 まで進んでいるはずである。
-        if runner.state.current_turn == 16:
-            target_seed = seed
-            break
-
-    assert target_seed != -1, "Mushroom Outbreak was not triggered in any of the 100 seeds"
-
-    # 発見したシードで再度詳細をアサート
-    runner = SimulationRunner()
-    runner.reset_state()
-    runner.state.seed_rng(target_seed)
-    runner.state.current_turn = 10
-    runner.state.current_actor_id = 0
-    runner.set_status(player=0, hp=40, mp=10, money=10)
-    runner.set_status(player=1, hp=40, mp=10, money=10)
-    runner.state.set_true_hand(0, 0, string_of_fate_id)
-
-    # 運命のひもを使用する前のターンは 10
-    assert runner.state.current_turn == 10
-
-    runner.perform_attack([0], to_self=True)
-
-    # ご乱心中の6ターンが自動進行し、終了していることをアサート
-    assert runner.state.current_turn == 16
-    assert runner.state.mushroom_turns == 0
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-
-    # 自動進行により、カードがドローされて手札に入っていることを確認
-    hand0 = [runner.state.get_true_hand(0, i) for i in range(18)]
-    hand1 = [runner.state.get_true_hand(1, i) for i in range(18)]
-    has_cards0 = any(c != godfield_core.CARD_EMPTY for c in hand0)
-    has_cards1 = any(c != godfield_core.CARD_EMPTY for c in hand1)
-
-    assert has_cards0 or has_cards1 or runner.state.is_done, (
-        "No cards were drawn or played during the 6 automatic turns under confusion"
+    g.expect(turn=start_turn + 6, phase=godfield_core.GamePhase.PHASE_MAIN)
+    assert g.state.mushroom_turns == 0, "ご乱心が終了しているべきです"
+    assert g.rng.consumed(godfield_core.RollKind.MUSHROOM_ACTION) > 0, (
+        "自動進行中に行動が選ばれているべきです"
     )
 
 
-def test_mushroom_outbreak_stacking():
+def test_mushroom_outbreak_adds_to_the_remaining_turns(board):
+    """ご乱心中にさらにきのこ大発生が起きると、残りターン数が上書きではなく加算されることを検証します。
+
+    【重要】従来のテストは C++ を一切呼ばず、Python 側で
+        runner.state.mushroom_turns += 6
+        assert runner.state.mushroom_turns == 9
+    としていた。これは Python の足し算を確認しているだけで、C++ の実装が
+    上書き（= 6）に変わっても検出できない完全に空のテストだった。
+
+    ここでは「すでに3ターン残っている状態」と「0の状態」で発生させ、
+    自動進行するターン数の差が事前の残りターン数と一致することを確認する。
+    加算ではなく上書きなら、どちらも同じターン数しか進まない。
     """
-    検証内容: きのこ大発生中にさらにきのこ大発生が発生した際、ターン数が上書きではなく加算されること。
-    - 内部状態の mushroom_turns に対し、値が正しく加算・保持できることを検証。
-    """
-    runner = SimulationRunner()
-    runner.reset_state()
+    preloaded = 3
 
-    # 初期状態としてご乱心3ターンをセット
-    runner.state.mushroom_turns = 3
+    fresh, start = run_mushroom_outbreak(board, preloaded_turns=0)
+    stacked, _ = run_mushroom_outbreak(board, preloaded_turns=preloaded)
 
-    # 加算解決（C++側の += 6 と同等の操作）
-    runner.state.mushroom_turns += 6
-    assert runner.state.mushroom_turns == 9
+    fresh_advanced = fresh.state.current_turn - start
+    stacked_advanced = stacked.state.current_turn - start
 
+    assert stacked_advanced == fresh_advanced + preloaded, (
+        f"残りターンに加算されるべきです（加算なら {fresh_advanced + preloaded}、"
+        f"上書きなら {fresh_advanced}）。実際: {stacked_advanced}"
+    )
+    assert stacked.state.mushroom_turns == 0

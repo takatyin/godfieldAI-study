@@ -1,401 +1,305 @@
+import pytest
+
 import godfield_core
-from godfield_core import ActionType
-from tests.core.test_utils import SimulationRunner, find_card_by_name, get_all_cards
+from godfield_core import (
+    ActionType,
+    CurseType,
+    Element,
+    EventType,
+    GamePhase,
+    PhenomenonType,
+    RollKind,
+    SicknessType,
+)
+from tests.core.dsl import (
+    Side,
+    card_feature,
+    card_id,
+    card_name,
+    dream_candidates,
+    element_of,
+    ev,
+)
+
+FILLER = "armor/wood-shield"
 
 
-def test_miracle_attack_basic():
+def test_miracle_attack_consumes_mp_and_opens_the_miracle_defense_phase(board):
+    """単体奇跡の攻撃が、MPを消費して奇跡防御フェイズを開くことを検証します。"""
+    miracle = "miracles/fireball"
+    mp_cost = card_feature(miracle, "mp_cost")
+    power = card_feature(miracle, "attack_power")
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[miracle]),
+        p1=Side(hp=40, mp=10),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(miracle)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_PLUS)
+
+    g.target_opp()
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE, actor=1, p0_mp=10 - mp_cost)
+
+    g.take_hit()
+    g.expect(p1_hp=40 - power, phase=GamePhase.PHASE_MAIN, actor=1)
+
+
+def test_absorption_on_self_nets_out_to_the_attack_power(board):
+    """吸収を自分に撃つと、被弾と回復が同ステップで解決されHPが攻撃力と等しくなることを検証します。
+
+    HP5 に ATK10 の吸収を自傷すると、いったん0にクランプされたあと +10 されるため
+    最終HPは10になります。死亡判定より先に回復が入ることの確認でもあります。
     """
-    検証内容: 単体対象の奇跡（攻撃）と、それに対する奇跡防御（PHASE_MIRACLE_DEFENSE）の基本フローテスト。
-    - P0が「火の玉 (fireball)」などの単体奇跡を選択し、相手 (P1) を対象に攻撃を実行すること。
-    - MPが正しく消費されること（例: 火の玉なら2MP）。
-    - 攻撃実行後、ゲーム状態が奇跡防御フェーズ (PHASE_MIRACLE_DEFENSE) に移行し、被攻撃者 (P1) に攻守交代すること。
-    - P1が防御を確定させた後、ダメージ計算が行われ、P1のHPが減少し、P1のターンに移行すること。
+    miracle = "miracles/absorption"
+    power = card_feature(miracle, "attack_power")
+    mp_cost = card_feature(miracle, "mp_cost")
+
+    g = board(p0=Side(hp=5, mp=20, hand=[miracle]), p1=Side(hp=40))
+    g.rng.deck_always(FILLER)
+
+    g.attack(miracle, to_self=True)
+
+    g.expect(p0_hp=power, p0_mp=20 - mp_cost, is_done=False, phase=GamePhase.PHASE_MAIN, actor=1)
+
+
+def test_deployed_miracle_stays_in_hand(board):
+    """展開型の奇跡は使用後も手札に残り、展開済みフラグが立つことを検証します。"""
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["weapons/punch", "miracles/aura"]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack("weapons/punch", "miracles/aura")
+    g.take_hit()
+
+    assert g.state.get_is_deployed(0, 1) is True
+    assert g.state.get_true_hand(0, 1) == card_id("miracles/aura")
+
+
+def test_consumed_weapon_slot_is_refilled_but_deployed_miracle_is_not(board):
+    """消費された武器のスロットは補充され、展開された奇跡のスロットは残ることを検証します。"""
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["weapons/punch", "miracles/aura"]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack("weapons/punch", "miracles/aura")
+    g.take_hit()
+
+    # 武器は消費されたので補充カードが入る
+    assert g.state.get_true_hand(0, 0) == card_id(FILLER)
+    assert g.state.get_is_deployed(0, 0) is False
+    # 奇跡は展開されたまま残り、その分だけ空きスロットにも補充が入る
+    assert g.state.get_true_hand(0, 2) == card_id(FILLER)
+
+
+def test_aura_doubles_the_attack_power_and_clears_the_element(board):
+    """＜オーラ＞が攻撃力を2倍にし、属性を無属性化することを検証します。"""
+    weapon = "weapons/blaze-blade"
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[weapon, "miracles/aura"]),
+        p1=Side(hp=40),
+    )
+
+    g.attack(weapon, "miracles/aura")
+
+    g.expect(
+        pending_power=card_feature(weapon, "attack_power") * 2,
+        pending_element=Element.ELEM_NONE,
+    )
+
+
+def test_status_miracle_still_opens_a_defense_phase(board):
+    """攻撃力0の状態異常奇跡でも、相手に防御（反射）の機会が与えられることを検証します。"""
+    miracle = "miracles/wind"
+    g = board(p0=Side(hp=40, mp=20, hand=[miracle]), p1=Side(hp=40))
+    g.rng.deck_always(FILLER)
+
+    g.attack(miracle)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE, actor=1)
+
+    g.take_hit()
+    g.expect(p1_sickness=SicknessType.SICKNESS_COLD)
+
+
+@pytest.mark.parametrize(
+    ("miracle", "sickness", "curses", "expect"),
+    [
+        ("miracles/tone", SicknessType.SICKNESS_FEVER, [],
+         {"p0_sickness": SicknessType.SICKNESS_NONE}),
+        ("miracles/tone", SicknessType.SICKNESS_NONE, [CurseType.CURSE_FLASH],
+         {"p0_curses": set()}),
+    ],
+    ids=["音色で熱病を治す", "音色で閃光を治す"],
+)
+def test_cure_miracles_clear_the_targeted_ailment(board, miracle, sickness, curses, expect):
+    """治癒の奇跡が病気・災いを解除することを検証します。"""
+    g = board(
+        p0=Side(hp=40, mp=20, sickness=sickness, curses=list(curses), hand=[miracle]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(miracle, to_self=True)
+
+    g.expect(**expect)
+
+
+def test_darkness_miracle_can_be_blocked_by_any_armor(board):
+    """闇属性の奇跡攻撃には、無属性・光属性のどちらの防具も出せることを検証します。
+
+    闇属性は防御しきれば即死を免れます。
     """
-    runner = SimulationRunner()
+    miracle = "miracles/darkness"
+    plain, light = "armor/leather-clothes", "armor/glittering-dress"
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[miracle]),
+        p1=Side(hp=40, mp=20, hand=[plain, light]),
+    )
+    g.rng.deck_always(FILLER)
 
-    miracle_attack_id = find_card_by_name("＜火の玉＞")  # MP2, ATK2
+    g.attack(miracle)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE, actor=1)
+    g.expect_legal([plain, light])
 
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.set_status(0, 40, 10)
-    runner.set_status(1, 40, 10)
+    # 攻撃力以上のガードで完全に防ぐ
+    assert card_feature(light, "defense_power") >= card_feature(miracle, "attack_power")
+    g.defend(light)
 
-    runner.state.set_true_hand(0, 0, miracle_attack_id)
-
-    # P0が奇跡を選択
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_PLUS
-
-    # 相手をターゲット
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    # MPが消費され、奇跡防御フェーズに移行すること
-    assert runner.state.get_mp(0) == 10 - 2
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
-    assert runner.state.current_actor_id == 1
-
-    # P1が防御を確定
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    assert runner.state.get_hp(1) == 40 - 2
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
+    g.expect(p1_hp=40, is_done=False)
 
 
-def test_miracle_absorption():
+@pytest.mark.parametrize(
+    ("card", "can_self_target"),
+    [
+        ("miracles/smoke", False),     # 命中率100%未満
+        ("miracles/fireball", True),   # 命中率100%
+    ],
+    ids=["命中不安なので自傷不可", "命中率100%なら自傷可"],
+)
+def test_unstable_accuracy_cards_cannot_target_self(board, card, can_self_target):
+    """命中率100%未満のカードは自分自身を対象に取れないことを検証します。
+
+    従来のテストは説明に「命中率100%のカードなら自傷できる」と書きながら、
+    その側を一度も検証していませんでした。
     """
-    検証内容: 「吸収 (absorption)」などのHP吸収系奇跡のテスト。
-    - P0が自身または相手に「吸収」を使用した際、対象の残りHPに関係なく「本来与えるはずだったダメージ量（攻撃力分）」が回復すること。
-    - 例えば、HPが残り5の対象にATK10の吸収を撃った場合、対象のHPは0でストップし、撃った側は+10回復すること。
+    accuracy = card_feature(card, "accuracy", 100)
+    assert (accuracy == 100) == can_self_target, "前提としている命中率がマスタと食い違っている"
+
+    g = board(p0=Side(hp=40, mp=20, hand=[card]), p1=Side(hp=40))
+    g.select(card)
+
+    g.expect_actions(target_self=can_self_target, target_opp=True)
+
+
+def test_a_miracle_used_this_turn_cannot_be_used_again(board):
+    """このターンすでに使った展開済み奇跡を、同じターンに再度使えないことを検証します。"""
+    cascade = "miracles/waterfall"
+    g = board(
+        p0=Side(hp=40, mp=40, hand=[cascade], deployed=[0], used=[0]),
+        p1=Side(hp=40, mp=40),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.expect_illegal([cascade])
+
+
+def test_a_deployed_miracle_becomes_usable_again_next_turn(board):
+    """展開済みの奇跡が、次の自分のターンには再び使えるようになることを検証します。
+
+    「使えない」ことだけを確認していると、常に使えないバグでもテストが通ります。
     """
-    runner = SimulationRunner()
+    cascade = "miracles/waterfall"
+    g = board(
+        p0=Side(hp=40, mp=40, hand=[cascade], deployed=[0], used=[0]),
+        p1=Side(hp=40, mp=40, hand=[FILLER]),
+    )
+    g.rng.deck_always(FILLER)
 
-    absorption_id = find_card_by_name("＜吸収＞")  # MP10, ATK10, HP吸収
+    g.expect_illegal([cascade])
 
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_hp(0, 5)  # 吸収を撃つ側（HP5から15に回復する想定）
-    runner.state.set_mp(0, 20)
+    g.pray()          # P0 のターンを終える
+    g.pray()          # P1 のターンを終える → P0 の番に戻る
 
-    runner.state.set_true_hand(0, 0, absorption_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)  # 自分自身に吸収を撃つ
-
-    # 吸収ダメージ10を受けるが即座に10回復するため、HPは5 - 10(0でストップ) + 10 = 10 になる
-    assert runner.state.get_hp(0) == 10
-    assert runner.state.get_mp(0) == 10
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MAIN
-    assert runner.state.current_actor_id == 1
+    g.expect(actor=0)
+    g.expect_legal([cascade])
 
 
-def test_miracle_deployment_retains_card():
+def test_deploying_a_miracle_never_evicts_an_already_deployed_one(board):
+    """奇跡の展開数に上限がなく、古い展開が押し出されないことを検証します。"""
+    fireball = "miracles/fireball"
+    already = 10
+
+    g = board(
+        p0=Side(hp=40, mp=99, hand=[fireball] * (already + 1),
+                deployed=list(range(already))),
+        p1=Side(hp=40, mp=40),
+    )
+    g.rng.deck_always(FILLER)
+
+    assert g.deployed_count(0) == already, "展開済みの状態を作れていない"
+
+    # まだ展開していない最後の1枚を使う（奇跡は解決されて初めて展開される）
+    g.attack_slots(already)
+    g.take_hit()
+
+    assert g.deployed_count(0) == already + 1, (
+        "新しく展開した分だけ増えるべきです（古い展開が押し出されてはいけない）"
+    )
+    for slot in range(already + 1):
+        assert g.state.get_is_deployed(0, slot) is True, f"スロット{slot}の展開が消えています"
+
+
+def test_a_weapon_with_a_miracle_stacked_resolves_as_a_weapon_attack(board):
+    """武器に奇跡を重ねた攻撃が「武器攻撃」として扱われることを検証します。
+
+    奇跡攻撃なら PHASE_MIRACLE_DEFENSE に入るので、遷移先で区別できます。
     """
-    検証内容: 展開型奇跡「＜オーラ＞」使用時の手札維持テスト。
-    - 奇跡「＜オーラ＞」を使用（展開）して戦闘を解決した際、カードが手札から消滅せず、使用したスロット（スロット1）に展開フラグ（is_deployed = True）および公開フラグ（is_known_to_opp = True）がオンの状態で留まることを確認します。
-    """
-    runner = SimulationRunner()
-    aura_id = find_card_by_name("＜オーラ＞")
-    weapon_id = find_card_by_name("パンチ")
+    punch = "weapons/punch"
+    fireball = "miracles/fireball"
+    power = card_feature(punch, "attack_power") + card_feature(fireball, "attack_power")
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[punch, fireball]),
+        p1=Side(hp=40, mp=10),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(punch)
+    g.expect(phase=GamePhase.PHASE_ATTACK_PLUS)
+
+    g.select(fireball)
+    g.target_opp()
+
+    g.expect(phase=GamePhase.PHASE_DEFENSE, pending_power=power)
+
+
+def test_only_a_spiritual_card_can_be_stacked_onto_a_miracle(board):
+    """奇跡を1枚目に置いた後は、精霊系カード以外を重ねられないことを検証します。"""
+    fireball = "miracles/fireball"
+    ice = "miracles/ice"
+    blowgun = "weapons/blowgun"      # プラス武器
+    doll = "sundries/spiritual-doll"
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[fireball, fireball, blowgun, ice, doll]),
+        p1=Side(hp=40, mp=10),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select_slots(0)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_PLUS)
+
+    actions = g.legal_actions()
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is False, "同じ奇跡の2枚目は重ねられない"
+    assert actions[ActionType.ACTION_SELECT_HAND_2] is False, "プラス武器は重ねられない"
+    assert actions[ActionType.ACTION_SELECT_HAND_3] is False, "別の奇跡も重ねられない"
+    assert actions[ActionType.ACTION_SELECT_HAND_4] is True, "精霊系カードだけが重ねられる"
 
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 20)
-
-    runner.state.set_true_hand(0, 0, weapon_id)
-    runner.state.set_true_hand(0, 1, aura_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # オーラはスロット1に展開されたまま残る
-    assert runner.state.get_is_deployed(0, 1) == True
-    assert runner.state.get_true_hand(0, 1) == aura_id
-
-
-def test_miracle_deployment_triggers_draw():
-    """
-    検証内容: 展開型奇跡と通常消費武器の混成使用時のドロー補充テスト。
-    - 武器とオーラを同時に使用し、ターンが移行した際、消費された武器のスロット0および追加のカード補充により、手札スロット0とスロット2の空き枠に新規カードが正しくドローされることを確認します。
-    """
-    runner = SimulationRunner()
-    aura_id = find_card_by_name("＜オーラ＞")
-    weapon_id = find_card_by_name("パンチ")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 20)
-
-    # スロット2以降は空にしておく
-    for i in range(2, 18):
-        runner.state.set_true_hand(0, i, godfield_core.CARD_EMPTY)
-
-    runner.state.set_true_hand(0, 0, weapon_id)
-    runner.state.set_true_hand(0, 1, aura_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 武器は消費されたためスロット0には新たなカードがドローされている
-    assert runner.state.get_is_deployed(0, 0) == False
-    assert runner.state.get_true_hand(0, 0) != godfield_core.CARD_EMPTY
-    # オーラの分、スロット2にもさらにドローされている
-    assert runner.state.get_true_hand(0, 2) != godfield_core.CARD_EMPTY
-
-
-def test_miracle_aura_doubling():
-    """
-    検証内容: 「オーラ (aura)」による攻撃力2倍化のテスト。
-    - 武器のATKに対して、追加でオーラを使用した場合に最終的な攻撃力(pending_attack_power)が2倍になること。
-    - 複数重ねた場合の処理（例: ATK5 * 2 = 10）が正しく適用されていること。
-    - 属性が無属性になっていること
-    """
-    runner = SimulationRunner()
-
-    weapon_id = find_card_by_name("ブレイズブレイド")  # 火ATK5
-    aura_id = find_card_by_name("＜オーラ＞")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 20)
-
-    runner.state.set_true_hand(0, 0, weapon_id)
-    runner.state.set_true_hand(0, 1, aura_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_1)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    # ATK5 -> オーラで2倍 -> ATK10 になっているか
-    cards = get_all_cards()
-    card_info = next(c for c in cards if c["id"] == weapon_id)
-    expected_atk = card_info.get("attack_power", 0) * 2
-    assert runner.state.pending_attack_power == expected_atk
-    assert runner.state.pending_attack_element == godfield_core.ELEM_NONE
-
-
-def test_miracle_status_ailment_application():
-    """
-    検証内容: 対象を状態異常（病・災い）にする奇跡のテスト。
-    - 「風 (wind)」などの奇跡を相手に使用した際、相手が正しく「風邪」状態になること。
-    - ダメージ0の奇跡であっても、PHASE_MIRACLE_DEFENSEへ移行し、相手が「乱気流」等で防御する機会が与えられること。
-    """
-    runner = SimulationRunner()
-
-    wind_id = find_card_by_name("＜風＞")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 20)
-    runner.state.set_true_hand(0, 0, wind_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_OPP)
-
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
-    assert runner.state.current_actor_id == 1
-
-    runner.step(action=ActionType.ACTION_CONFIRM)
-
-    # 風邪状態になっているか (sickness == SICKNESS_COLD)
-    assert runner.state.get_sickness(1) == godfield_core.SicknessType.SICKNESS_COLD
-
-
-def test_miracle_cure_sickness_fever():
-    """
-    検証内容: 音色による熱病の治癒テスト。
-    - 自身が「熱病（SICKNESS_FEVER）」である状態で、自分自身を対象に奇跡「＜音色＞」を使用した際、熱病状態が「SICKNESS_NONE」へと完全に治癒されることを確認します。
-    """
-    runner = SimulationRunner()
-    tone_id = find_card_by_name("＜音色＞")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 20)
-    runner.state.set_sickness(0, godfield_core.SicknessType.SICKNESS_FEVER)
-    runner.state.set_true_hand(0, 0, tone_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    # 治癒解決
-    assert runner.state.get_sickness(0) == godfield_core.SicknessType.SICKNESS_NONE
-
-
-def test_miracle_cure_curse_flash():
-    """
-    検証内容: 音色による閃光の災い（Curse）治癒テスト。
-    - 自身が「閃光の災い（CURSE_FLASH）」である状態で、自分自身を対象に奇跡「＜音色＞」を使用した際、閃光の災いが False（治癒）になることを確認します。
-    """
-    runner = SimulationRunner()
-    tone_id = find_card_by_name("＜音色＞")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 20)
-    runner.state.set_curses(0, godfield_core.CurseType.CURSE_FLASH, True)
-    runner.state.set_true_hand(0, 0, tone_id)
-
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-    runner.step(action=ActionType.ACTION_TARGET_SELF)
-
-    # 治癒解決
-    assert runner.state.get_curses(0, godfield_core.CurseType.CURSE_FLASH) == False
-
-
-def test_miracle_darkness_defense_by_any_armor():
-    """
-    検証内容: 闇属性攻撃＜闇＞に対する防御の合法手テスト。
-    - 相手からの＜闇＞(闇属性ATK5の奇跡攻撃) に対し、防御側が持つ無属性防具（木の盾）や属性防具（きらきらドレス）
-      が合法手 (legal action) として選択可能であることを検証。
-    - 完全防御によって無事に生存できることを確認する。
-    """
-    runner = SimulationRunner()
-    darkness_id = find_card_by_name("＜闇＞")
-    leather_clothes_id = find_card_by_name("armor/leather-clothes")
-    dress_id = find_card_by_name("きらきらドレス")
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, darkness_id)
-    runner.state.set_true_hand(1, 0, leather_clothes_id)
-    runner.state.set_true_hand(1, 1, dress_id)
-
-    # 1. P0 Magiが＜闇＞(ATK 5)でP1に奇跡攻撃
-    runner.perform_attack([0])
-
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
-    assert runner.state.current_actor_id == 1
-
-    # 2. P1の合法手に「革の服」(0) も「きらきらドレス」(1) も含まれていること！
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True, "無属性防具(革の服)が選択可能であること"
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "光属性防具(きらきらドレス)が選択可能であること"
-
-    # 3. きらきらドレス(DEF10)を出して計DEF10で完全防御
-    runner.perform_defense([1])
-
-    # 完全防御成功（即死せずHP40で生存）
-    assert runner.state.get_hp(1) == 40
-
-
-def test_miracle_multiple_uses_per_turn():
-    """
-    検証内容: 一度展開された奇跡の同ターン中の複数回使用禁止ルールのテスト。
-    - 一度使用されて盤面に展開された(is_deployed=True)奇跡カードは、次の自ターンにならないと再使用できない。
-    - 同ターン中に同じカードを2回選択しようとした際、非合法手(Illegal Action)として扱われること。
-    """
-    runner = SimulationRunner()
-
-    cascade_id = find_card_by_name("＜滝＞")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_ATTACK_PLUS
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 40)
-
-    # 既に展開済みで、このターン中に使用したフラグを立てる
-    runner.state.set_true_hand(0, 0, cascade_id)
-    runner.state.set_is_deployed(0, 0, True)
-    runner.state.set_is_used(0, 0, True)
-
-    # 合法手を取得し、既にこのターン使用した奇跡は選択できないことを確認
-    legal_actions = godfield_core.get_legal_actions(runner.state)
-    assert legal_actions[ActionType.ACTION_SELECT_HAND_0.value] == False
-
-
-def test_unstable_accuracy_cannot_target_self():
-    """
-    検証内容: 命中不安の奇跡・武器（命中率 < 100）は自分自身を対象に取れないルール。
-    - 命中率75%の「煙」などを選択した場合、PHASE_MIRACLE_PLUS 時に ACTION_TARGET_SELF が非合法手になること。
-    - 命中率100%のカードを選択した場合は ACTION_TARGET_SELF が合法手になること。
-    """
-    runner = SimulationRunner()
-
-    unstable_miracle_id = find_card_by_name("＜煙＞")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.state.set_mp(0, 20)
-
-    # 命中不安の奇跡を使用
-    runner.state.set_true_hand(0, 0, unstable_miracle_id)
-    runner.step(action=ActionType.ACTION_SELECT_HAND_0)
-
-    legal_actions = godfield_core.get_legal_actions(runner.state)
-
-    assert legal_actions[ActionType.ACTION_TARGET_SELF.value] == False
-    assert legal_actions[ActionType.ACTION_TARGET_OPP.value] == True
-
-
-def test_miracle_deployment_unlimited():
-    """
-    検証内容: 奇跡の展開数に制限がなく、いくらでも展開できること。
-    - 10個のスロットに奇跡を展開し、10個すべてが展開されたままであることを確認します（押し出しは発生しない）。
-    """
-    runner = SimulationRunner()
-    fireball_id = find_card_by_name("＜火の玉＞")
-
-    # 10個のスロットに奇跡を展開
-    for i in range(10):
-        runner.state.set_true_hand(0, i, fireball_id)
-        runner.state.set_is_deployed(0, i, True)
-
-    deployed_count = sum(1 for i in range(18) if runner.state.get_is_deployed(0, i))
-    assert deployed_count == 10
-
-    # 最古のスロット（0）も展開されたままであり、消滅していないこと
-    assert runner.state.get_is_deployed(0, 0) == True
-    assert runner.state.get_true_hand(0, 0) == fireball_id
-
-
-def test_weapon_and_miracle_stacking():
-    """
-    検証内容: 武器 + 奇跡の重ねがけは「武器攻撃」として扱われ、PHASE_DEFENSEへ遷移する。
-    """
-    runner = SimulationRunner()
-    punch_id = find_card_by_name("パンチ")
-    fireball_id = find_card_by_name("＜火の玉＞")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.set_status(0, hp=40, mp=10)  # 十分なMPを付与
-
-    runner.state.set_true_hand(0, 0, punch_id)
-    runner.state.set_true_hand(0, 1, fireball_id)
-
-    # 1. 武器 (パンチ) を出す -> PHASE_ATTACK_PLUSへ
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_ATTACK_PLUS
-
-    # 2. 火の玉を追加で出す (TIMING_ATK_PLUS)
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-
-    # 3. 相手を対象に攻撃決定 -> PHASE_DEFENSE (武器攻撃の守り) へ遷移するはず
-    runner.step(ActionType.ACTION_TARGET_OPP)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-
-
-def test_miracle_and_miracle_stacking_is_illegal():
-    """
-    検証内容: 奇跡を1枚目に使用した場合、追加できるのは精霊系（MP0化）のみ。
-    火の玉 ＋ 火の玉、火の玉 ＋ プラス武器、火の玉 ＋ 他の奇跡などはすべて非合法手となることを確認する。
-    """
-    runner = SimulationRunner()
-    fireball_id = find_card_by_name("＜火の玉＞")
-    blowgun_id = find_card_by_name("吹き矢")  # プラス武器 (TIMING_ATK_PLUS)
-    ice_id = find_card_by_name("＜氷＞")  # 通常奇跡
-    doll_id = find_card_by_name("精霊のぬいぐるみ")
-
-    runner.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    runner.state.current_actor_id = 0
-    runner.set_status(0, hp=40, mp=10)  # 十分なMPを付与
-
-    runner.state.set_true_hand(0, 0, fireball_id)
-    runner.state.set_true_hand(0, 1, fireball_id)
-    runner.state.set_true_hand(0, 2, blowgun_id)
-    runner.state.set_true_hand(0, 3, ice_id)
-    runner.state.set_true_hand(0, 4, doll_id)
-
-    # 1. 火の玉を出す -> PHASE_MIRACLE_PLUSへ
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_PLUS
-
-    # 2. 重ねがけ可能なカードの検証
-    legal_actions = godfield_core.get_legal_actions(runner.state)
-
-    # 火の玉（2枚目）は非合法
-    assert legal_actions[ActionType.ACTION_SELECT_HAND_1] is False
-    # プラス武器（吹き矢）は非合法
-    assert legal_actions[ActionType.ACTION_SELECT_HAND_2] is False
-    # 通常奇跡（氷）は非合法
-    assert legal_actions[ActionType.ACTION_SELECT_HAND_3] is False
-    # 精霊系（ぬいぐるみ）は合法
-    assert legal_actions[ActionType.ACTION_SELECT_HAND_4] is True
 
 # ==========================================
 # Merged from: tests/core/test_apocalypse.py
@@ -403,217 +307,121 @@ def test_miracle_and_miracle_stacking_is_illegal():
 
 
 
-def test_apocalypse_turn_threshold():
+APOCALYPSE_TURN = godfield_core.APOCALYPSE_TURN
+
+
+@pytest.mark.parametrize(
+    ("turn", "is_apocalypse"),
+    [
+        (APOCALYPSE_TURN - 1, False),
+        (APOCALYPSE_TURN, True),
+    ],
+    ids=["終末の1ターン前", "終末が始まるターン"],
+)
+def test_the_apocalypse_starts_exactly_on_its_turn(board, turn, is_apocalypse):
+    """終末の時が APOCALYPSE_TURN ちょうどから始まることを、実際の挙動で検証します。
+
+    従来のテストは
+        runner.state.current_turn = 149
+        assert runner.state.current_turn < 150
+    と書かれており、Python の代入結果を読み返しているだけでゲームロジックを
+    一度も呼んでいませんでした。閾値が変わっても、終末の判定が壊れても通ります。
+
+    ここでは「終末の時にだけ悪魔が引かれる」という観測可能な差で判定します。
     """
-    検証内容: APOCALYPSE_TURN (150) に達した時、ゲームが「終末の時」に入ることを確認する。
-    """
-    runner = SimulationRunner()
-    runner.reset_state()
-
-    # 150ターン未満は通常モード
-    runner.state.current_turn = 149
-    assert runner.state.current_turn < 150
-
-    # 150ターン以上は終末の時
-    runner.state.current_turn = 150
-    assert runner.state.current_turn >= 150
-
-
-def test_apocalypse_pray_draws_devil_cards():
-    """
-    検証内容: 終末の時において、カードドロー時 (祈るなど) に25%の確率で悪魔カードが発生し、
-    その即時効果が適用された後に代替のカードがドローされることを検証する。
-    """
-    little_devil_count = 0
-    medium_devil_count = 0
-    large_devil_count = 0
-    fairy_count = 0
-
-    # 200回試行して悪魔カードの発生と効果を検出する
-    for i in range(200):
-        runner = SimulationRunner()
-        runner.reset_state()
-        runner.state.seed_rng(i)  # 各試行の乱数シードを個別に設定
-        runner.state.current_turn = 150  # 終末の時
-        runner.set_status(player=0, hp=40, mp=10, money=10)
-        runner.set_hand(player=0, cards=[])  # 手札を空にする
-
-        # 祈るを実行してドローする
-        runner.step(ActionType.ACTION_PRAY)
-
-        # 生存している場合のみ、手札にカードが入ることを確認
-        if not runner.state.is_done:
-            assert runner.state.get_true_hand(0, 0) != godfield_core.CARD_EMPTY
-
-        hp = runner.state.get_hp(0)
-        mp = runner.state.get_mp(0)
-        money = runner.state.get_money(0)
-
-        # ダメージ系悪魔の効果
-        if hp == 30:
-            little_devil_count += 1
-        elif hp == 20:
-            medium_devil_count += 1
-        elif hp == 10:
-            large_devil_count += 1
-
-        # めぐみの妖精の効果 (+10 HP, MP, or money)
-        if hp == 50 or mp == 20 or money == 20:
-            fairy_count += 1
-
-    # いずれかの悪魔カード・妖精カードが確率的に発生したことを確認する
-    print(
-        f"Detected Little: {little_devil_count}, Medium: {medium_devil_count}, Large: {large_devil_count}, Fairy: {fairy_count}"
+    devil = "devils/small-devil"
+    g = board(
+        p0=Side(hp=40, mp=10, money=10, hand=[FILLER]),
+        p1=Side(hp=40, mp=10, money=10),
+        turn=turn,
     )
-    assert little_devil_count > 0, "Little Devil did not trigger in 200 trials"
-    assert medium_devil_count > 0, "Medium Devil did not trigger in 200 trials"
-    assert large_devil_count > 0, "Large Devil did not trigger in 200 trials"
-    assert fairy_count > 0, "Gracious Fairy did not trigger in 200 trials"
+    g.rng.deck_always(FILLER)
+    g.rng.apocalypse_draws(devil, optional=True)
+
+    g.pray()
+
+    drew_devil = g.rng.consumed(RollKind.APOCALYPSE_DRAW) > 0
+    assert drew_devil is is_apocalypse, (
+        f"ターン{turn}で悪魔抽選が{'行われる' if is_apocalypse else '行われない'}べきです"
+    )
 
 
-def test_apocalypse_prankster_discard():
+@pytest.mark.parametrize(
+    ("turn", "refills"),
+    [
+        (0, False),
+        (APOCALYPSE_TURN, True),
+    ],
+    ids=["通常の「捨てる」", "終末の「ささげる」"],
+)
+def test_discarding_refills_the_slot_only_during_the_apocalypse(board, turn, refills):
+    """通常は捨てたスロットが空のまま、終末の時は補充されることを検証します。"""
+    discarded = "armor/leather-clothes"
+    refill = "armor/leather-cap"
+
+    g = board(
+        p0=Side(hp=40, mp=10, money=10, hand=[discarded]),
+        p1=Side(hp=40, mp=10, money=10),
+        turn=turn,
+    )
+    g.rng.deck_always(refill)
+    g.rng.apocalypse_draws(None, optional=True)
+
+    g.discard(discarded)
+
+    if refills:
+        assert g.state.get_true_hand(0, 0) == card_id(refill), (
+            "終末の時はささげた分だけ引き直される"
+        )
+    else:
+        assert g.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY, (
+            "通常時は捨てたスロットが空のまま残る"
+        )
+
+
+def crossbow_kills_with_a_deferred_draw(board, *, turn: int, devil: str | None):
+    """P0 がクロスボウで HP1 の P1 を倒した直後の局面を返します。"""
+    bow = "weapons/crossbow"
+    g = board(
+        p0=Side(hp=10, mp=10, money=10, hand=[bow]),
+        p1=Side(hp=1, mp=10, money=10, hand=[]),
+        turn=turn,
+    )
+    g.rng.deck_always(FILLER)
+    if devil is not None:
+        # 引いた悪魔で死亡するとドローが打ち切られるため、末尾の指示は消費されないことがある
+        g.rng.apocalypse_draws(devil, None, repeat_last=True)
+    else:
+        g.rng.apocalypse_draws(None, optional=True)
+
+    g.attack(bow)
+    g.take_hit()
+    return g
+
+
+def test_a_lethal_hit_ends_the_game_immediately_in_normal_play(board):
+    """通常時は、被弾でHP0になった時点でゲームが終わることを検証します。"""
+    g = crossbow_kills_with_a_deferred_draw(board, turn=0, devil=None)
+
+    g.expect(p0_hp=10, p1_hp=0, is_done=True, p0_reward=1.0)
+
+
+def test_the_apocalypse_defers_the_death_check_until_after_the_refill_draw(board):
+    """終末の時は死亡判定が補充ドローの後まで持ち越され、引いた悪魔で相打ちになりうることを検証します。
+
+    従来は「補充ドローで大悪魔を引いてP0も死ぬ」シードを最大500回探索していました。
+    どの悪魔を引くかは制御できず、HP10に対して致死量かどうかも運任せでした。
     """
-    検証内容: イタズラマン (Prankster) の効果により、手札/アクティブな奇跡から無作為に2つ破棄されることを検証する。
-    """
-    shield_id = find_card_by_name("革の服")
+    # 大悪魔は30ダメージ。P0 の HP10 を確実に削り切れる悪魔を選んでいる
+    # （悪魔ごとのダメージ量そのものは test_apocalypse_draw_triggers_each_devil で検証）。
+    large_devil = "devils/large-devil"
 
-    prankster_triggered = 0
+    g = crossbow_kills_with_a_deferred_draw(
+        board, turn=APOCALYPSE_TURN, devil=large_devil
+    )
 
-    # 200回試行してイタズラマンが発生し、手札が破棄されたかを確認する
-    for i in range(200):
-        runner = SimulationRunner()
-        runner.reset_state()
-        runner.state.seed_rng(i)  # 各試行の乱数シードを個別に設定
-        runner.state.current_turn = 150  # 終末 of 時
-        runner.set_status(player=0, hp=40, mp=10, money=10)
-
-        # 手札をセット（イタズラマンが破棄する候補、武器以外である必要があるため革の服のみ）
-        runner.state.set_true_hand(0, 1, shield_id)
-        runner.state.set_true_hand(0, 2, shield_id)
-
-        # 祈るを実行
-        runner.step(ActionType.ACTION_PRAY)
-
-        # イタズラマンがトリガーした場合、スロット1または2が空 (CARD_EMPTY) になっている
-        slot1 = runner.state.get_true_hand(0, 1)
-        slot2 = runner.state.get_true_hand(0, 2)
-
-        if slot1 == godfield_core.CARD_EMPTY or slot2 == godfield_core.CARD_EMPTY:
-            prankster_triggered += 1
-
-    assert prankster_triggered > 0, "Prankster (trickster) did not trigger in 200 trials"
-
-
-def test_apocalypse_sacrifice_refills_hand():
-    """
-    検証内容: 通常モードの「捨てる」と終末の時の「ささげる」の挙動の違いを検証する。
-    - 通常モードでは捨てたスロットは空のままになる。
-    - 終末の時では捨てた分だけ新たにドローされる。
-    """
-    shield_id = find_card_by_name("革の服")
-
-    # --- 通常モードの検証 ---
-    runner_normal = SimulationRunner()
-    runner_normal.reset_state()
-    runner_normal.state.current_turn = 0  # 通常
-    runner_normal.state.set_true_hand(0, 0, shield_id)
-
-    # 捨てるフェーズに入り、スロット0を選択して確定
-    runner_normal.step(ActionType.ACTION_DISCARD)
-    runner_normal.perform_defense([0])
-
-    # 通常モードではスロット0は空のまま
-    assert runner_normal.state.get_true_hand(0, 0) == godfield_core.CARD_EMPTY
-
-    # --- 終末の時の検証 ---
-    runner_apocalypse = SimulationRunner()
-    runner_apocalypse.reset_state()
-    runner_apocalypse.state.current_turn = 150  # 終末の時
-    runner_apocalypse.state.set_true_hand(0, 0, shield_id)
-
-    # ささげるフェーズに入り、スロット0を選択して確定
-    runner_apocalypse.step(ActionType.ACTION_DISCARD)
-    runner_apocalypse.perform_defense([0])
-
-    # 終末の時では新しくカードがドローされているため、スロット0は空ではない
-    assert runner_apocalypse.state.get_true_hand(0, 0) != godfield_core.CARD_EMPTY
-
-
-def test_apocalypse_draw_death_defer():
-    """
-    検証内容: 終末の時において、使用済みカードのドロー処理が終わった後に勝敗判定が行われること。
-    - プレイヤー0（HP10）が「クロスボウ」を使用し、プレイヤー1（HP1）を攻撃。
-    - プレイヤー1は防御できず被弾し、HPが0になる。
-    - 通常時であれば、被弾解決の段階でプレイヤー1が死亡した時点で即座にゲーム終了となる。
-    - しかし、終末 of 時では、被弾の瞬間にはゲーム終了せず、使用済みカードの補充ドロー処理に進む。
-    - ドロー補充は生存しているプレイヤー0に対してのみ行われ、そのドローで悪魔を引いてプレイヤー0のHPも0になる。
-    - ドロー処理全体の完了後に初めて死亡判定が行われ、両者死亡による「引き分け（Draw）」になることを確認する。
-    """
-    bow_id = find_card_by_name("weapons/crossbow")
-
-    target_seed = -1
-    for seed in range(500):
-        runner = SimulationRunner()
-        runner.reset_state()
-        runner.state.seed_rng(seed)
-        runner.state.current_turn = 150  # 終末の時
-        runner.set_status(player=0, hp=10, mp=10, money=10)
-        runner.set_status(player=1, hp=1, mp=10, money=10)
-        runner.state.set_true_hand(0, 0, bow_id)
-        runner.set_hand(player=1, cards=[]) # プレイヤー1は手札空で防御不能
-
-        # プレイヤー0がクロスボウを使用
-        runner.perform_attack([0])
-
-        # プレイヤー1の防御フェイズ ➡ confirmしか押せない
-        runner.step(ActionType.ACTION_CONFIRM)
-
-        # ドロー補充で悪魔を引き、両者死亡（引き分け）になったシードを探す
-        if runner.state.is_done and runner.state.get_hp(0) == 0 and runner.state.get_hp(1) == 0 and runner.state.p0_reward == 0.0:
-            target_seed = seed
-            break
-
-    assert target_seed != -1, "Could not find a seed where player 0 draws a damaging devil during cleanup draw"
-
-    # 通常時の挙動を確認（クロスボウでの被弾の瞬間に即座にゲーム終了し、プレイヤー0の勝利になる）
-    runner_normal = SimulationRunner()
-    runner_normal.reset_state()
-    runner_normal.state.seed_rng(target_seed)
-    runner_normal.state.current_turn = 0  # 通常時
-    runner_normal.set_status(player=0, hp=10, mp=10, money=10)
-    runner_normal.set_status(player=1, hp=1, mp=10, money=10)
-    runner_normal.state.set_true_hand(0, 0, bow_id)
-    runner_normal.set_hand(player=1, cards=[])
-
-    runner_normal.perform_attack([0])
-    runner_normal.step(ActionType.ACTION_CONFIRM)
-
-    # 通常時なので被弾の瞬間にゲーム終了し、プレイヤー0が勝利している（HP10のまま、ドローは発生しない）
-    assert runner_normal.state.is_done is True
-    assert runner_normal.state.get_hp(0) == 10
-    assert runner_normal.state.get_hp(1) == 0
-    assert runner_normal.state.p0_reward == 1.0
-
-    # 終末の時の挙動を確認（被弾では終了せず、ドロー処理後に両者死亡で引き分けになる）
-    runner_apoc = SimulationRunner()
-    runner_apoc.reset_state()
-    runner_apoc.state.seed_rng(target_seed)
-    runner_apoc.state.current_turn = 150  # 終末の時
-    runner_apoc.set_status(player=0, hp=10, mp=10, money=10)
-    runner_apoc.set_status(player=1, hp=1, mp=10, money=10)
-    runner_apoc.state.set_true_hand(0, 0, bow_id)
-    runner_apoc.set_hand(player=1, cards=[])
-
-    runner_apoc.perform_attack([0])
-    runner_apoc.step(ActionType.ACTION_CONFIRM)
-
-    # 終末 of 時なので、補充ドローによりプレイヤー0も死亡し、結果は引き分けになる
-    assert runner_apoc.state.is_done is True
-    assert runner_apoc.state.get_hp(0) == 0
-    assert runner_apoc.state.get_hp(1) == 0
-    assert runner_apoc.state.p0_reward == 0.0
-    assert runner_apoc.state.p1_reward == 0.0
-
+    # 被弾の瞬間には終わらず、補充ドローで引いた大悪魔が P0 も倒す
+    g.expect(p0_hp=0, p1_hp=0, is_done=True, p0_reward=0.0, p1_reward=0.0)
 
 
 # ==========================================
@@ -622,357 +430,233 @@ def test_apocalypse_draw_death_defer():
 
 
 
-def find_seed_for_phenomenon(target_phenomenon: int) -> int:
+FATE = "sundries/string-of-fate"
+FILLER = "armor/wood-shield"
+
+
+def trigger_phenomenon(board, phenomenon, *, p0=None, p1=None, **rng_kwargs):
+    """「運命のひも」を自分に使い、指定した超常現象を発生させた局面を返します。
+
+    従来は目的の現象が出るまで最大5000シードを3回に分けて探索していました。
     """
-    運命のひもを使用した際に、目的の超常現象 (0~9) が発生するシード値を探索します。
+    g = board(
+        p0=p0 if p0 is not None else Side(hp=99, mp=10, money=10, hand=[FATE]),
+        p1=p1 if p1 is not None else Side(hp=99, mp=10, money=10),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(phenomenon)
+    for kind, value in rng_kwargs.items():
+        g.rng.force(getattr(RollKind, kind.upper()), value)
+    g.attack(FATE, to_self=True)
+    return g
+
+
+def test_sunset_gives_both_players_fever(board):
+    """夕焼け: 両者が熱病になることを検証します。"""
+    g = trigger_phenomenon(board, PhenomenonType.SUNSET)
+    g.expect(
+        p0_sickness=SicknessType.SICKNESS_FEVER,
+        p1_sickness=SicknessType.SICKNESS_FEVER,
+    )
+
+
+def test_dense_fog_curses_both_players(board):
+    """濃霧: 両者が霧状態になることを検証します。"""
+    g = trigger_phenomenon(board, PhenomenonType.DENSE_FOG)
+    g.expect(p0_curses={CurseType.CURSE_FOG}, p1_curses={CurseType.CURSE_FOG})
+
+
+def test_tornado_sets_both_players_to_one_hp(board):
+    """竜巻: 両者のHPが1になることを検証します。"""
+    g = trigger_phenomenon(board, PhenomenonType.TORNADO)
+    g.expect(p0_hp=1, p1_hp=1)
+
+
+def test_gigantic_tub_on_self_deals_undefendable_damage(board):
+    """巨大なタライが自分に当たった場合、防御できず即座にダメージが入ることを検証します。"""
+    power = card_feature("phenomena/gigantic-tub", "attack_power")
+    g = trigger_phenomenon(
+        board, PhenomenonType.GIGANTIC_TUB,
+        p0=Side(hp=80, mp=10, money=10, hand=[FATE]),
+        phenomenon_tub_target=0,  # 0 = 使用者自身
+    )
+    g.expect(p0_hp=80 - power, phase=GamePhase.PHASE_MAIN)
+
+
+def test_gigantic_tub_on_opponent_opens_a_defense_phase(board):
+    """巨大なタライが相手に当たった場合、光属性の物理防御フェイズが起動することを検証します。"""
+    source = "phenomena/gigantic-tub"
+    g = trigger_phenomenon(
+        board, PhenomenonType.GIGANTIC_TUB, phenomenon_tub_target=1,
+    )
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        attacker=0,
+        defender=1,
+        pending_power=card_feature(source, "attack_power"),
+        pending_element=element_of(source),
+    )
+    assert g.state.pending_attack_source_id == card_id(source)
+
+
+def test_black_hole_is_a_group_darkness_attack(board):
+    """ブラックホール: 相手に闇属性の全体攻撃が飛ぶことを検証します。"""
+    source = "phenomena/black-hole"
+    g = trigger_phenomenon(board, PhenomenonType.BLACK_HOLE)
+
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        attacker=0,
+        defender=1,
+        pending_power=card_feature(source, "attack_power"),
+        pending_element=element_of(source),
+        pending_is_group=True,
+    )
+    assert g.state.pending_attack_source_id == card_id(source)
+
+
+def test_warm_current_heals_the_user(board):
+    """暖流: 使用者のHPが+50されることを検証します。"""
+    g = trigger_phenomenon(
+        board, PhenomenonType.WARM_CURRENT,
+        p0=Side(hp=40, mp=10, money=10, hand=[FATE]),
+    )
+    g.expect(p0_hp=90)
+
+
+@pytest.mark.parametrize("lucky", [0, 1], ids=["P0が総取り", "P1が総取り"])
+def test_gold_mine_concentrates_all_money(board, lucky):
+    """金山: お金が指定した側へ集約されることを検証します。
+
+    従来は「どちらか一方が30でもう一方が0」という OR 条件で、どちらが選ばれたかを
+    制御も検証もできていませんでした。
     """
-    string_of_fate_id = find_card_by_name("sundries/string-of-fate")
-    for seed in range(5000):
-        sim = SimulationRunner()
-        sim.state.seed_rng(seed)
-        sim.set_status(player=0, hp=99, mp=10, money=10)
-        sim.set_status(player=1, hp=99, mp=10, money=10)
-
-        # 手札に「運命のひも」だけを持たせる
-        sim.state.set_true_hand(0, 0, string_of_fate_id)
-        sim.state.set_true_hand(0, 1, -1)
-        sim.state.set_true_hand(1, 0, -1)
-
-        # Confirm -> Target Self
-        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-        sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-        # 各現象特有の状態変化で検出
-        if target_phenomenon == 0:  # 夕焼け (全員熱病)
-            if int(sim.state.get_sickness(0)) == 2 and int(sim.state.get_sickness(1)) == 2:
-                return seed
-        elif target_phenomenon == 1:  # 濃霧 (全員霧)
-            if sim.state.get_curses(0, godfield_core.CurseType.CURSE_FOG) and sim.state.get_curses(
-                1, godfield_core.CurseType.CURSE_FOG
-            ):
-                return seed
-        elif target_phenomenon == 3:  # 竜巻 (全員 HP 1)
-            if sim.state.get_hp(0) == 1 and sim.state.get_hp(1) == 1:
-                return seed
-        elif target_phenomenon == 4:  # 巨大なタライ (自分被弾 50ダメ)
-            # 自分に被弾したシード（HPが減った）
-            if sim.state.get_hp(0) == 49:
-                return seed
-        elif target_phenomenon == 400:  # 相手に巨大なタライ (相手に防御フェイズ)
-            if (
-                sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-                and sim.state.pending_attack_source_id == find_card_by_name("phenomena/gigantic-tub")
-            ):
-                return seed
-        elif target_phenomenon == 5:  # ブラックホール (相手全体攻撃防御フェイズ)
-            if (
-                sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-                and sim.state.pending_attack_source_id == find_card_by_name("phenomena/black-hole")
-            ):
-                return seed
-        elif target_phenomenon == 6:  # 暖流 (自身 HP+50)
-            pass
-        elif target_phenomenon == 7:  # 金山 (お金集約)
-            if (sim.state.get_money(0) == 20 and sim.state.get_money(1) == 0) or (
-                sim.state.get_money(0) == 0 and sim.state.get_money(1) == 20
-            ):
-                return seed
-        elif target_phenomenon == 8:  # 磁気嵐 (手札相互シャッフル交換)
-            pass
-        elif target_phenomenon == 9:  # 日食 (守護神割り当て)
-            if sim.state.get_guardian(0) > 0 and sim.state.get_guardian(1) > 0:
-                return seed
-
-    # 暖流用の探索 (初期HPを40にする)
-    for seed in range(5000):
-        sim = SimulationRunner()
-        sim.state.seed_rng(seed)
-        sim.set_status(player=0, hp=40, mp=10, money=10)
-        sim.set_status(player=1, hp=40, mp=10, money=10)
-        sim.state.set_true_hand(0, 0, string_of_fate_id)
-        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-        sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-        if target_phenomenon == 6:  # 暖流
-            if sim.state.get_hp(0) == 90:
-                return seed
-
-    # 磁気嵐用の探索 (手札がある状態)
-    for seed in range(5000):
-        sim = SimulationRunner()
-        sim.state.seed_rng(seed)
-        sim.set_status(player=0, hp=99, mp=10, money=10)
-        sim.set_status(player=1, hp=99, mp=10, money=10)
-        sim.state.set_true_hand(0, 0, string_of_fate_id)
-        sim.state.set_true_hand(0, 1, 10)  # 適当なカードA
-        sim.state.set_true_hand(0, 2, 11)  # 適当なカードB
-        sim.state.set_true_hand(1, 0, 12)  # 適当なカードC
-        sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-        sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-        if target_phenomenon == 8:  # 磁気嵐
-            h1 = [sim.state.get_true_hand(1, idx) for idx in range(18) if sim.state.get_true_hand(1, idx) != -1]
-            if len(h1) > 0 and h1[0] in [10, 11] and int(sim.state.get_sickness(0)) == 0:
-                if sim.state.get_hp(0) == 99 and sim.state.get_guardian(0) == 0:
-                    return seed
-
-    raise ValueError(f"Could not find seed for phenomenon {target_phenomenon}")
+    g = trigger_phenomenon(
+        board, PhenomenonType.GOLD_MINE,
+        p0=Side(hp=99, mp=10, money=10, hand=[FATE]),
+        p1=Side(hp=99, mp=10, money=20),
+        phenomenon_gold_mine=lucky,
+    )
+    if lucky == 0:
+        g.expect(p0_money=30, p1_money=0)
+    else:
+        g.expect(p0_money=0, p1_money=30)
 
 
-def test_afterglow():
-    """夕焼け: 全員熱病"""
-    seed = find_seed_for_phenomenon(0)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-    sim.set_hand(0, ["sundries/string-of-fate"])
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
+def test_eclipse_assigns_distinct_guardians_to_both(board):
+    """日食: 両者に重複しない守護神が割り当てられることを検証します。
 
-    assert int(sim.state.get_sickness(0)) == 2  # 熱病
-    assert int(sim.state.get_sickness(1)) == 2  # 熱病
-
-
-def test_dense_fog():
-    """濃霧: 全員霧"""
-    seed = find_seed_for_phenomenon(1)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-    sim.set_hand(0, ["sundries/string-of-fate"])
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    assert sim.state.get_curses(0, godfield_core.CurseType.CURSE_FOG)
-    assert sim.state.get_curses(1, godfield_core.CurseType.CURSE_FOG)
+    従来は「1〜10のいずれかで、かつ異なる」という緩い検証でした。
+    重複回避の補正そのものは test_roll_branch_coverage.py が境界値で検証します。
+    """
+    g = trigger_phenomenon(
+        board, PhenomenonType.ECLIPSE,
+        phenomenon_eclipse_g0=4,
+        phenomenon_eclipse_g1=4,  # g0 以上なので +1 されて 5 になる
+    )
+    g.expect(p0_guardian=4, p1_guardian=5)
 
 
-def test_tornado():
-    """竜巻: 全員HP 1"""
-    seed = find_seed_for_phenomenon(3)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-    sim.set_hand(0, ["sundries/string-of-fate"])
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
+@pytest.mark.parametrize("disguised", [True, False], ids=["偽装される", "偽装されない"])
+def test_magnetic_storm_makes_both_hands_unconfirmed_if_either_side_dreams(board, disguised):
+    """磁気嵐: どちらかが夢状態なら、配り直された手札が両者とも未確定になることを検証します。
 
-    assert sim.state.get_hp(0) == 1
-    assert sim.state.get_hp(1) == 1
+    夢の偽装は50%でしか起きないため、「見た目が変わっていること」を条件にすると
+    半分の確率で落ちるテストになります。夢が効いているかどうかは is_confirmed で
+    判定し、見た目については偽装の有無を明示的に固定して両方を検証します。
+    """
+    g = board(
+        p0=Side(hp=40, hand=["sundries/string-of-fate", "weapons/bronze-club", "armor/sky-armor"]),
+        p1=Side(hp=40, curses=[CurseType.CURSE_DREAM], hand=["armor/god-shield"]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(PhenomenonType.MAGNETIC_STORM)
+    g.rng.dream(disguised=disguised)
 
+    g.attack("sundries/string-of-fate", to_self=True)
 
-def test_gigantic_tub_self():
-    """巨大なタライ (自分に当たる): 防御不可、即50ダメージ"""
-    seed = find_seed_for_phenomenon(4)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-    sim.set_hand(0, ["sundries/string-of-fate"])
-    sim.set_status(player=0, hp=80)
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    assert sim.state.get_hp(0) == 30  # 80 - 50 = 30
-
-
-def test_gigantic_tub_opp():
-    """巨大なタライ (相手に当たる): 光属性50の防御フェイズ起動"""
-    seed = find_seed_for_phenomenon(400)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-    sim.set_hand(0, ["sundries/string-of-fate"])
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert sim.state.defender_id == 1
-    assert sim.state.attacker_id == 0
-    assert sim.state.pending_attack_source_id == find_card_by_name("phenomena/gigantic-tub")
-    assert sim.state.pending_attack_power == 50
-    assert sim.state.pending_attack_element == godfield_core.Element.ELEM_LIGHT
+    # ひもは消費されるので、配り直される非ステージのカードは3枚（P0に2枚、P1に1枚）
+    dealt = [(0, 0), (0, 1), (1, 0)]
+    for p, i in dealt:
+        true_id = g.state.get_true_hand(p, i)
+        assert true_id != godfield_core.CARD_EMPTY, f"P{p} スロット{i} に配られているはず"
+        assert g.state.get_is_confirmed(p, i) is False, (
+            f"P{p} スロット{i}: 夢の相手がいるので未確定になるべきです"
+        )
+        apparent = g.state.get_apparent_hand(p, i)
+        if disguised:
+            assert apparent in dream_candidates(true_id), "同じ夢グループの別カードに見える"
+        else:
+            assert apparent == true_id, "偽装されなければ見た目は真のカードのまま"
 
 
-def test_black_hole():
-    """ブラックホール: 相手に対して全体攻撃闇属性30防御フェイズ起動"""
-    seed = find_seed_for_phenomenon(5)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-    sim.set_hand(0, ["sundries/string-of-fate"])
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
+def test_magnetic_storm_tracks_who_knows_which_card(board):
+    """磁気嵐で手札を交換したあと、公開状態が正しく引き継がれることを検証します。
 
-    assert sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-    assert sim.state.defender_id == 1
-    assert sim.state.attacker_id == 0
-    assert sim.state.pending_attack_source_id == find_card_by_name("phenomena/black-hole")
-    assert sim.state.pending_attack_power == 30
-    assert sim.state.pending_attack_element == godfield_core.Element.ELEM_DARKNESS
-    assert sim.state.pending_is_group_attack == True
+    規則は「相手から渡ってきたカードは相手が中身を知っている」「自分に戻ってきた
+    カードは元の公開状態を保つ」の2つです。
+    """
+    mine_known = "weapons/bronze-club"     # 元から相手に知られている自分のカード
+    mine_secret = "armor/sky-armor"        # 相手に知られていない自分のカード
+    theirs_secret = "armor/god-shield"     # 相手の非公開カード
 
+    g = board(
+        p0=Side(
+            hp=40, mp=10, money=10,
+            hand=["sundries/string-of-fate", mine_known, mine_secret],
+            known_to_opp=[1],
+        ),
+        p1=Side(hp=40, mp=10, money=10, hand=[theirs_secret]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(PhenomenonType.MAGNETIC_STORM)
 
-def test_warm_current():
-    """暖流: 自身HP+50"""
-    seed = find_seed_for_phenomenon(6)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-    sim.set_hand(0, ["sundries/string-of-fate"])
-    sim.set_status(player=0, hp=40)
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
+    g.attack("sundries/string-of-fate", to_self=True)
 
-    assert sim.state.get_hp(0) == 90  # 40 + 50 = 90
+    # ひもを除く3枚が配り直される（P0 に2枚、P1 に1枚）
+    expected_known = {
+        # 自分に戻ってきたカードは元の公開状態を保つ
+        (0, card_id(mine_known)): True,
+        (0, card_id(mine_secret)): False,
+        # 相手から渡ってきたカードは、元の持ち主が中身を知っている
+        (0, card_id(theirs_secret)): True,
+        (1, card_id(mine_known)): True,
+        (1, card_id(mine_secret)): True,
+        # 自分に戻ってきた相手のカード
+        (1, card_id(theirs_secret)): False,
+    }
 
-
-def test_gold_mountain():
-    """金山: お互いのお金合計が集約"""
-    seed = find_seed_for_phenomenon(7)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-    sim.set_hand(0, ["sundries/string-of-fate"])
-    sim.set_status(player=0, money=10)
-    sim.set_status(player=1, money=20)
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    m0 = sim.state.get_money(0)
-    m1 = sim.state.get_money(1)
-    # 合計 30 がどちらか一方に集約し、もう一方は 0 になる
-    assert (m0 == 30 and m1 == 0) or (m0 == 0 and m1 == 30)
-
-
-def test_solar_eclipse():
-    """日食: 重複しない守護神が両者にセット"""
-    seed = find_seed_for_phenomenon(9)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-    sim.set_hand(0, ["sundries/string-of-fate"])
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    g0 = sim.state.get_guardian(0)
-    g1 = sim.state.get_guardian(1)
-
-    assert g0 in range(1, 11)
-    assert g1 in range(1, 11)
-    assert g0 != g1  # 重複しない！
+    checked = 0
+    for player, slots in ((0, 2), (1, 1)):
+        for slot in range(slots):
+            cid = g.state.get_true_hand(player, slot)
+            assert cid != godfield_core.CARD_EMPTY, f"P{player} スロット{slot} が空です"
+            want = expected_known[(player, cid)]
+            got = g.state.get_is_known_to_opp(player, slot)
+            assert got is want, (
+                f"P{player} スロット{slot} の {card_name(cid)}:"
+                f" 公開状態は {want} であるべきですが {got} でした"
+            )
+            checked += 1
+    assert checked == 3, "配り直された3枚すべてを検証しているべきです"
 
 
-def test_magnetic_storm():
-    """磁気嵐: 手札相互交換 & known_to_opp 追跡"""
-    seed = find_seed_for_phenomenon(8)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
+def test_the_string_of_fate_logs_which_phenomenon_it_triggered(board):
+    """運命のひもが、発生した超常現象を TRIGGER_PHENOMENON として記録することを検証します。
 
-    # プレイヤー 0: ひも + 銅のこん棒 (ID 5) + 天空のよろい (確実にある)
-    # プレイヤー 1: 神の盾 (確実にある)
-    fate_id = find_card_by_name("sundries/string-of-fate")
-    card_a = find_card_by_name("weapons/bronze-club")
-    card_b = find_card_by_name("armor/sky-armor")
-    card_c = find_card_by_name("armor/god-shield")
+    従来は発生する現象を制御しておらず、値の範囲（0..9）しか確認できませんでした。
+    現象を名指しして、その番号が記録されることを確認します。
+    """
+    fate = "sundries/string-of-fate"
+    phenomenon = PhenomenonType.WARM_CURRENT  # 盤面をほとんど動かさない現象
 
-    sim.state.set_true_hand(0, 0, fate_id)
-    sim.state.set_true_hand(0, 1, card_a)
-    sim.state.set_true_hand(0, 2, card_b)
-    sim.state.set_is_known_to_opp(0, 1, True)  # 銅のこん棒は相手に知られている
-    sim.state.set_is_known_to_opp(0, 2, False)  # 天空のよろいは相手に知られていない
+    g = board(
+        p0=Side(hp=99, mp=10, money=10, hand=[fate]),
+        p1=Side(hp=99, mp=10, money=10),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(phenomenon)
 
-    sim.state.set_true_hand(1, 0, card_c)
-    sim.state.set_is_known_to_opp(1, 0, False)  # 神の盾は相手に知られていない
+    g.attack(fate, to_self=True)
 
-    # ひもを使用
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    # 分配後は：
-    # プールは [card_a, card_b, card_c]。
-    # 元の有効枚数は P0: 2枚, P1: 1枚。
-    # 分配された結果、P0 の true_hand の 0, 1 スロットに 2枚、 P1 の 0 スロットに 1枚が配置される。
-    # (ひも使用による通常ドローが最後に入って P0 に 1枚新規追加されるため、 P0 は計 3枚になる。)
-    # 磁気嵐でシャッフルされて配られたカードについて、 known_to_opp が正しく設定されているか。
-
-    # 元々 P0 の持ち物: card_a (known), card_b (unknown)
-    # 元々 P1 の持ち物: card_c (unknown)
-
-    # シャッフル後の手札スロット（ドローカード除く元のスロット）を調査
-    # ひも分のドローは sim.step() で解決されて引かれているため、
-    # P0 の 2枚のスロットと P1 の 1枚のスロットを確認。
-    for p in [0, 1]:
-        slots = 2 if p == 0 else 1
-        for i in range(slots):
-            cid = sim.state.get_true_hand(p, i)
-            known = sim.state.get_is_known_to_opp(p, i)
-
-            # 元の持ち主と配られた先を判定
-            if p == 0:
-                if cid == card_c:
-                    # 元々 P1 の持ち物だった card_c が P0 に来た ➡ P1 は知っている
-                    assert known == True
-                elif cid == card_a:
-                    # 自分に戻ってきた card_a ➡ 元々 known だったので known を維持
-                    assert known == True
-                elif cid == card_b:
-                    # 自分に戻ってきた card_b ➡ 元々 unknown だったので unknown を維持
-                    assert known == False
-            else:  # p == 1
-                if cid in [card_a, card_b]:
-                    # 元々 P0 の持ち物だったカードが P1 に来た ➡ P0 は知っている
-                    assert known == True
-                elif cid == card_c:
-                    # 自分に戻ってきた card_c ➡ 元々 unknown だったので維持
-                    assert known == False
-
-
-def test_magnetic_storm_dream():
-    """磁気嵐: プレイヤーのどちらかでも夢状態の場合、お互いの手札が見かけ上夢になる"""
-    seed = find_seed_for_phenomenon(8)
-    sim = SimulationRunner()
-    sim.state.seed_rng(seed)
-
-    fate_id = find_card_by_name("sundries/string-of-fate")
-    card_a = find_card_by_name("weapons/bronze-club")
-    card_b = find_card_by_name("armor/sky-armor")
-    card_c = find_card_by_name("armor/god-shield")
-
-    # プレイヤー1を夢状態にする
-    sim.state.set_curses(1, godfield_core.CurseType.CURSE_DREAM, True)
-
-    sim.state.set_true_hand(0, 0, fate_id)
-    sim.state.set_true_hand(0, 1, card_a)
-    sim.state.set_true_hand(0, 2, card_b)
-    sim.state.set_true_hand(1, 0, card_c)
-
-    # ひもを使用
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    # 磁気嵐でカードが配り直されたスロットについて、
-    # プレイヤー0（夢ではない）とプレイヤー1（夢）の双方で、
-    # 配り直されたカード（ドローを除く）が is_confirmed == False であり、
-    # apparent_hand が dream_group によるダミー（異なる値など）になっているか。
-    for p in [0, 1]:
-        slots = 2 if p == 0 else 1
-        for i in range(slots):
-            true_id = sim.state.get_true_hand(p, i)
-            app_id = sim.state.get_apparent_hand(p, i)
-            confirmed = sim.state.get_is_confirmed(p, i)
-
-            # 配られたカード (銅のこん棒、天空のよろい、神の盾) はすべて夢で隠されている（is_confirmed == False）こと
-            assert confirmed is False, f"Player {p} slot {i} should not be confirmed"
-            assert app_id != -1 and app_id != true_id
-
-
-def test_string_of_fate_event_logging():
-    """運命のひもを使用した際、TRIGGER_PHENOMENON (22) イベントが正常に発行されることを確認"""
-    sim = SimulationRunner()
-    sim.state.seed_rng(0)
-    fate_id = find_card_by_name("運命のひも")
-
-    sim.set_status(player=0, hp=99, mp=10, money=10)
-    sim.state.set_true_hand(0, 0, fate_id)
-
-    sim.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    sim.step(godfield_core.ActionType.ACTION_TARGET_SELF)
-
-    obs = godfield_core.get_observation(sim.state, 0)
-    history = obs.get_history()
-
-    phenomenon_events = [ev for ev in history if hasattr(ev, "event_type") and ev.event_type == int(godfield_core.EventType.TRIGGER_PHENOMENON)]
-    assert len(phenomenon_events) > 0
-    ev = phenomenon_events[0]
-    assert ev.card_id == fate_id
-    assert 0 <= int(ev.value) <= 9
-
+    g.expect_events(ev(EventType.TRIGGER_PHENOMENON, card=fate, value=int(phenomenon)))

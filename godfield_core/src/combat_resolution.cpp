@@ -112,7 +112,7 @@ static void discard_random_cards(InternalState &state, int player_id, int count,
     }
     if (candidates.empty()) return;
 
-    std::shuffle(candidates.begin(), candidates.end(), state.rng);
+    shuffle_by_value(state, RollKind::DISCARD_RANDOM_ORDER, candidates);
     int num_to_discard = std::min(count, static_cast<int>(candidates.size()));
     for (int k = 0; k < num_to_discard; ++k) {
         clear_hand_slot(state, player_id, candidates[k]);
@@ -238,22 +238,37 @@ DreamGroup get_dream_group(int card_id) {
     return g_card_registry[card_id].dream_group;
 }
 
-static int get_fake_dream_card(InternalState &state, int true_card_id) {
+std::vector<int> get_dream_candidates(int true_card_id) {
+    std::vector<int> candidates;
     DreamGroup target_grp = get_dream_group(true_card_id);
     if (target_grp == DreamGroup::NONE) {
-        return true_card_id;
+        return candidates;
     }
-    
-    std::vector<int> candidates;
+    // 偽装先に自分自身は含めない（「正しく見える」側は DREAM_DISGUISE で分岐する）
     for (int i = 0; i < get_registry_size(); ++i) {
-        if (get_dream_group(i) == target_grp) {
+        if (i != true_card_id && get_dream_group(i) == target_grp) {
             candidates.push_back(i);
         }
     }
+    return candidates;
+}
+
+static int get_fake_dream_card(InternalState &state, int true_card_id) {
+    if (get_dream_group(true_card_id) == DreamGroup::NONE) {
+        return true_card_id;
+    }
+
+    // 50%はそのまま正しく見える（見た目が変わらなくても未確定であることに変わりはない）
+    if (roll_range(state, RollKind::DREAM_DISGUISE, 0, 99) >= DREAM_DISGUISE_RATE) {
+        return true_card_id;
+    }
+
+    // 残る50%は同じ夢グループの「自分以外」のカードに見える
+    std::vector<int> candidates = get_dream_candidates(true_card_id);
     if (candidates.empty()) {
         return true_card_id;
     }
-    int idx = std::uniform_int_distribution<int>(0, candidates.size() - 1)(state.rng);
+    int idx = roll_range(state, RollKind::DREAM_FAKE_CARD, 0, static_cast<int>(candidates.size()) - 1);
     return candidates[idx];
 }
 
@@ -474,8 +489,8 @@ void discard_one_card_randomly(InternalState &state, int player_id) {
     }
     if (candidate_indices.empty()) return;
 
-    std::uniform_int_distribution<int> dist(0, (int)candidate_indices.size() - 1);
-    int initial_pick_idx = candidate_indices[dist(state.rng)];
+    int initial_pick_idx = candidate_indices[
+        roll_range(state, RollKind::DISCARD_ONE_SLOT, 0, (int)candidate_indices.size() - 1)];
     int target_card_id = state.true_hand[player_id][initial_pick_idx];
 
     int best_idx = initial_pick_idx;
@@ -514,10 +529,11 @@ void apply_devil_prankster(InternalState &state, int player_id) {
             clear_hand_slot(state, player_id, idx);
         }
     } else {
-        int first = std::uniform_int_distribution<int>(0, candidates.size() - 1)(state.rng);
+        int hi = static_cast<int>(candidates.size()) - 1;
+        int first = roll_range(state, RollKind::DEVIL_PRANKSTER, 0, hi);
         int second;
         do {
-            second = std::uniform_int_distribution<int>(0, candidates.size() - 1)(state.rng);
+            second = roll_range(state, RollKind::DEVIL_PRANKSTER, 0, hi);
         } while (second == first);
         clear_hand_slot(state, player_id, candidates[first]);
         clear_hand_slot(state, player_id, candidates[second]);
@@ -525,7 +541,7 @@ void apply_devil_prankster(InternalState &state, int player_id) {
 }
 
 void apply_devil_fairy(InternalState &state, int player_id) {
-    int choice = std::uniform_int_distribution<int>(0, 2)(state.rng);
+    int choice = roll_range(state, RollKind::DEVIL_FAIRY, 0, 2);
     if (choice == 0) {
         state.hp[player_id] = std::min(99, state.hp[player_id] + 10);
     } else if (choice == 1) {
@@ -533,6 +549,24 @@ void apply_devil_fairy(InternalState &state, int player_id) {
     } else {
         state.money[player_id] = std::min(99, state.money[player_id] + 10);
     }
+}
+
+/**
+ * @brief 終末の時のドローで出る悪魔カード（APOCALYPSE_DEVIL_THRESHOLDS の各区間に対応）。
+ */
+static const int APOCALYPSE_DEVILS[APOCALYPSE_DEVIL_COUNT] = {
+    ID_SMALL_DEVIL,    // 小悪魔: 10ダメージ
+    ID_MEDIUM_DEVIL,   // 中悪魔: 20ダメージ
+    ID_LARGE_DEVIL,    // 大悪魔: 30ダメージ
+    ID_TRICKSTER,      // イタズラマン: 手札を2枚破棄
+    ID_CHARITY_FAIRY,  // めぐみの妖精: HP/MP/お金のいずれかが+10
+};
+
+/**
+ * @brief 終末の時に出る悪魔カードの一覧（テストが悪魔名から指示値を逆引きするために公開）。
+ */
+std::vector<int> get_apocalypse_devils() {
+    return std::vector<int>(APOCALYPSE_DEVILS, APOCALYPSE_DEVILS + APOCALYPSE_DEVIL_COUNT);
 }
 
 int draw_card_with_apocalypse(InternalState &state, int player_id) {
@@ -543,23 +577,19 @@ int draw_card_with_apocalypse(InternalState &state, int player_id) {
         bool is_apocalypse = (state.current_turn >= APOCALYPSE_TURN);
         int card_id = CARD_EMPTY;
         if (is_apocalypse) {
-            std::uniform_real_distribution<double> dist(0.0, 100.0);
-            double r = dist(state.rng);
-            if (r < 7.0) {
-                card_id = ID_SMALL_DEVIL;
-            } else if (r < 12.0) {
-                card_id = ID_MEDIUM_DEVIL;
-            } else if (r < 15.0) {
-                card_id = ID_LARGE_DEVIL;
-            } else if (r < 20.0) {
-                card_id = ID_TRICKSTER;
-            } else if (r < 25.0) {
-                card_id = ID_CHARITY_FAIRY;
-            } else {
-                card_id = draw_card(state.rng);
+            // 閾値は constants.h の APOCALYPSE_DEVIL_THRESHOLDS を唯一の定義元とする
+            double r = roll_real(state, RollKind::APOCALYPSE_DRAW, 0.0, 100.0);
+            for (int i = 0; i < APOCALYPSE_DEVIL_COUNT; ++i) {
+                if (r < static_cast<double>(APOCALYPSE_DEVIL_THRESHOLDS[i])) {
+                    card_id = APOCALYPSE_DEVILS[i];
+                    break;
+                }
+            }
+            if (card_id == CARD_EMPTY) {
+                card_id = draw_card(state);
             }
         } else {
-            card_id = draw_card(state.rng);
+            card_id = draw_card(state);
         }
 
         // is_devil に基づく即時解決と再ドロー
@@ -760,8 +790,8 @@ void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse) 
  * @param user_id 「運命のひも」の効果を受けたプレイヤー（現象の起点）。
  */
 static void resolve_string_of_fate(InternalState &state, int user_id) {
-    std::uniform_int_distribution<int> dist(0, 9);
-    PhenomenonType phenomenon = static_cast<PhenomenonType>(dist(state.rng));
+    PhenomenonType phenomenon =
+        static_cast<PhenomenonType>(roll_range(state, RollKind::PHENOMENON, 0, 9));
     int opp = 1 - user_id;
     push_event(state, user_id, EventType::TRIGGER_PHENOMENON, ID_STRING_OF_FATE, -1, static_cast<float>(phenomenon));
 
@@ -781,7 +811,7 @@ static void resolve_string_of_fate(InternalState &state, int user_id) {
         state.hp[1] = 1;
     }
     else if (phenomenon == PHENOMENON_GIGANTIC_TUB) { // 巨大なタライ: 自分か相手に光属性攻50
-        int target_player = std::uniform_int_distribution<int>(0, 1)(state.rng);
+        int target_player = roll_range(state, RollKind::PHENOMENON_TUB_TARGET, 0, 1);
         if (target_player == user_id) { // 自分自身: 防御不可で50ダメ
             apply_damage(state, user_id, 50);
         } else { // 相手: 防御フェイズ起動
@@ -806,7 +836,7 @@ static void resolve_string_of_fate(InternalState &state, int user_id) {
     }
     else if (phenomenon == PHENOMENON_GOLD_MINE) { // 金山: お金集約
         int total_money = state.money[0] + state.money[1];
-        int lucky = std::uniform_int_distribution<int>(0, 1)(state.rng);
+        int lucky = roll_range(state, RollKind::PHENOMENON_GOLD_MINE, 0, 1);
         state.money[lucky] = std::clamp(total_money, 0, 99);
         state.money[1 - lucky] = 0;
     }
@@ -838,8 +868,8 @@ static void resolve_string_of_fate(InternalState &state, int user_id) {
             }
         }
                 
-        std::shuffle(pool.begin(), pool.end(), state.rng);
-                
+        shuffle_by_index(state, RollKind::PHENOMENON_MAGNETIC_STORM, pool);
+
         bool is_any_dream = state.curses[0][CURSE_TYPE_DREAM] || state.curses[1][CURSE_TYPE_DREAM];
         int pool_idx = 0;
         for (int p = 0; p < 2; ++p) {
@@ -875,8 +905,8 @@ static void resolve_string_of_fate(InternalState &state, int user_id) {
         }
     }
     else if (phenomenon == PHENOMENON_ECLIPSE) { // 日食: 重複しない守護神割り当て
-        int g0 = std::uniform_int_distribution<int>(1, 10)(state.rng);
-        int g1 = std::uniform_int_distribution<int>(1, 9)(state.rng);
+        int g0 = roll_range(state, RollKind::PHENOMENON_ECLIPSE_G0, 1, 10);
+        int g1 = roll_range(state, RollKind::PHENOMENON_ECLIPSE_G1, 1, 9);
         if (g1 >= g0) {
             g1 += 1;
         }
@@ -915,9 +945,9 @@ void apply_card_effect_to_target(InternalState &state, int target_id, int card_i
     } else if (card_id == ID_SPRING) {
         add_hp(state, target_id, 10);
     } else if (card_id == ID_THUMP_THUMP_TEAR) {
-        std::uniform_int_distribution<int> dist(0, 1);
         int hp_before = state.hp[target_id];
-        add_hp(state, target_id, (dist(state.rng) == 0) ? 10 : -10);
+        int direction = roll_range(state, RollKind::THUMP_THUMP_TEAR, 0, 1);
+        add_hp(state, target_id, (direction == 0) ? 10 : -10);
         // HPが減った場合はダメージ扱いとし、守護神の離脱判定を行う
         try_guardian_leave(state, target_id, state.hp[target_id] < hp_before);
     } else if (card_id == ID_SMILE_FLOWER) {
@@ -959,8 +989,8 @@ void apply_card_effect_to_target(InternalState &state, int target_id, int card_i
         change_guardian(state, 0, GUARDIAN_NONE);
         change_guardian(state, 1, GUARDIAN_NONE);
     } else if (card_id == ID_GUARDIAN_POT) {
-        std::uniform_int_distribution<int> dist(1, 10);
-        change_guardian(state, target_id, static_cast<GuardianType>(dist(state.rng)));
+        change_guardian(state, target_id,
+                        static_cast<GuardianType>(roll_range(state, RollKind::GUARDIAN_POT, 1, 10)));
     } else if (card_id == ID_NOCTURNAL_BROOM) {
         discard_random_cards(state, target_id, 3, false); // 未使用・未展開の手札を3枚
     } else if (card_id == ID_GODDESS_S_SOAP) {
@@ -1078,7 +1108,7 @@ void execute_sell_resolution(InternalState &state, int seller, int buyer) {
             }
         }
         if (!candidates.empty()) {
-            std::shuffle(candidates.begin(), candidates.end(), state.rng);
+            shuffle_by_value(state, RollKind::HAND_REPLACE_SLOT, candidates);
             int replace_idx = candidates[0];
             add_card_to_hand_slot(state, buyer, replace_idx, card_id, false);
             state.is_known_to_opp[buyer][replace_idx] = true;
@@ -1228,7 +1258,7 @@ static bool try_revive_with_amulet(InternalState &state, int player_id) {
     int amulet_slot = find_card_in_hand(state, player_id, ID_SUN_AMULET);
     if (amulet_slot == -1) return false;
 
-    state.hp[player_id] = 10;
+    state.hp[player_id] = SUN_AMULET_REVIVE_HP;
     consume_hand_card(state, player_id, amulet_slot);
     return true;
 }
@@ -1248,7 +1278,7 @@ bool run_immediate_revive(InternalState &state) {
 
 void try_guardian_leave(InternalState &state, int player_id, bool hp_decreased) {
     if (!hp_decreased || state.guardian[player_id] <= GUARDIAN_NONE) return;
-    int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
+    int roll = roll_range(state, RollKind::GUARDIAN_LEAVE, 0, 99);
     if (roll < GUARDIAN_LEAVE_RATE) {
         change_guardian(state, player_id, GUARDIAN_NONE);
     }
@@ -1296,7 +1326,7 @@ bool run_death_check(InternalState &state) {
         for (int p = 0; p < 2; ++p) {
             while (state.pending_ascension_bows[p] > 0) {
                 state.pending_ascension_bows[p]--;
-                int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
+                int roll = roll_range(state, RollKind::ASCENSION_BOW_HIT, 0, 99);
                 if (roll < ASCENSION_BOW_HIT_RATE) {
                     state.current_phase = GamePhase::PHASE_DEFENSE;
                     state.attacker_id = p;
@@ -1305,7 +1335,7 @@ bool run_death_check(InternalState &state) {
                     state.num_staged_cards[1 - p] = 0; // 防御側の仮置き場をクリア
                     // 昇天弓は状態異常付与もCP奪取も行わない。cleanup_phase_end はターン終了処理の
                     // CLEANUP まで走らないため、直前の攻撃の効果はここで確実に打ち消す必要がある。
-                    set_pending_attack(state, ID_ASCENSION_BOW, 30, ELEM_LIGHT, false);
+                    set_pending_attack(state, ID_ASCENSION_BOW, ASCENSION_BOW_TRIGGERED_POWER, ELEM_LIGHT, false);
                     return true; // 防御フェイズへ移行するため一時中断
                 } else {
                     push_event(state, p, EventType::ATTACK_MISS, ID_ASCENSION_BOW, 1 - p, 0.0f);
@@ -1391,8 +1421,7 @@ static bool setup_guardian_attack_defense(InternalState &state, int attacker, in
 
     // 命中率（accuracy）チェック。暗雲がかかっていない場合で確率計算
     if (feat.accuracy < 100 && !state.curses[defender][CURSE_TYPE_DARK_CLOUD]) {
-        std::uniform_int_distribution<int> dist(0, 99);
-        if (dist(state.rng) >= feat.accuracy) {
+        if (roll_range(state, RollKind::ACCURACY, 0, 99) >= feat.accuracy) {
             // 外れても「攻撃を仕掛けて外した」ことがログに残るようイベントを発行する
             push_event(state, attacker, EventType::EFFECT_GUARDIAN, source_id, defender, static_cast<float>(state.guardian[attacker]));
             push_event(state, attacker, EventType::ATTACK_MISS, source_id, defender, 0.0f);
@@ -1438,7 +1467,7 @@ bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, 
 
     if (total_mortars > 0) {
         // パターンB: ウスが存在する場合 (99被弾、1枚消費)
-        int r = std::uniform_int_distribution<int>(0, total_mortars - 1)(state.rng);
+        int r = roll_range(state, RollKind::MORTAR_VICTIM, 0, total_mortars - 1);
         int victim = (r < count_attacker) ? attacker : defender;
 
         state.hp[victim] = std::clamp(state.hp[victim] - 99, 0, 99);
@@ -1460,7 +1489,8 @@ bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, 
 
         int actual_target = attacker;
         if (!alive_players.empty()) {
-            int r = std::uniform_int_distribution<int>(0, alive_players.size() - 1)(state.rng);
+            int r = roll_range(state, RollKind::PESTLE_TARGET, 0,
+                               static_cast<int>(alive_players.size()) - 1);
             actual_target = alive_players[r];
         }
 
@@ -1504,7 +1534,7 @@ bool execute_attack_from_staged_cards(InternalState &state, int attacker, int ta
         state.mp[attacker] = std::clamp(state.mp[attacker] - info.mp_cost, 0, 99);
     }
 
-    if (!info.hit) {
+    if (!roll_staged_attack_hits(state, attacker)) {
         // ミス：防御フェイズを起動せず終了
         state.current_phase = GamePhase::PHASE_END;
         if (is_guardian) state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
@@ -1613,6 +1643,44 @@ static const int NEPTUNE_ACTIONS[5] = {
 };
 
 /**
+ * @brief 金星神の行動カード表（act_idx 1〜5 に対応）。
+ *
+ * わいろ・罰金だけは相手を対象に取るため防御フェイズを起動し、残る3つは
+ * お金が増えるだけで反射の機会がありません。解決の流れが行動ごとに違うので
+ * 共通化はできませんが、act_idx とカードの対応はこの表を唯一の定義元とします。
+ */
+static const int VENUS_ACTIONS[5] = {
+    ID_COIN_SCATTERING,  // 小銭ばらまき: 両者にお金+1
+    ID_LUXURY_ACCESSORY, // 豪華なアクセサリー: 持ち主にお金+20
+    ID_BRIBE,            // わいろ: 相手にお金+5（反射されうる）
+    ID_LITTLE_SOMETHING, // つまらない物: 持ち主にお金+8
+    ID_FINE,             // 罰金: 相手からお金3を没収（反射されうる）
+};
+
+/**
+ * @brief 指定した守護神の5行動に対応するカードID一覧を返します（該当しなければ空）。
+ *
+ * テスト側が「行動カードの名前」から RollKind::GUARDIAN_ACT_CHOICE の指示値を
+ * 逆引きするために公開しています。act_idx を直書きさせると、この表の並びを
+ * 変えた瞬間に別の行動を検証する黙ったバグになるため、必ずここを参照させます。
+ */
+std::vector<int> get_guardian_action_cards(int guardian) {
+    GuardianType g = static_cast<GuardianType>(guardian);
+    if (g == GUARDIAN_NEPTUNE) {
+        return std::vector<int>(NEPTUNE_ACTIONS, NEPTUNE_ACTIONS + 5);
+    }
+    if (g == GUARDIAN_VENUS) {
+        return std::vector<int>(VENUS_ACTIONS, VENUS_ACTIONS + 5);
+    }
+    for (const GuardianAttackActions &entry : GUARDIAN_ATTACK_ACTIONS) {
+        if (entry.guardian == g) {
+            return std::vector<int>(entry.cards, entry.cards + 5);
+        }
+    }
+    return {};
+}
+
+/**
  * @brief 指定した守護神が攻撃系（行動カード表を持つ）ならその表を返し、そうでなければ nullptr を返します。
  */
 static const int *find_guardian_attack_actions(GuardianType guardian) {
@@ -1636,6 +1704,17 @@ static const int MOON_MIRACLES[] = {
 static constexpr int MOON_MIRACLE_COUNT = static_cast<int>(sizeof(MOON_MIRACLES) / sizeof(MOON_MIRACLES[0]));
 
 /**
+ * @brief 月神が発動しうる奇跡の一覧を返します。
+ *
+ * テスト側が「奇跡の名前」から RollKind::MOON_MIRACLE の指示値（インデックス）を
+ * 逆引きするために公開しています。テストにインデックスを直書きさせると、この配列の
+ * 順序を変えた瞬間に別の奇跡を検証する黙ったバグになるため、必ずここを参照させます。
+ */
+std::vector<int> get_moon_miracles() {
+    return std::vector<int>(MOON_MIRACLES, MOON_MIRACLES + MOON_MIRACLE_COUNT);
+}
+
+/**
  * @brief 相手を攻撃せず、使用者自身に効果を及ぼす補助系の奇跡かを判定します。
  */
 static bool is_support_miracle(int card_id) {
@@ -1643,13 +1722,35 @@ static bool is_support_miracle(int card_id) {
            card_id == ID_SPRING || card_id == ID_TREASURE;
 }
 
+/**
+ * @brief HP吸収効果を持つカードの一覧。
+ *
+ * 与えたダメージと同じだけ攻撃側のHPが回復する。仮置きから組み立てる攻撃と、
+ * 仮置きを経由しない守護神の行動の双方から参照するため、ここに一元化している。
+ */
+static const int ABSORPTION_SOURCES[] = {
+    ID_ABSORPTION,       // ＜吸収＞（奇跡）
+    ID_VINE_SHOOT,       // つるシュート
+    ID_GHOST_SWORD,      // ゴーストソード
+    ID_REAL_GHOST_SWORD, // 真ゴーストソード
+    ID_TENTACLES,        // 触手（木星神）
+    ID_BLESSING,         // 祝福（天王神）
+};
+static constexpr int ABSORPTION_SOURCE_COUNT =
+    static_cast<int>(sizeof(ABSORPTION_SOURCES) / sizeof(ABSORPTION_SOURCES[0]));
+
 bool is_absorption_source(int card_id) {
-    return card_id == ID_ABSORPTION ||       // ＜吸収＞（奇跡）
-           card_id == ID_VINE_SHOOT ||       // ツルの芽
-           card_id == ID_GHOST_SWORD ||      // ゴーストソード
-           card_id == ID_REAL_GHOST_SWORD || // 真ゴーストソード
-           card_id == ID_TENTACLES ||        // 触手（木星神）
-           card_id == ID_BLESSING;           // 祝福（天王神）
+    for (int i = 0; i < ABSORPTION_SOURCE_COUNT; ++i) {
+        if (ABSORPTION_SOURCES[i] == card_id) return true;
+    }
+    return false;
+}
+
+/**
+ * @brief HP吸収を持つカードの一覧（テストが全種を網羅するために公開）。
+ */
+std::vector<int> get_absorption_sources() {
+    return std::vector<int>(ABSORPTION_SOURCES, ABSORPTION_SOURCES + ABSORPTION_SOURCE_COUNT);
 }
 
 bool resolve_turn_end_steps(InternalState &state) {
@@ -1667,7 +1768,7 @@ bool resolve_turn_end_steps(InternalState &state) {
             case TurnEndSubstep::SICKNESS_WORSEN: { // 病気悪化判定
                 int me = state.current_turn % 2;
                 if (state.hp[me] > 0 && state.sickness[me] != SICKNESS_NONE) {
-                    int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
+                    int roll = roll_range(state, RollKind::SICKNESS_WORSEN, 0, 99);
                     if (roll < SICKNESS_WORSEN_RATE) {
                         if (state.sickness[me] == SICKNESS_HEAVEN) { // 天国病悪化 -> 死亡 (発作)
                             state.hp[me] = 0;
@@ -1740,15 +1841,17 @@ bool resolve_turn_end_steps(InternalState &state) {
                 state.num_staged_cards[me] = 0;      // 被攻撃に備えて仮置き場をクリア
                 
                 if (state.hp[opp] > 0 && state.guardian[opp] > GUARDIAN_NONE) {
-                    int roll = std::uniform_int_distribution<int>(0, 99)(state.rng);
+                    int roll = roll_range(state, RollKind::GUARDIAN_ACT, 0, 99);
                     if (roll < GUARDIAN_ACT_RATE) {
-                        int roll_act = std::uniform_int_distribution<int>(0, 99)(state.rng);
-                        int act_idx = 0;
-                        if (roll_act < 30) act_idx = 1;
-                        else if (roll_act < 55) act_idx = 2;
-                        else if (roll_act < 75) act_idx = 3;
-                        else if (roll_act < 90) act_idx = 4;
-                        else act_idx = 5;
+                        int roll_act = roll_range(state, RollKind::GUARDIAN_ACT_CHOICE, 0, 99);
+                        // 閾値表は constants.h に一元化してある（テスト側もこの表から代表値を導出する）
+                        int act_idx = GUARDIAN_ACT_CHOICE_COUNT;
+                        for (int i = 0; i < GUARDIAN_ACT_CHOICE_COUNT; ++i) {
+                            if (roll_act < GUARDIAN_ACT_CHOICE_THRESHOLDS[i]) {
+                                act_idx = i + 1;
+                                break;
+                            }
+                        }
 
                         GuardianType g_id = state.guardian[opp];
                         
@@ -1767,25 +1870,29 @@ bool resolve_turn_end_steps(InternalState &state) {
                             push_event(state, opp, EventType::EFFECT_GUARDIAN, source_id, opp, static_cast<float>(g_id));
                         }
                         else if (g_id == GUARDIAN_VENUS) { // 金星神
+                            // act_idx とカードの対応は VENUS_ACTIONS が唯一の定義元。
+                            // 以前は各分岐で act_idx の数値を直接見ていたため、対応表が
+                            // 分岐に散らばっていた。
+                            int venus_card = VENUS_ACTIONS[act_idx - 1];
+
                             // わいろ・罰金は相手を対象に取るため、スーパーミラー等で反射される機会がある
-                            if (act_idx == 3) { // わいろ: 相手にお金+5
+                            if (venus_card == ID_BRIBE) { // わいろ: 相手にお金+5
                                 return setup_guardian_attack_defense(state, opp, me, ID_BRIBE, GamePhase::PHASE_DEFENSE, false, 5);
                             }
-                            if (act_idx == 5) { // 罰金: 相手からお金3を没収
+                            if (venus_card == ID_FINE) { // 罰金: 相手からお金3を没収
                                 return setup_guardian_attack_defense(state, opp, me, ID_FINE, GamePhase::PHASE_DEFENSE, false, 3);
                             }
 
                             // 残る3行動はお金が増えるだけで、反射の機会はない
-                            if (act_idx == 1) { // 小銭ばらまき: 両者にお金+1
+                            if (venus_card == ID_COIN_SCATTERING) { // 小銭ばらまき: 両者にお金+1
                                 apply_card_effect_to_target(state, 0, ID_COIN_SCATTERING);
                                 apply_card_effect_to_target(state, 1, ID_COIN_SCATTERING);
                                 state.pending_attack_source_id = ID_COIN_SCATTERING;
                                 push_event(state, opp, EventType::EFFECT_GUARDIAN, ID_COIN_SCATTERING, -1, static_cast<float>(g_id));
-                            } else { // 豪華なアクセサリー / ちょっとしたもの: 持ち主自身にお金
-                                int source_id = (act_idx == 2) ? ID_LUXURY_ACCESSORY : ID_LITTLE_SOMETHING;
-                                apply_card_effect_to_target(state, opp, source_id);
-                                state.pending_attack_source_id = source_id;
-                                push_event(state, opp, EventType::EFFECT_GUARDIAN, source_id, opp, static_cast<float>(g_id));
+                            } else { // 豪華なアクセサリー / つまらない物: 持ち主自身にお金
+                                apply_card_effect_to_target(state, opp, venus_card);
+                                state.pending_attack_source_id = venus_card;
+                                push_event(state, opp, EventType::EFFECT_GUARDIAN, venus_card, opp, static_cast<float>(g_id));
                             }
                         }
 
@@ -1816,7 +1923,8 @@ bool resolve_turn_end_steps(InternalState &state) {
                                             }
                                         }
                                         if (!candidates.empty()) {
-                                            int rand_idx = std::uniform_int_distribution<int>(0, candidates.size() - 1)(state.rng);
+                                            int rand_idx = roll_range(state, RollKind::EARTH_DISCARD_SLOT, 0,
+                                                                      static_cast<int>(candidates.size()) - 1);
                                             int discard_slot = candidates[rand_idx];
                                             add_card_to_hand_slot(state, opp, discard_slot, drawn_card_id, true);
                                             state.is_known_to_opp[opp][discard_slot] = false;
@@ -1829,10 +1937,12 @@ bool resolve_turn_end_steps(InternalState &state) {
                                     int sum = state.hp[opp] + state.mp[opp] + state.money[opp];
                                     auto hp_range = get_exchange_hp_range(sum);
                                     if (hp_range.first <= hp_range.second) {
-                                        int chosen_hp = std::uniform_int_distribution<int>(hp_range.first, hp_range.second)(state.rng);
+                                        int chosen_hp = roll_range(state, RollKind::EARTH_EXCHANGE_HP,
+                                                                   hp_range.first, hp_range.second);
                                         auto mp_range = get_exchange_mp_range(sum, chosen_hp);
                                         if (mp_range.first <= mp_range.second) {
-                                            int chosen_mp = std::uniform_int_distribution<int>(mp_range.first, mp_range.second)(state.rng);
+                                            int chosen_mp = roll_range(state, RollKind::EARTH_EXCHANGE_MP,
+                                                                       mp_range.first, mp_range.second);
                                             state.hp[opp] = chosen_hp;
                                             state.mp[opp] = chosen_mp;
                                             state.money[opp] = sum - chosen_hp - chosen_mp;
@@ -1854,7 +1964,8 @@ bool resolve_turn_end_steps(InternalState &state) {
                                         }
                                     }
                                     if (!sell_candidates.empty()) {
-                                        int rand_idx = std::uniform_int_distribution<int>(0, static_cast<int>(sell_candidates.size()) - 1)(state.rng);
+                                        int rand_idx = roll_range(state, RollKind::EARTH_SELL_SLOT, 0,
+                                                                  static_cast<int>(sell_candidates.size()) - 1);
                                         int sell_slot = sell_candidates[rand_idx];
 
                                         state.attacker_id = opp;
@@ -1926,7 +2037,8 @@ bool resolve_turn_end_steps(InternalState &state) {
                             state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
                         }
                         else if (g_id == GUARDIAN_MOON) { // 月神
-                            int chosen_miracle = MOON_MIRACLES[std::uniform_int_distribution<int>(0, MOON_MIRACLE_COUNT - 1)(state.rng)];
+                            int chosen_miracle = MOON_MIRACLES[
+                                roll_range(state, RollKind::MOON_MIRACLE, 0, MOON_MIRACLE_COUNT - 1)];
 
                             // オーラ・蜃気楼は攻撃奇跡ではないため、満月刀の物理攻撃に読み替える
                             if (chosen_miracle == ID_AURA) { // オーラ: 威力2倍相当の ATK20

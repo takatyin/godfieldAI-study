@@ -44,7 +44,8 @@ void step_game(InternalState& state, ActionType action) {
             if (valids.empty()) {
                 break;
             }
-            int idx = std::uniform_int_distribution<int>(0, valids.size() - 1)(state.rng);
+            int idx = roll_range(state, RollKind::MUSHROOM_ACTION, 0,
+                                 static_cast<int>(valids.size()) - 1);
             current_action = static_cast<ActionType>(valids[idx]);
         } else {
             // ご乱心が終了し、かつ最初のステップでない場合は操作を待つためループを抜ける

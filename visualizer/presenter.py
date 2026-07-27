@@ -60,16 +60,15 @@ def compute_staged_total_badge(staged_cards, player_id, game_state):
     if phase == "PHASE_DISCARD":
         return None
 
-    sell_price = getattr(game_state, "pending_sell_price", 0)
     has_sell = any(c and c.get("name") == "売る" for c in staged_cards)
     if (has_sell or "SELL" in phase):
-        calc_price = 0
-        for idx, c in enumerate(staged_cards):
-            if c:
-                if idx == 0 and c.get("name") in ["売る", "買う"]:
-                    continue
-                calc_price += c.get("price", 0)
-        total_price = sell_price if sell_price > 0 else calc_price
+        # 取引カード自体には値段がつかないので、先頭の「売る」「買う」は数えない。
+        # 価格の表示はこの計算が唯一の実装（C++ 側は価格を保持しない）。
+        total_price = sum(
+            c.get("price", 0)
+            for idx, c in enumerate(staged_cards)
+            if c and not (idx == 0 and c.get("name") in ["売る", "買う"])
+        )
         return {
             "label": f"¥{total_price}",
             "type": "price",

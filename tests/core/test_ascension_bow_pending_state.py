@@ -1,90 +1,97 @@
 """昇天弓の攻撃が直前の攻撃の保留状態を引き継がないことのテスト。
 
-昇天弓は「死亡時に光属性・命中率75%・攻撃力30で、所持していた弓の枚数分だけ攻撃する」
-カードであり、状態異常の付与やお金の奪取といった効果は一切持ちません。
+昇天弓は「死亡時に光属性・攻撃力30で、所持していた弓の枚数分だけ攻撃する」カードで、
+状態異常の付与やCP奪取といった効果は一切持ちません。
 
 しかし昇天弓の防御フェイズ起動処理は `pending_attack_*` 系のフィールドを個別に
 設定しており、状態異常（`pending_attack_curse`）とCP奪取（`pending_take_cp`）の
 リセットが漏れていました。これらを初期化する `cleanup_phase_end()` は
 ターン終了処理の CLEANUP ステップでしか呼ばれず、昇天弓が発射される
 DEATH_CHECK_START はそれより前に走るため、直前の攻撃の効果が弓に引き継がれます。
+
+【移行メモ】
+従来は昇天弓（命中率75%）が命中するシードを最大2000回探索していました。
+命中側しか検証できていなかったため、外れた場合に保留状態がどうなるかは
+未検証のままでした。
 """
 
-import godfield_core
-from godfield_core import ActionType
-from tests.core.test_utils import SimulationRunner, find_card_by_name
+from godfield_core import Element, GamePhase, RollKind, SicknessType
+from tests.core.dsl import Side, card_feature, card_id, element_of
 
-SICKNESS_NONE = godfield_core.SicknessType.SICKNESS_NONE
-SICKNESS_COLD = godfield_core.SicknessType.SICKNESS_COLD
-
-SEED_SEARCH_LIMIT = 2000
+FILLER = "armor/wood-shield"
+BOW_POWER = 30  # 死亡時反撃はカードマスタの攻撃力ではなくエンジン側の固定値
 
 
-def _setup_cursed_attack_then_bow(sim: SimulationRunner, seed: int):
-    """「激突風剣」で攻撃した直後に、相手の昇天弓が自分へ飛んでくる盤面を作ります。
+def cursed_attack_then_bow(board, *, bow_hits: bool):
+    """「激突風剣」で攻撃した直後に、相手の昇天弓が自分へ飛んでくる盤面を解決します。
 
     激突風剣: 攻撃力13・命中率100%・無属性・風邪を付与。
     昇天弓を事前にキューへ積んでおくことで、ターン終了時の死亡判定で発射されます。
     """
-    gale_sword_id = find_card_by_name("weapons/severe-gale-sword")
-
-    sim.reset_state()
-    sim.state.seed_rng(seed)
-    sim.state.current_phase = godfield_core.GamePhase.PHASE_MAIN
-    sim.state.current_actor_id = 0
-    sim.state.set_hp(0, 90)  # 昇天弓の30ダメージでは死なないHP
-    sim.state.set_hp(1, 40)
-    sim.state.set_sickness(0, SICKNESS_NONE)
-    sim.state.set_sickness(1, SICKNESS_NONE)
-
-    sim.set_hand(0, [gale_sword_id])
-    sim.set_hand(1, [])  # 防具を持たせず、防御は自動確定させる
-
-    # プレイヤー1の昇天弓を発射待ちキューに積む
-    sim.state.set_pending_ascension_bows(1, 1)
+    g = board(
+        p0=Side(hp=90, hand=["weapons/severe-gale-sword"]),  # 弓の30では死なないHP
+        p1=Side(hp=40, hand=[], pending_ascension_bows=1),   # 防具なしで素受けさせる
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.ascension_bow(bow_hits)
+    g.attack("weapons/severe-gale-sword")
+    g.take_hit()  # P1 が防御せず被弾
+    if g.state.current_phase == GamePhase.PHASE_DEFENSE:
+        g.take_hit()  # 弓が命中した場合は P0 が被弾
+    return g
 
 
-def _resolve_attack_and_bow(sim: SimulationRunner):
-    """攻撃 → プレイヤー1の防御確定 → （弓命中時）プレイヤー0の防御確定まで進めます。"""
-    sim.perform_attack([0])
-    sim.step(ActionType.ACTION_CONFIRM)  # プレイヤー1が防御を確定（防具なしのため素受け）
-    if sim.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE:
-        # 昇天弓が命中し、プレイヤー0に防御フェイズが回ってきた
-        sim.step(ActionType.ACTION_CONFIRM)
+def test_gale_sword_applies_cold_to_the_target(board):
+    """前提の確認: 激突風剣が相手に命中し、風邪を付与すること。"""
+    power = card_feature("weapons/severe-gale-sword", "attack_power")
+    g = cursed_attack_then_bow(board, bow_hits=False)
+
+    g.expect(p1_hp=40 - power, p1_sickness=SicknessType.SICKNESS_COLD)
+    assert element_of("weapons/severe-gale-sword") == Element.ELEM_NONE
 
 
-def _find_seed_where_bow_hits() -> int:
-    """昇天弓（命中率75%）が命中し、プレイヤー0がダメージを受けるシードを探します。"""
-    sim = SimulationRunner()
-    for seed in range(SEED_SEARCH_LIMIT):
-        _setup_cursed_attack_then_bow(sim, seed)
-        _resolve_attack_and_bow(sim)
-        if sim.state.get_hp(0) < 90:  # 昇天弓が命中している
-            return seed
+def test_ascension_bow_does_not_inherit_the_previous_attack_curse(board):
+    """昇天弓が直前の攻撃の状態異常付与を引き継がないことを検証します。
 
-    raise ValueError("Could not find a seed where the ascension bow hits player 0")
-
-
-def test_ascension_bow_does_not_inherit_previous_attack_curse():
+    攻撃を受けた P1 には風邪が付きますが、昇天弓には状態異常付与の効果がないため、
+    被弾した P0 は健康なままである必要があります。
     """
-    検証内容: 昇天弓が直前の攻撃の状態異常付与を引き継がないこと。
-    - プレイヤー0が「激突風剣」（風邪付与）でプレイヤー1を攻撃した直後、
-      プレイヤー1の昇天弓がプレイヤー0に命中する状況を作ります。
-    - 攻撃を受けたプレイヤー1には風邪が付与されますが、昇天弓には状態異常付与の
-      効果がないため、被弾したプレイヤー0は健康なままである必要があります。
+    g = cursed_attack_then_bow(board, bow_hits=True)
+
+    # 昇天弓は状態異常を付与しない
+    g.expect(p0_sickness=SicknessType.SICKNESS_NONE)
+    # 風邪を引いていないのでターン終了時の病気ダメージもなく、弓の30ダメージのみ
+    g.expect(p0_hp=90 - BOW_POWER)
+
+
+def test_ascension_bow_miss_leaves_the_shooter_unharmed(board):
+    """昇天弓が外れた場合、P0 は無傷で状態異常も付かないことを検証します。
+
+    従来は命中するシードだけを探索していたため、外れ側は未検証でした。
     """
-    seed = _find_seed_where_bow_hits()
+    g = cursed_attack_then_bow(board, bow_hits=False)
 
-    sim = SimulationRunner()
-    _setup_cursed_attack_then_bow(sim, seed)
-    _resolve_attack_and_bow(sim)
+    g.expect(p0_hp=90, p0_sickness=SicknessType.SICKNESS_NONE, p1_bows=0)
+    assert g.rng.consumed(RollKind.ASCENSION_BOW_HIT) == 1
 
-    # 前提: 激突風剣がプレイヤー1に命中し、風邪を付与している
-    assert sim.state.get_hp(1) == 27  # 40 - 13
-    assert sim.state.get_sickness(1) == SICKNESS_COLD
 
-    # 昇天弓は状態異常を付与しないため、プレイヤー0は健康なまま
-    assert sim.state.get_sickness(0) == SICKNESS_NONE
+def test_ascension_bow_fires_with_light_element_and_fixed_power(board):
+    """昇天弓の反撃が光属性・固定威力30で組まれることを検証します。"""
+    g = board(
+        p0=Side(hp=90, hand=["weapons/severe-gale-sword"]),
+        p1=Side(hp=40, hand=[], pending_ascension_bows=1),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.ascension_bow(True)
+    g.attack("weapons/severe-gale-sword")
+    g.take_hit()
 
-    # 風邪を引いていなければターン終了時の病気ダメージもないため、弓の30ダメージのみ
-    assert sim.state.get_hp(0) == 60  # 90 - 30
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        attacker=1,
+        defender=0,
+        pending_power=BOW_POWER,
+        pending_element=Element.ELEM_LIGHT,
+    )
+    # 攻撃元が直前の激突風剣ではなく昇天弓に差し替わっていること
+    assert g.state.pending_attack_source_id == card_id("weapons/ascension-bow")

@@ -2,12 +2,13 @@
 GodField core engine and RL environment pool
 """
 from __future__ import annotations
+import collections.abc
 import numpy
 import numpy.typing
 import typing
 from . import CurseEvent
 from . import SicknessEvent
-__all__: list[str] = ['ACTION_CONFIRM', 'ACTION_DEAL_NO', 'ACTION_DEAL_YES', 'ACTION_DISCARD', 'ACTION_NUM_0', 'ACTION_NUM_1', 'ACTION_NUM_10', 'ACTION_NUM_11', 'ACTION_NUM_12', 'ACTION_NUM_13', 'ACTION_NUM_14', 'ACTION_NUM_15', 'ACTION_NUM_16', 'ACTION_NUM_17', 'ACTION_NUM_18', 'ACTION_NUM_19', 'ACTION_NUM_2', 'ACTION_NUM_20', 'ACTION_NUM_21', 'ACTION_NUM_22', 'ACTION_NUM_23', 'ACTION_NUM_24', 'ACTION_NUM_25', 'ACTION_NUM_26', 'ACTION_NUM_27', 'ACTION_NUM_28', 'ACTION_NUM_29', 'ACTION_NUM_3', 'ACTION_NUM_30', 'ACTION_NUM_31', 'ACTION_NUM_32', 'ACTION_NUM_33', 'ACTION_NUM_34', 'ACTION_NUM_35', 'ACTION_NUM_36', 'ACTION_NUM_37', 'ACTION_NUM_38', 'ACTION_NUM_39', 'ACTION_NUM_4', 'ACTION_NUM_40', 'ACTION_NUM_41', 'ACTION_NUM_42', 'ACTION_NUM_43', 'ACTION_NUM_44', 'ACTION_NUM_45', 'ACTION_NUM_46', 'ACTION_NUM_47', 'ACTION_NUM_48', 'ACTION_NUM_49', 'ACTION_NUM_5', 'ACTION_NUM_50', 'ACTION_NUM_51', 'ACTION_NUM_52', 'ACTION_NUM_53', 'ACTION_NUM_54', 'ACTION_NUM_55', 'ACTION_NUM_56', 'ACTION_NUM_57', 'ACTION_NUM_58', 'ACTION_NUM_59', 'ACTION_NUM_6', 'ACTION_NUM_60', 'ACTION_NUM_61', 'ACTION_NUM_62', 'ACTION_NUM_63', 'ACTION_NUM_64', 'ACTION_NUM_65', 'ACTION_NUM_66', 'ACTION_NUM_67', 'ACTION_NUM_68', 'ACTION_NUM_69', 'ACTION_NUM_7', 'ACTION_NUM_70', 'ACTION_NUM_71', 'ACTION_NUM_72', 'ACTION_NUM_73', 'ACTION_NUM_74', 'ACTION_NUM_75', 'ACTION_NUM_76', 'ACTION_NUM_77', 'ACTION_NUM_78', 'ACTION_NUM_79', 'ACTION_NUM_8', 'ACTION_NUM_80', 'ACTION_NUM_81', 'ACTION_NUM_82', 'ACTION_NUM_83', 'ACTION_NUM_84', 'ACTION_NUM_85', 'ACTION_NUM_86', 'ACTION_NUM_87', 'ACTION_NUM_88', 'ACTION_NUM_89', 'ACTION_NUM_9', 'ACTION_NUM_90', 'ACTION_NUM_91', 'ACTION_NUM_92', 'ACTION_NUM_93', 'ACTION_NUM_94', 'ACTION_NUM_95', 'ACTION_NUM_96', 'ACTION_NUM_97', 'ACTION_NUM_98', 'ACTION_NUM_99', 'ACTION_PRAY', 'ACTION_SELECT_HAND_0', 'ACTION_SELECT_HAND_1', 'ACTION_SELECT_HAND_10', 'ACTION_SELECT_HAND_11', 'ACTION_SELECT_HAND_12', 'ACTION_SELECT_HAND_13', 'ACTION_SELECT_HAND_14', 'ACTION_SELECT_HAND_15', 'ACTION_SELECT_HAND_16', 'ACTION_SELECT_HAND_17', 'ACTION_SELECT_HAND_2', 'ACTION_SELECT_HAND_3', 'ACTION_SELECT_HAND_4', 'ACTION_SELECT_HAND_5', 'ACTION_SELECT_HAND_6', 'ACTION_SELECT_HAND_7', 'ACTION_SELECT_HAND_8', 'ACTION_SELECT_HAND_9', 'ACTION_SPACE_SIZE', 'ACTION_TARGET_OPP', 'ACTION_TARGET_SELF', 'ATTACK_HIT', 'ATTACK_MISS', 'ActionType', 'BLACK_HOLE', 'BLOCK_ATTACK', 'BOUNCE_ATTACK', 'BUY_CARD', 'CARD_EMPTY', 'CLEANUP', 'CLEANUP_DEATH_CHECK', 'CONFIRM_ATTACK', 'CONFIRM_DEFENSE', 'CURSE_COLD', 'CURSE_DARK_CLOUD', 'CURSE_DREAM', 'CURSE_FEVER', 'CURSE_FLASH', 'CURSE_FOG', 'CURSE_HEAVEN', 'CURSE_HELL', 'CURSE_NONE', 'CurseEvent', 'CurseType', 'DEATH_CHECK_START', 'DENSE_FOG', 'DISCARD_CARD', 'DRAW_CARD', 'EARTH', 'ECLIPSE', 'EFFECT_CURSE', 'EFFECT_GUARDIAN', 'EFFECT_SICKNESS', 'ELEM_DARKNESS', 'ELEM_FIRE', 'ELEM_LIGHT', 'ELEM_NONE', 'ELEM_STONE', 'ELEM_WATER', 'ELEM_WOOD', 'EXCHANGE', 'Element', 'EnvPool', 'EventType', 'FINAL_DEATH_CHECK', 'GIGANTIC_TUB', 'GOLD_MINE', 'GUARDIAN_ACT', 'GUARDIAN_ENTER', 'GUARDIAN_LEAVE', 'GameEvent', 'GamePhase', 'GuardianType', 'HEAL_HP', 'HEAL_MP', 'HISTORY_LENGTH', 'HitCurse', 'InternalState', 'JUPITER', 'MAGNETIC_STORM', 'MARS', 'MAX_HAND_SIZE', 'MERCURY', 'MOON', 'MUSHROOM', 'NEPTUNE', 'NONE', 'OBSERVATION_FEATURE_SIZE', 'OBSERVATION_SIZE', 'Observation', 'PASS_DEFENSE', 'PHASE_ATTACK_PLUS', 'PHASE_BUY', 'PHASE_BUY_SELECT_MIRROR', 'PHASE_DEFENSE', 'PHASE_DISCARD', 'PHASE_END', 'PHASE_EXCHANGE_HP', 'PHASE_EXCHANGE_MP', 'PHASE_GROUP_MIRACLE_PLUS', 'PHASE_GROUP_WEAPON', 'PHASE_GUARDIAN', 'PHASE_MAIN', 'PHASE_MAIN_TARGET_SELECT', 'PHASE_MIRACLE_DEFENSE', 'PHASE_MIRACLE_PLUS', 'PHASE_SELL_SELECT', 'PHASE_SELL_SELECT_MIRROR', 'PHASE_SUNDRY_SELECT_MIRROR', 'PLUTO', 'PhenomenonType', 'REACTION_BLOCK', 'REACTION_BOUNCE', 'REACTION_NONE', 'REACTION_REFLECT', 'REFLECT_DAMAGE', 'REFLECT_MIRROR', 'REFUSE_DEAL', 'RING_EFFECT', 'ReactionType', 'SATURN', 'SELL_CARD', 'SICKNESS_COLD', 'SICKNESS_DAMAGE', 'SICKNESS_FEVER', 'SICKNESS_HEAVEN', 'SICKNESS_HELL', 'SICKNESS_NONE', 'SICKNESS_WORSEN', 'STAGE_CARD', 'SUNSET', 'SicknessEvent', 'SicknessType', 'TAKE_DAMAGE', 'TIMING_ATK_DEFENCE', 'TIMING_ATK_PLUS', 'TIMING_MAIN_ATK', 'TIMING_MAIN_DEAL', 'TIMING_MAIN_MIRACLE', 'TIMING_MAIN_SUNDRY', 'TIMING_MIRACLE_DEFENCE', 'TIMING_MIRACLE_PLUS', 'TORNADO', 'TRIGGER_PHENOMENON', 'TURN_TRANSITION', 'TurnEndSubstep', 'UNSTAGE_CARD', 'URANUS', 'VENUS', 'WARM_CURRENT', 'clear_state', 'get_card_name', 'get_legal_actions', 'get_observation', 'get_opponent_staged_cards_for_obs', 'get_registry_size', 'get_single_legal_action', 'init_game_logic', 'step_game']
+__all__: list[str] = ['ACTION_CONFIRM', 'ACTION_DEAL_NO', 'ACTION_DEAL_YES', 'ACTION_DISCARD', 'ACTION_NUM_0', 'ACTION_NUM_1', 'ACTION_NUM_10', 'ACTION_NUM_11', 'ACTION_NUM_12', 'ACTION_NUM_13', 'ACTION_NUM_14', 'ACTION_NUM_15', 'ACTION_NUM_16', 'ACTION_NUM_17', 'ACTION_NUM_18', 'ACTION_NUM_19', 'ACTION_NUM_2', 'ACTION_NUM_20', 'ACTION_NUM_21', 'ACTION_NUM_22', 'ACTION_NUM_23', 'ACTION_NUM_24', 'ACTION_NUM_25', 'ACTION_NUM_26', 'ACTION_NUM_27', 'ACTION_NUM_28', 'ACTION_NUM_29', 'ACTION_NUM_3', 'ACTION_NUM_30', 'ACTION_NUM_31', 'ACTION_NUM_32', 'ACTION_NUM_33', 'ACTION_NUM_34', 'ACTION_NUM_35', 'ACTION_NUM_36', 'ACTION_NUM_37', 'ACTION_NUM_38', 'ACTION_NUM_39', 'ACTION_NUM_4', 'ACTION_NUM_40', 'ACTION_NUM_41', 'ACTION_NUM_42', 'ACTION_NUM_43', 'ACTION_NUM_44', 'ACTION_NUM_45', 'ACTION_NUM_46', 'ACTION_NUM_47', 'ACTION_NUM_48', 'ACTION_NUM_49', 'ACTION_NUM_5', 'ACTION_NUM_50', 'ACTION_NUM_51', 'ACTION_NUM_52', 'ACTION_NUM_53', 'ACTION_NUM_54', 'ACTION_NUM_55', 'ACTION_NUM_56', 'ACTION_NUM_57', 'ACTION_NUM_58', 'ACTION_NUM_59', 'ACTION_NUM_6', 'ACTION_NUM_60', 'ACTION_NUM_61', 'ACTION_NUM_62', 'ACTION_NUM_63', 'ACTION_NUM_64', 'ACTION_NUM_65', 'ACTION_NUM_66', 'ACTION_NUM_67', 'ACTION_NUM_68', 'ACTION_NUM_69', 'ACTION_NUM_7', 'ACTION_NUM_70', 'ACTION_NUM_71', 'ACTION_NUM_72', 'ACTION_NUM_73', 'ACTION_NUM_74', 'ACTION_NUM_75', 'ACTION_NUM_76', 'ACTION_NUM_77', 'ACTION_NUM_78', 'ACTION_NUM_79', 'ACTION_NUM_8', 'ACTION_NUM_80', 'ACTION_NUM_81', 'ACTION_NUM_82', 'ACTION_NUM_83', 'ACTION_NUM_84', 'ACTION_NUM_85', 'ACTION_NUM_86', 'ACTION_NUM_87', 'ACTION_NUM_88', 'ACTION_NUM_89', 'ACTION_NUM_9', 'ACTION_NUM_90', 'ACTION_NUM_91', 'ACTION_NUM_92', 'ACTION_NUM_93', 'ACTION_NUM_94', 'ACTION_NUM_95', 'ACTION_NUM_96', 'ACTION_NUM_97', 'ACTION_NUM_98', 'ACTION_NUM_99', 'ACTION_PRAY', 'ACTION_SELECT_HAND_0', 'ACTION_SELECT_HAND_1', 'ACTION_SELECT_HAND_10', 'ACTION_SELECT_HAND_11', 'ACTION_SELECT_HAND_12', 'ACTION_SELECT_HAND_13', 'ACTION_SELECT_HAND_14', 'ACTION_SELECT_HAND_15', 'ACTION_SELECT_HAND_16', 'ACTION_SELECT_HAND_17', 'ACTION_SELECT_HAND_2', 'ACTION_SELECT_HAND_3', 'ACTION_SELECT_HAND_4', 'ACTION_SELECT_HAND_5', 'ACTION_SELECT_HAND_6', 'ACTION_SELECT_HAND_7', 'ACTION_SELECT_HAND_8', 'ACTION_SELECT_HAND_9', 'ACTION_SPACE_SIZE', 'ACTION_TARGET_OPP', 'ACTION_TARGET_SELF', 'APOCALYPSE_DEVIL_THRESHOLDS', 'APOCALYPSE_TURN', 'ASCENSION_BOW_TRIGGERED_POWER', 'ATTACK_HIT', 'ATTACK_MISS', 'ActionType', 'BLACK_HOLE', 'BLOCK_ATTACK', 'BOUNCE_ATTACK', 'BUY_CARD', 'CARD_EMPTY', 'CLEANUP', 'CLEANUP_DEATH_CHECK', 'CONFIRM_ATTACK', 'CONFIRM_DEFENSE', 'CURSE_COLD', 'CURSE_DARK_CLOUD', 'CURSE_DREAM', 'CURSE_FEVER', 'CURSE_FLASH', 'CURSE_FOG', 'CURSE_HEAVEN', 'CURSE_HELL', 'CURSE_NONE', 'CurseEvent', 'CurseType', 'DEATH_CHECK_START', 'DENSE_FOG', 'DISCARD_CARD', 'DRAW_CARD', 'DREAM_DISGUISE_RATE', 'EARTH', 'ECLIPSE', 'EFFECT_CURSE', 'EFFECT_GUARDIAN', 'EFFECT_SICKNESS', 'ELEM_DARKNESS', 'ELEM_FIRE', 'ELEM_LIGHT', 'ELEM_NONE', 'ELEM_STONE', 'ELEM_WATER', 'ELEM_WOOD', 'EXCHANGE', 'Element', 'EnvPool', 'EventType', 'FINAL_DEATH_CHECK', 'GIGANTIC_TUB', 'GOLD_MINE', 'GUARDIAN_ACT', 'GUARDIAN_ACT_CHOICE_THRESHOLDS', 'GUARDIAN_ENTER', 'GUARDIAN_LEAVE', 'GameEvent', 'GamePhase', 'GuardianType', 'HEAL_HP', 'HEAL_MP', 'HISTORY_LENGTH', 'HitCurse', 'InternalState', 'JUPITER', 'MAGNETIC_STORM', 'MARS', 'MAX_HAND_SIZE', 'MERCURY', 'MOON', 'MUSHROOM', 'NEPTUNE', 'NONE', 'OBSERVATION_FEATURE_SIZE', 'OBSERVATION_SIZE', 'Observation', 'PASS_DEFENSE', 'PHASE_ATTACK_PLUS', 'PHASE_BUY', 'PHASE_BUY_SELECT_MIRROR', 'PHASE_DEFENSE', 'PHASE_DISCARD', 'PHASE_END', 'PHASE_EXCHANGE_HP', 'PHASE_EXCHANGE_MP', 'PHASE_GROUP_MIRACLE_PLUS', 'PHASE_GROUP_WEAPON', 'PHASE_GUARDIAN', 'PHASE_MAIN', 'PHASE_MAIN_TARGET_SELECT', 'PHASE_MIRACLE_DEFENSE', 'PHASE_MIRACLE_PLUS', 'PHASE_SELL_SELECT', 'PHASE_SELL_SELECT_MIRROR', 'PHASE_SUNDRY_SELECT_MIRROR', 'PLUTO', 'PhenomenonType', 'REACTION_BLOCK', 'REACTION_BOUNCE', 'REACTION_NONE', 'REACTION_REFLECT', 'REFLECT_DAMAGE', 'REFLECT_MIRROR', 'REFUSE_DEAL', 'RING_EFFECT', 'ROLL_MAX', 'ROLL_MIN', 'ReactionType', 'RollKind', 'SATURN', 'SAW_BOOM_BOOM_ATTACK_COUNT', 'SELL_CARD', 'SICKNESS_COLD', 'SICKNESS_DAMAGE', 'SICKNESS_FEVER', 'SICKNESS_HEAVEN', 'SICKNESS_HELL', 'SICKNESS_NONE', 'SICKNESS_WORSEN', 'STAGE_CARD', 'SUNSET', 'SUN_AMULET_REVIVE_HP', 'SicknessEvent', 'SicknessType', 'TAKE_DAMAGE', 'TIMING_ATK_DEFENCE', 'TIMING_ATK_PLUS', 'TIMING_MAIN_ATK', 'TIMING_MAIN_DEAL', 'TIMING_MAIN_MIRACLE', 'TIMING_MAIN_SUNDRY', 'TIMING_MIRACLE_DEFENCE', 'TIMING_MIRACLE_PLUS', 'TORNADO', 'TRIGGER_PHENOMENON', 'TURN_TRANSITION', 'TurnEndSubstep', 'UNSTAGE_CARD', 'URANUS', 'VENUS', 'WARM_CURRENT', 'clear_state', 'draw_card', 'get_absorption_sources', 'get_apocalypse_devils', 'get_card_name', 'get_draw_table_size', 'get_dream_candidates', 'get_guardian_action_cards', 'get_legal_actions', 'get_moon_miracles', 'get_observation', 'get_opponent_staged_cards_for_obs', 'get_registry_size', 'get_single_legal_action', 'init_game_logic', 'rng_clear_script', 'rng_consumed', 'rng_forbid_unscripted', 'rng_force', 'rng_pick_order', 'rng_script', 'rng_unconsumed_kinds', 'step_game']
 class ActionType:
     """
     Members:
@@ -1039,12 +1040,6 @@ class InternalState:
     def pending_defense_power(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
         ...
     @property
-    def pending_sell_price(self) -> int:
-        ...
-    @pending_sell_price.setter
-    def pending_sell_price(self, arg0: typing.SupportsInt | typing.SupportsIndex) -> None:
-        ...
-    @property
     def remaining_attacks(self) -> int:
         ...
     @remaining_attacks.setter
@@ -1261,6 +1256,141 @@ class ReactionType:
     @property
     def value(self) -> int:
         ...
+class RollKind:
+    """
+    乱数消費点のラベル。どの確率判定を指示するかを表す。
+    
+    Members:
+    
+      ACCURACY
+    
+      BOUNCE
+    
+      MARS_RING
+    
+      GUARDIAN_LEAVE
+    
+      ASCENSION_BOW_HIT
+    
+      SICKNESS_WORSEN
+    
+      GUARDIAN_ACT
+    
+      GUARDIAN_ACT_CHOICE
+    
+      MOON_MIRACLE
+    
+      PHENOMENON
+    
+      PHENOMENON_TUB_TARGET
+    
+      PHENOMENON_GOLD_MINE
+    
+      PHENOMENON_ECLIPSE_G0
+    
+      PHENOMENON_ECLIPSE_G1
+    
+      PHENOMENON_MAGNETIC_STORM
+    
+      GUARDIAN_POT
+    
+      THUMP_THUMP_TEAR
+    
+      DEVIL_FAIRY
+    
+      DEVIL_PRANKSTER
+    
+      DECK_DRAW
+    
+      APOCALYPSE_DRAW
+    
+      DREAM_DISGUISE
+    
+      DREAM_FAKE_CARD
+    
+      MUSHROOM_ACTION
+    
+      MORTAR_VICTIM
+    
+      PESTLE_TARGET
+    
+      DISCARD_RANDOM_ORDER
+    
+      DISCARD_ONE_SLOT
+    
+      REVEAL_SLOT
+    
+      HAND_REPLACE_SLOT
+    
+      EARTH_DISCARD_SLOT
+    
+      EARTH_EXCHANGE_HP
+    
+      EARTH_EXCHANGE_MP
+    
+      EARTH_SELL_SLOT
+    """
+    ACCURACY: typing.ClassVar[RollKind]  # value = <RollKind.ACCURACY: 0>
+    APOCALYPSE_DRAW: typing.ClassVar[RollKind]  # value = <RollKind.APOCALYPSE_DRAW: 20>
+    ASCENSION_BOW_HIT: typing.ClassVar[RollKind]  # value = <RollKind.ASCENSION_BOW_HIT: 4>
+    BOUNCE: typing.ClassVar[RollKind]  # value = <RollKind.BOUNCE: 1>
+    DECK_DRAW: typing.ClassVar[RollKind]  # value = <RollKind.DECK_DRAW: 19>
+    DEVIL_FAIRY: typing.ClassVar[RollKind]  # value = <RollKind.DEVIL_FAIRY: 17>
+    DEVIL_PRANKSTER: typing.ClassVar[RollKind]  # value = <RollKind.DEVIL_PRANKSTER: 18>
+    DISCARD_ONE_SLOT: typing.ClassVar[RollKind]  # value = <RollKind.DISCARD_ONE_SLOT: 27>
+    DISCARD_RANDOM_ORDER: typing.ClassVar[RollKind]  # value = <RollKind.DISCARD_RANDOM_ORDER: 26>
+    DREAM_DISGUISE: typing.ClassVar[RollKind]  # value = <RollKind.DREAM_DISGUISE: 21>
+    DREAM_FAKE_CARD: typing.ClassVar[RollKind]  # value = <RollKind.DREAM_FAKE_CARD: 22>
+    EARTH_DISCARD_SLOT: typing.ClassVar[RollKind]  # value = <RollKind.EARTH_DISCARD_SLOT: 30>
+    EARTH_EXCHANGE_HP: typing.ClassVar[RollKind]  # value = <RollKind.EARTH_EXCHANGE_HP: 31>
+    EARTH_EXCHANGE_MP: typing.ClassVar[RollKind]  # value = <RollKind.EARTH_EXCHANGE_MP: 32>
+    EARTH_SELL_SLOT: typing.ClassVar[RollKind]  # value = <RollKind.EARTH_SELL_SLOT: 33>
+    GUARDIAN_ACT: typing.ClassVar[RollKind]  # value = <RollKind.GUARDIAN_ACT: 6>
+    GUARDIAN_ACT_CHOICE: typing.ClassVar[RollKind]  # value = <RollKind.GUARDIAN_ACT_CHOICE: 7>
+    GUARDIAN_LEAVE: typing.ClassVar[RollKind]  # value = <RollKind.GUARDIAN_LEAVE: 3>
+    GUARDIAN_POT: typing.ClassVar[RollKind]  # value = <RollKind.GUARDIAN_POT: 15>
+    HAND_REPLACE_SLOT: typing.ClassVar[RollKind]  # value = <RollKind.HAND_REPLACE_SLOT: 29>
+    MARS_RING: typing.ClassVar[RollKind]  # value = <RollKind.MARS_RING: 2>
+    MOON_MIRACLE: typing.ClassVar[RollKind]  # value = <RollKind.MOON_MIRACLE: 8>
+    MORTAR_VICTIM: typing.ClassVar[RollKind]  # value = <RollKind.MORTAR_VICTIM: 24>
+    MUSHROOM_ACTION: typing.ClassVar[RollKind]  # value = <RollKind.MUSHROOM_ACTION: 23>
+    PESTLE_TARGET: typing.ClassVar[RollKind]  # value = <RollKind.PESTLE_TARGET: 25>
+    PHENOMENON: typing.ClassVar[RollKind]  # value = <RollKind.PHENOMENON: 9>
+    PHENOMENON_ECLIPSE_G0: typing.ClassVar[RollKind]  # value = <RollKind.PHENOMENON_ECLIPSE_G0: 12>
+    PHENOMENON_ECLIPSE_G1: typing.ClassVar[RollKind]  # value = <RollKind.PHENOMENON_ECLIPSE_G1: 13>
+    PHENOMENON_GOLD_MINE: typing.ClassVar[RollKind]  # value = <RollKind.PHENOMENON_GOLD_MINE: 11>
+    PHENOMENON_MAGNETIC_STORM: typing.ClassVar[RollKind]  # value = <RollKind.PHENOMENON_MAGNETIC_STORM: 14>
+    PHENOMENON_TUB_TARGET: typing.ClassVar[RollKind]  # value = <RollKind.PHENOMENON_TUB_TARGET: 10>
+    REVEAL_SLOT: typing.ClassVar[RollKind]  # value = <RollKind.REVEAL_SLOT: 28>
+    SICKNESS_WORSEN: typing.ClassVar[RollKind]  # value = <RollKind.SICKNESS_WORSEN: 5>
+    THUMP_THUMP_TEAR: typing.ClassVar[RollKind]  # value = <RollKind.THUMP_THUMP_TEAR: 16>
+    __members__: typing.ClassVar[dict[str, RollKind]]  # value = {'ACCURACY': <RollKind.ACCURACY: 0>, 'BOUNCE': <RollKind.BOUNCE: 1>, 'MARS_RING': <RollKind.MARS_RING: 2>, 'GUARDIAN_LEAVE': <RollKind.GUARDIAN_LEAVE: 3>, 'ASCENSION_BOW_HIT': <RollKind.ASCENSION_BOW_HIT: 4>, 'SICKNESS_WORSEN': <RollKind.SICKNESS_WORSEN: 5>, 'GUARDIAN_ACT': <RollKind.GUARDIAN_ACT: 6>, 'GUARDIAN_ACT_CHOICE': <RollKind.GUARDIAN_ACT_CHOICE: 7>, 'MOON_MIRACLE': <RollKind.MOON_MIRACLE: 8>, 'PHENOMENON': <RollKind.PHENOMENON: 9>, 'PHENOMENON_TUB_TARGET': <RollKind.PHENOMENON_TUB_TARGET: 10>, 'PHENOMENON_GOLD_MINE': <RollKind.PHENOMENON_GOLD_MINE: 11>, 'PHENOMENON_ECLIPSE_G0': <RollKind.PHENOMENON_ECLIPSE_G0: 12>, 'PHENOMENON_ECLIPSE_G1': <RollKind.PHENOMENON_ECLIPSE_G1: 13>, 'PHENOMENON_MAGNETIC_STORM': <RollKind.PHENOMENON_MAGNETIC_STORM: 14>, 'GUARDIAN_POT': <RollKind.GUARDIAN_POT: 15>, 'THUMP_THUMP_TEAR': <RollKind.THUMP_THUMP_TEAR: 16>, 'DEVIL_FAIRY': <RollKind.DEVIL_FAIRY: 17>, 'DEVIL_PRANKSTER': <RollKind.DEVIL_PRANKSTER: 18>, 'DECK_DRAW': <RollKind.DECK_DRAW: 19>, 'APOCALYPSE_DRAW': <RollKind.APOCALYPSE_DRAW: 20>, 'DREAM_DISGUISE': <RollKind.DREAM_DISGUISE: 21>, 'DREAM_FAKE_CARD': <RollKind.DREAM_FAKE_CARD: 22>, 'MUSHROOM_ACTION': <RollKind.MUSHROOM_ACTION: 23>, 'MORTAR_VICTIM': <RollKind.MORTAR_VICTIM: 24>, 'PESTLE_TARGET': <RollKind.PESTLE_TARGET: 25>, 'DISCARD_RANDOM_ORDER': <RollKind.DISCARD_RANDOM_ORDER: 26>, 'DISCARD_ONE_SLOT': <RollKind.DISCARD_ONE_SLOT: 27>, 'REVEAL_SLOT': <RollKind.REVEAL_SLOT: 28>, 'HAND_REPLACE_SLOT': <RollKind.HAND_REPLACE_SLOT: 29>, 'EARTH_DISCARD_SLOT': <RollKind.EARTH_DISCARD_SLOT: 30>, 'EARTH_EXCHANGE_HP': <RollKind.EARTH_EXCHANGE_HP: 31>, 'EARTH_EXCHANGE_MP': <RollKind.EARTH_EXCHANGE_MP: 32>, 'EARTH_SELL_SLOT': <RollKind.EARTH_SELL_SLOT: 33>}
+    def __eq__(self, other: typing.Any) -> bool:
+        ...
+    def __getstate__(self) -> int:
+        ...
+    def __hash__(self) -> int:
+        ...
+    def __index__(self) -> int:
+        ...
+    def __init__(self, value: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    def __int__(self) -> int:
+        ...
+    def __ne__(self, other: typing.Any) -> bool:
+        ...
+    def __repr__(self) -> str:
+        ...
+    def __setstate__(self, state: typing.SupportsInt | typing.SupportsIndex) -> None:
+        ...
+    def __str__(self) -> str:
+        ...
+    @property
+    def name(self) -> str:
+        ...
+    @property
+    def value(self) -> int:
+        ...
 class SicknessType:
     """
     Members:
@@ -1366,13 +1496,41 @@ def clear_state(arg0: InternalState) -> None:
     """
     Zero out the state memory preserving RNG
     """
+def draw_card(state: InternalState) -> int:
+    """
+    山札から1枚抽選してカードIDを返します。抽選分布そのものを検証するために公開しています（テストが next_draws() で指示している場合はその値が返ります）。
+    """
+def get_absorption_sources() -> list[int]:
+    """
+    HP吸収（与えたダメージ分だけ攻撃側が回復する）を持つカードID一覧。テストが全種を網羅するために公開しています。
+    """
+def get_apocalypse_devils() -> list[int]:
+    """
+    終末の時のドローで出る悪魔カードID一覧。APOCALYPSE_DEVIL_THRESHOLDS の各区間に対応する。テストは悪魔名からこの並びのインデックスを逆引きしてRollKind::APOCALYPSE_DRAW に指示します。
+    """
 def get_card_name(arg0: typing.SupportsInt | typing.SupportsIndex) -> str:
     """
     Get card name by ID
     """
+def get_draw_table_size() -> int:
+    """
+    抽選テーブルの要素数（drop_rate の重みの総和）。
+    """
+def get_dream_candidates(card_id: typing.SupportsInt | typing.SupportsIndex) -> list[int]:
+    """
+    夢状態でそのカードが偽装されうる相手のカードID一覧（自分自身は含まない）。テストは偽装先のカード名からこの並びのインデックスを逆引きして RollKind::DREAM_FAKE_CARD に指示します。
+    """
+def get_guardian_action_cards(guardian: typing.SupportsInt | typing.SupportsIndex) -> list[int]:
+    """
+    指定した守護神の5行動に対応するカードID一覧（攻撃系6神と海王神のみ。他は空）。テストは行動カード名からこの並びのインデックスを逆引きして RollKind::GUARDIAN_ACT_CHOICE に指示します。
+    """
 def get_legal_actions(arg0: InternalState) -> list:
     """
     Get a boolean list of legal actions
+    """
+def get_moon_miracles() -> list[int]:
+    """
+    月神が発動しうる奇跡のカードID一覧。テストは奇跡名からこの並びのインデックスを逆引きして RollKind::MOON_MIRACLE に指示します。
     """
 def get_observation(arg0: InternalState, arg1: typing.SupportsInt | typing.SupportsIndex) -> Observation:
     """
@@ -1393,6 +1551,34 @@ def get_single_legal_action(arg0: InternalState) -> int:
 def init_game_logic(arg0: list) -> None:
     """
     Initialize the global card registry from JSON
+    """
+def rng_clear_script() -> None:
+    """
+    仕込んだ指示をすべて破棄し、本番と同じ挙動に戻します（各テストの終わりに必ず呼ぶ）。
+    """
+def rng_consumed(kind: RollKind) -> int:
+    """
+    その判定が実際に何回行われたかを返します。
+    """
+def rng_forbid_unscripted(forbid: bool = True) -> None:
+    """
+    指示のない乱数消費が起きた時点で例外にします。そのテストが運に一切依存しないことを機械的に証明できます。
+    """
+def rng_force(kind: RollKind, value: typing.SupportsInt | typing.SupportsIndex, optional: bool = False) -> None:
+    """
+    以後その判定が常に value を返すようにします（回数は問わない）。optional=True にすると未消費検査の対象外になります（手札補充のように、起きるかどうかがテストの主題でない背景固定に使う）。
+    """
+def rng_pick_order(kind: RollKind, preferred: collections.abc.Sequence[typing.SupportsInt | typing.SupportsIndex]) -> None:
+    """
+    シャッフル系の判定で、指定した値（手札スロット番号など）を先頭から順に並べます。残りは候補の元の順序を保つため、指示済みテストは完全に決定的になります。
+    """
+def rng_script(kind: RollKind, values: collections.abc.Sequence[typing.SupportsInt | typing.SupportsIndex], repeat_last: bool = False) -> None:
+    """
+    その判定がちょうどこの順で values 回だけ行われることを指示します。回数を超えて判定されると例外になります。repeat_last=True にすると、使い切った後は最後の値を繰り返します（先頭数回だけ意味を持たせ、残りは無害な値で埋めたい場合に使う）。
+    """
+def rng_unconsumed_kinds() -> list:
+    """
+    指示したのに使われなかった判定の名前一覧を返します。空でなければ、テストが意図したコードパスが実行されていません。
     """
 def step_game(arg0: InternalState, arg1: ActionType) -> None:
     """
@@ -1524,6 +1710,9 @@ ACTION_SELECT_HAND_9: ActionType  # value = <ActionType.ACTION_SELECT_HAND_9: 9>
 ACTION_SPACE_SIZE: int = 122
 ACTION_TARGET_OPP: ActionType  # value = <ActionType.ACTION_TARGET_OPP: 18>
 ACTION_TARGET_SELF: ActionType  # value = <ActionType.ACTION_TARGET_SELF: 19>
+APOCALYPSE_DEVIL_THRESHOLDS: list = [7, 12, 15, 20, 25]
+APOCALYPSE_TURN: int = 150
+ASCENSION_BOW_TRIGGERED_POWER: int = 30
 ATTACK_HIT: EventType  # value = <EventType.ATTACK_HIT: 6>
 ATTACK_MISS: EventType  # value = <EventType.ATTACK_MISS: 7>
 BLACK_HOLE: PhenomenonType  # value = <PhenomenonType.BLACK_HOLE: 5>
@@ -1548,6 +1737,7 @@ DEATH_CHECK_START: TurnEndSubstep  # value = <TurnEndSubstep.DEATH_CHECK_START: 
 DENSE_FOG: PhenomenonType  # value = <PhenomenonType.DENSE_FOG: 1>
 DISCARD_CARD: EventType  # value = <EventType.DISCARD_CARD: 18>
 DRAW_CARD: EventType  # value = <EventType.DRAW_CARD: 17>
+DREAM_DISGUISE_RATE: int = 50
 EARTH: GuardianType  # value = <GuardianType.EARTH: 9>
 ECLIPSE: PhenomenonType  # value = <PhenomenonType.ECLIPSE: 9>
 EFFECT_CURSE: EventType  # value = <EventType.EFFECT_CURSE: 27>
@@ -1565,6 +1755,7 @@ FINAL_DEATH_CHECK: TurnEndSubstep  # value = <TurnEndSubstep.FINAL_DEATH_CHECK: 
 GIGANTIC_TUB: PhenomenonType  # value = <PhenomenonType.GIGANTIC_TUB: 4>
 GOLD_MINE: PhenomenonType  # value = <PhenomenonType.GOLD_MINE: 7>
 GUARDIAN_ACT: TurnEndSubstep  # value = <TurnEndSubstep.GUARDIAN_ACT: 4>
+GUARDIAN_ACT_CHOICE_THRESHOLDS: list = [30, 55, 75, 90, 100]
 GUARDIAN_ENTER: EventType  # value = <EventType.GUARDIAN_ENTER: 25>
 GUARDIAN_LEAVE: EventType  # value = <EventType.GUARDIAN_LEAVE: 26>
 HEAL_HP: EventType  # value = <EventType.HEAL_HP: 12>
@@ -1609,7 +1800,10 @@ REFLECT_DAMAGE: EventType  # value = <EventType.REFLECT_DAMAGE: 10>
 REFLECT_MIRROR: EventType  # value = <EventType.REFLECT_MIRROR: 23>
 REFUSE_DEAL: EventType  # value = <EventType.REFUSE_DEAL: 19>
 RING_EFFECT: EventType  # value = <EventType.RING_EFFECT: 24>
+ROLL_MAX: int = 2147483647
+ROLL_MIN: int = -2147483648
 SATURN: GuardianType  # value = <GuardianType.SATURN: 4>
+SAW_BOOM_BOOM_ATTACK_COUNT: int = 2
 SELL_CARD: EventType  # value = <EventType.SELL_CARD: 15>
 SICKNESS_COLD: SicknessType  # value = <SicknessType.SICKNESS_COLD: 1>
 SICKNESS_DAMAGE: TurnEndSubstep  # value = <TurnEndSubstep.SICKNESS_DAMAGE: 2>
@@ -1620,6 +1814,7 @@ SICKNESS_NONE: SicknessType  # value = <SicknessType.SICKNESS_NONE: 0>
 SICKNESS_WORSEN: TurnEndSubstep  # value = <TurnEndSubstep.SICKNESS_WORSEN: 1>
 STAGE_CARD: EventType  # value = <EventType.STAGE_CARD: 1>
 SUNSET: PhenomenonType  # value = <PhenomenonType.SUNSET: 0>
+SUN_AMULET_REVIVE_HP: int = 10
 TAKE_DAMAGE: EventType  # value = <EventType.TAKE_DAMAGE: 11>
 TIMING_ATK_DEFENCE: int = 64
 TIMING_ATK_PLUS: int = 16

@@ -35,6 +35,7 @@ ext_modules = [
             "godfield_core/src/env_pool.cpp",
             "godfield_core/src/game_logic.cpp",
             "godfield_core/src/card_registry.cpp",
+            "godfield_core/src/rng.cpp",
             "godfield_core/src/combat_resolution.cpp",
             "godfield_core/src/phase_handlers.cpp",
             "godfield_core/src/legal_actions.cpp",

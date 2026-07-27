@@ -1,150 +1,245 @@
-from godfield_core import ActionType, Element, GamePhase
-from tests.core.test_utils import SimulationRunner
+"""仮置き中に更新される pending 情報（攻撃力・属性・全体攻撃フラグ・防御力）の検証。
+
+【移行メモ】
+このファイルは全体が生のカードID直書き（`create_game_with_hand([23, 63])`）で
+書かれていました。カードマスタは `tools/build_cards.py` で生成されるため、
+YAML にカードを1枚挿すだけで以降のIDがずれ、テストは落ちずに「別のカードの
+組み合わせ」を検証し始めます。実際コメントの `# ID 6: 弓` は吹き矢でした。
+
+攻撃力・属性もすべて直書きだったので、カードの性能を変えたときに
+「どちらが正しいのか」が分からないまま落ちます。すべてカードマスタから
+引くようにしました。
+"""
+
+import pytest
+
+from godfield_core import Element, GamePhase
+from tests.core.dsl import Side, card_feature, element_of
+
+FILLER = "armor/wood-shield"
+
+GLAIVE = "weapons/glaive-classic"                       # 無属性 ATK7
+WAND_OF_IGNITION = "weapons/wand-of-ignition"           # 火属性 ATK2（属性を火に染める）
+WAND_OF_MYSTIC_WATER = "weapons/wand-of-mystic-water"   # 水属性 ATK5（属性を水に染める）
+BLOWGUN = "weapons/blowgun"                             # 無属性 ATK1（プラス武器）
+MAGICAL_STICK = "weapons/magical-stick"                 # 残りMPを攻撃力に変える
+METEOR = "miracles/meteor"                              # 光属性 ATK10 MP7
+FIREBALL = "miracles/fireball"                          # 火属性 ATK2 MP2
+BLAZE_BLADE = "weapons/blaze-blade"                     # 火属性 ATK5
+JAVELIN = "weapons/paleolithic-javelin"                 # 土属性 ATK5
+MIRAGE = "miracles/mirage"                              # 全体攻撃化
+AURA = "miracles/aura"                                  # 攻撃力2倍・無属性化
+
+# マジカルステッキは残りMP1につき攻撃力2を生む
+MAGICAL_STICK_POWER_PER_MP = 2
 
 
-def create_game_with_hand(card_ids):
-    """P0の手札を指定したカードID群で固定し、十分なリソース(MP/Money)を持たせたテスト環境を作成"""
-    sim = SimulationRunner()
-    sim.set_status(player=0, hp=40, mp=50, money=99)
-    sim.set_status(player=1, hp=40, mp=50, money=99)
-    sim.set_hand(0, card_ids)
-    return sim, sim.state
+def atk(card: str) -> int:
+    return card_feature(card, "attack_power")
 
-def test_staging_naginata_and_wand_of_ignition():
-    """無属性武器（なぎなたクラシック ID 23, 攻7）＋発火のワンド (ID 63, 攻2) の仮置き即時計算テスト"""
-    sim, state = create_game_with_hand([23, 63])
 
-    # 1. なぎなたクラシックを仮置き
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    assert state.pending_attack_power == 7
-    assert state.pending_attack_element == Element.ELEM_NONE
+def defense(card: str) -> int:
+    return card_feature(card, "defense_power")
 
-    # 2. 発火のワンドを重ねて仮置き ➔ 即座に火属性(ELEM_FIRE)へ染まることをアサート！
-    sim.step(ActionType.ACTION_SELECT_HAND_1)
-    assert state.pending_attack_power == 9
-    assert state.pending_attack_element == Element.ELEM_FIRE
 
-def test_staging_naginata_and_normal_fire_sword():
-    """無属性武器（なぎなたクラシック ID 23, 攻7）＋弓 (ID 6, 攻1) の仮置き即時計算テスト"""
-    sim, state = create_game_with_hand([23, 6])
+def mp_cost(card: str) -> int:
+    return card_feature(card, "mp_cost", 0) or 0
 
-    # 1. なぎなたクラシックを仮置き
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    assert state.pending_attack_power == 7
-    assert state.pending_attack_element == Element.ELEM_NONE
 
-    # 2. 弓を重ねて仮置き ➔ 攻撃力が合算されて 8 になることをアサート！
-    sim.step(ActionType.ACTION_SELECT_HAND_1)
-    assert state.pending_attack_power == 8
-    assert state.pending_attack_element == Element.ELEM_NONE
+def test_a_wand_dyes_the_whole_stack_with_its_element(board):
+    """ワンドを重ねると、仮置きの時点で攻撃全体がその属性に染まることを検証します。"""
+    assert element_of(GLAIVE) == Element.ELEM_NONE
+    assert element_of(WAND_OF_IGNITION) == Element.ELEM_FIRE
 
-def test_staging_magical_stick():
-    """マジカルステッキ (ID 55) 仮置き時に後続のMP消費カード追加でリアルタイム再計算されるかのテスト"""
-    sim, state = create_game_with_hand([55, 214])  # マジカルステッキ (ID 55), 流星 (ID 214, MP 7, 攻10)
-    sim.set_status(0, hp=40, mp=10)  # 初期 MP=10
+    g = board(
+        p0=Side(hp=40, mp=50, money=99, hand=[GLAIVE, WAND_OF_IGNITION]),
+        p1=Side(hp=40, mp=50, money=99),
+    )
+    g.rng.deck_always(FILLER)
 
-    # 1. マジカルステッキを仮置き ➔ 他のMP消費0。残存 MP10 * 2 = 20 の攻撃力！
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    assert state.pending_attack_power == 20
-    assert state.pending_attack_element == Element.ELEM_NONE
+    g.select(GLAIVE)
+    g.expect(pending_power=atk(GLAIVE), pending_element=Element.ELEM_NONE)
 
-    # 2. <流星> (ID 214, MP 7, 攻10) を重ねて仮置き
-    # ➔ 流星の MP 7 消費により、マジカルステッキで使える残存 MP が (10 - 7) = 3 に減少！
-    # ➔ マジカルステッキ (3 * 2 = 6) + 流星 (10) = 合計攻撃力 16 に即座に再計算されることを確認！
-    sim.step(ActionType.ACTION_SELECT_HAND_1)
-    assert state.pending_attack_power == 16
+    g.select(WAND_OF_IGNITION)
+    g.expect(
+        pending_power=atk(GLAIVE) + atk(WAND_OF_IGNITION),
+        pending_element=Element.ELEM_FIRE,
+    )
 
-def test_staging_armor_defense_power():
-    """防具重ねがけ仮置き時の合計防御力計算テスト (ID 115: 革の服 守2, ID 120: アイアンガントレット 守3)"""
-    sim, state = create_game_with_hand([115, 120])
 
-    # 防御フェーズ設定
-    state.current_phase = GamePhase.PHASE_DEFENSE
-    state.defender_id = 0
-    state.attacker_id = 1
-    state.current_actor_id = 0
-    state.pending_attack_power = 20  # 飛んできている攻撃
-    state.pending_attack_element = Element.ELEM_NONE  # 無属性物理攻撃
-    state.pending_attack_source_id = 23  # なぎなたクラシックからの物理攻撃
+def test_stacking_an_un_elemental_weapon_only_adds_power(board):
+    """無属性のプラス武器を重ねても、属性は変わらず攻撃力だけ加算されることを検証します。"""
+    assert element_of(BLOWGUN) == Element.ELEM_NONE
 
-    # 1. 防具1 (ID 115, 守2) を仮置き
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    assert state.pending_defense_power == 2
+    g = board(
+        p0=Side(hp=40, mp=50, money=99, hand=[GLAIVE, BLOWGUN]),
+        p1=Side(hp=40, mp=50, money=99),
+    )
+    g.rng.deck_always(FILLER)
 
-    # 2. 防具2 (ID 120, 守3) を重ねて仮置き ➔ 合計防御力 5 になることをアサート！
-    sim.step(ActionType.ACTION_SELECT_HAND_1)
-    assert state.pending_defense_power == 5
+    g.select(GLAIVE)
+    g.expect(pending_power=atk(GLAIVE), pending_element=Element.ELEM_NONE)
 
-def test_staging_sell_price_zero_yen_item():
-    """0円アイテム（昇天の弓 ID 109）売却仮置き時の ¥0 表示保証テスト (ID 1: 売る)"""
-    sim, state = create_game_with_hand([1, 109])
+    g.select(BLOWGUN)
+    g.expect(
+        pending_power=atk(GLAIVE) + atk(BLOWGUN),
+        pending_element=Element.ELEM_NONE,
+    )
 
-    # 1. 「売る」を仮置き
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    assert state.pending_sell_price == 0
 
-    # 2. 昇天の弓を売却対象として仮置き ➔ pending_sell_price が 0 として提示されることをアサート！
-    sim.step(ActionType.ACTION_SELECT_HAND_1)
-    assert state.pending_sell_price == 0
+def test_the_magical_stick_recomputes_when_a_mp_cost_card_is_added(board):
+    """マジカルステッキの攻撃力が、後から重ねたMP消費カードのぶんだけ即座に減ることを検証します。"""
+    mp = 10
+    assert 0 < mp_cost(METEOR) < mp, "残りMPが残る組み合わせでないと再計算を検証できない"
 
-def test_staging_blaze_blade_meteor_fireball():
-    """ブレイズブレイド(攻5, 火) ＋ 流星(攻10, 火) ＋ 火の玉(攻2, 火) の都度計算アサート"""
-    sim, state = create_game_with_hand([79, 214, 207])
+    g = board(
+        p0=Side(hp=40, mp=mp, money=99, hand=[MAGICAL_STICK, METEOR]),
+        p1=Side(hp=40, mp=50, money=99),
+    )
+    g.rng.deck_always(FILLER)
 
-    # 1. ブレイズブレイド (ID 79, 攻5, 火)
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    assert state.pending_attack_power == 5
-    assert state.pending_attack_element == Element.ELEM_FIRE
+    # 他にMPを使うカードが無いので、MPを全部ステッキに注げる
+    g.select(MAGICAL_STICK)
+    g.expect(
+        pending_power=mp * MAGICAL_STICK_POWER_PER_MP,
+        pending_element=Element.ELEM_NONE,
+    )
 
-    # 2. <流星> (ID 214, 攻10, 火)
-    sim.step(ActionType.ACTION_SELECT_HAND_1)
-    assert state.pending_attack_power == 15
-    assert state.pending_attack_element == Element.ELEM_FIRE
+    # ＜流星＞のMP消費ぶんだけ、ステッキに回せる残りMPが減る
+    g.select(METEOR)
+    leftover = mp - mp_cost(METEOR)
+    g.expect(pending_power=leftover * MAGICAL_STICK_POWER_PER_MP + atk(METEOR))
 
-    # 3. <火の玉> (ID 207, 攻2, 火)
-    sim.step(ActionType.ACTION_SELECT_HAND_2)
-    assert state.pending_attack_power == 17
-    assert state.pending_attack_element == Element.ELEM_FIRE
 
-def test_staging_complex_javelin_wand_mirage_combination():
+def test_stacked_armor_sums_its_defense_power_while_staged(board):
+    """防具を重ねた時点で、合計防御力が仮置き情報に反映されることを検証します。
+
+    従来は pending_attack_* を直接代入して防御フェイズを組み立てていました。
+    実際に攻撃を受けて同じ局面に到達します。
     """
-    ユーザー提示の超複雑コンボ検証 (蜃気楼による全体攻撃化および後置き発火のワンド属性上書きを含む):
-    旧石器ジャベリン (土5) ➔ 魔水のワンド (水5) ➔ <流星> (光10) ➔ <蜃気楼> (全体化) ➔ 発火のワンド (火2) ➔ <オーラ> (倍率2)
+    clothes = "armor/leather-clothes"
+    gauntlet = "armor/iron-gauntlet"
+
+    g = board(
+        p0=Side(hp=40, mp=50, money=99, hand=[GLAIVE]),
+        p1=Side(hp=40, mp=50, money=99, hand=[clothes, gauntlet]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(GLAIVE)
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1, pending_defense=0)
+
+    g.select(clothes)
+    g.expect(pending_defense=defense(clothes))
+
+    g.select(gauntlet)
+    g.expect(pending_defense=defense(clothes) + defense(gauntlet))
+
+
+def test_same_element_cards_keep_the_element_and_sum_their_power(board):
+    """火属性で揃えた重ねがけで、属性が保たれて攻撃力が素直に足されることを検証します。"""
+    stack = [BLAZE_BLADE, METEOR, FIREBALL]
+    for card in (BLAZE_BLADE, FIREBALL):
+        assert element_of(card) == Element.ELEM_FIRE
+    # ＜流星＞は光属性だが、光は中立なのでベースの火が維持される
+    assert element_of(METEOR) == Element.ELEM_LIGHT
+
+    g = board(
+        p0=Side(hp=40, mp=50, money=99, hand=list(stack)),
+        p1=Side(hp=40, mp=50, money=99),
+    )
+    g.rng.deck_always(FILLER)
+
+    running = 0
+    for card in stack:
+        g.select(card)
+        running += atk(card)
+        g.expect(pending_power=running, pending_element=Element.ELEM_FIRE)
+
+
+def test_a_long_stack_recomputes_element_power_and_group_flag_at_every_step(board):
+    """長い重ねがけの各段階で、属性・攻撃力・全体攻撃フラグが正しく再計算されることを検証します。
+
+    旧石器ジャベリン(土) → 魔水のワンド(水) → ＜流星＞(光) → ＜蜃気楼＞(全体化)
+    → 発火のワンド(火) → ＜オーラ＞(2倍) の順に重ねます。
     """
-    sim, state = create_game_with_hand([81, 80, 214, 229, 63, 228])
+    g = board(
+        p0=Side(
+            hp=40, mp=50, money=99,
+            hand=[JAVELIN, WAND_OF_MYSTIC_WATER, METEOR, MIRAGE, WAND_OF_IGNITION, AURA],
+        ),
+        p1=Side(hp=40, mp=50, money=99),
+    )
+    g.rng.deck_always(FILLER)
 
-    # 1. 旧石器ジャベリン (ID 81, 攻5, 土) ➔ 攻5, 土, 単体攻撃
-    sim.step(ActionType.ACTION_SELECT_HAND_0)
-    assert state.pending_attack_power == 5
-    assert state.pending_attack_element == Element.ELEM_STONE
-    assert state.pending_is_group_attack is False
+    # 1. 土属性の武器そのまま
+    g.select(JAVELIN)
+    g.expect(pending_power=atk(JAVELIN), pending_element=Element.ELEM_STONE)
+    assert g.state.pending_is_group_attack is False
 
-    # 2. 魔水のワンド (ID 80, 攻5, 水) ➔ 水に染まり 攻10, 単体攻撃
-    sim.step(ActionType.ACTION_SELECT_HAND_1)
-    assert state.pending_attack_power == 10
-    assert state.pending_attack_element == Element.ELEM_WATER
-    assert state.pending_is_group_attack is False
+    # 2. ワンドは属性を上書きする（土 → 水）
+    power = atk(JAVELIN) + atk(WAND_OF_MYSTIC_WATER)
+    g.select(WAND_OF_MYSTIC_WATER)
+    g.expect(pending_power=power, pending_element=Element.ELEM_WATER)
+    assert g.state.pending_is_group_attack is False
 
-    # 3. <流星> (ID 214, 攻10, 光) ➔ 魔水のワンドにより後置きの流星(光)も水に染まり 攻20, 単体攻撃
-    sim.step(ActionType.ACTION_SELECT_HAND_2)
-    assert state.pending_attack_power == 20
-    assert state.pending_attack_element == Element.ELEM_WATER
-    assert state.pending_is_group_attack is False
+    # 3. ワンドの後ろに置いた光属性も水に染まったまま
+    power += atk(METEOR)
+    g.select(METEOR)
+    g.expect(pending_power=power, pending_element=Element.ELEM_WATER)
+    assert g.state.pending_is_group_attack is False
 
-    # 4. <蜃気楼> (ID 229, 全体攻撃化, 無属性) ➔ 攻20 ＆ 無属性カード(<蜃気楼>)混入により無属性(ELEM_NONE)化 ＆ 【全体攻撃(pending_is_group_attack = True)に変化！】
-    sim.step(ActionType.ACTION_SELECT_HAND_3)
-    assert state.pending_attack_power == 20
-    assert state.pending_attack_element == Element.ELEM_NONE
-    assert state.pending_is_group_attack is True
+    # 4. ＜蜃気楼＞は無属性なので属性が打ち消され、全体攻撃になる
+    g.select(MIRAGE)
+    g.expect(pending_power=power, pending_element=Element.ELEM_NONE)
+    assert g.state.pending_is_group_attack is True, "＜蜃気楼＞で全体攻撃になるべきです"
 
-    # 5. 発火のワンド (ID 63, 攻2, 火) ➔ 20 + 2 = 攻22 ＆ 【火属性(ELEM_FIRE)に染まり上書き！】 ＆ 【全体攻撃継続！】
-    sim.step(ActionType.ACTION_SELECT_HAND_4)
-    assert state.pending_attack_power == 22
-    assert state.pending_attack_element == Element.ELEM_FIRE
-    assert state.pending_is_group_attack is True
+    # 5. 後から置いたワンドが属性を再度上書きする。全体攻撃は維持される
+    power += atk(WAND_OF_IGNITION)
+    g.select(WAND_OF_IGNITION)
+    g.expect(pending_power=power, pending_element=Element.ELEM_FIRE)
+    assert g.state.pending_is_group_attack is True
 
-    # 6. <オーラ> (ID 228, 倍率2, 無属性) ➔ 22 * 2 = 攻44 ＆ 無属性カード(<オーラ>)混入により再度無属性(ELEM_NONE)化！ ＆ 【全体攻撃継続！】
-    sim.step(ActionType.ACTION_SELECT_HAND_5)
-    assert state.pending_attack_power == 44
-    assert state.pending_attack_element == Element.ELEM_NONE
-    assert state.pending_is_group_attack is True
+    # 6. ＜オーラ＞で2倍になり、無属性に戻る
+    g.select(AURA)
+    g.expect(pending_power=power * 2, pending_element=Element.ELEM_NONE)
+    assert g.state.pending_is_group_attack is True
+
+
+@pytest.mark.parametrize(
+    "item",
+    ["weapons/ascension-bow", "sundries/guardian-pot", "armor/super-mirror"],
+    ids=["昇天弓", "守護封印のつぼ", "スーパーミラー"],
+)
+def test_selling_transfers_exactly_the_master_price(board, item):
+    """売却で動くお金が、カードマスタの価格ちょうどであることを検証します。
+
+    【削除したフィールドについて】
+    以前ここには test_staging_sell_price_zero_yen_item という
+    「0円アイテム（昇天弓）を売却仮置きすると pending_sell_price が 0 になる」
+    テストがありました。しかし昇天弓はマスタ上 price=10 で、0円アイテムでは
+    ありません。調べたところ pending_sell_price には値が入る経路が一つも無く
+    （計算処理は書かれているのに、売却フェイズのハンドラから呼ばれていなかった）、
+    常に 0 でした。つまりどのカードを置いても通る空のテストでした。
+
+    このフィールドは観測にも含まれておらず、visualizer は Python 側で価格を
+    計算し直すフォールバックを持っていたため、削除しました。代わりにここでは
+    「実際に動くお金がマスタの価格と一致する」という意味のある不変条件を検証します。
+    """
+    price = card_feature(item, "price")
+    assert price > 0, "価格0のカードでは受け渡しを検証できない"
+    seller_money, buyer_money = 0, 99
+
+    g = board(
+        p0=Side(hp=40, mp=50, money=seller_money, hand=["deals/sell", item]),
+        p1=Side(hp=40, mp=50, money=buyer_money),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select("deals/sell", item)
+    g.target_opp()
+    g.expect(phase=GamePhase.PHASE_SELL_SELECT_MIRROR, actor=1)
+
+    g.confirm()  # 買い手が受諾
+
+    g.expect(p0_money=seller_money + price, p1_money=buyer_money - price)

@@ -1,1057 +1,817 @@
+"""防御・リアクション（＜壁＞／＜乱気流＞／反射・弾き／虹のカーテン／閃光）の検証。
+
+【移行メモ】
+このファイルの旧テストには次の3種類の問題がありました。
+
+1. **手で組み立てた防御フェイズ**
+   `pending_attack_power` などを直接代入して防御フェイズを作っていたため、
+   「その局面が実際に発生しうるか」が一切検証されていませんでした。攻撃力や属性が
+   実装と食い違っていても気付けず、逆に実装のセットアップ処理が壊れても通ります。
+   現在は超常現象・守護神行動を実際に発生させて同じ局面へ到達します。
+
+2. **どちらの結果でも通るアサーション**
+   `assert hp == 40 or hp == 30` のように、弾きの成否どちらでも通る書き方が
+   ありました。弾き判定を固定して両分岐をそれぞれ検証します。
+
+3. **結果の数値の直書き**
+   `assert hp == 31` の 31 がどう計算されるのか読めませんでした。攻撃力・防御力は
+   カードマスタから引いて式で書きます。
+"""
+
+import pytest
+
 import godfield_core
-from godfield_core import ActionType, CurseType, GamePhase
-from tests.core.test_utils import SimulationRunner, find_card_by_name
+from godfield_core import ActionType, CurseType, Element, GamePhase, PhenomenonType
+from tests.core.dsl import Side, card_feature, card_id, cards_of_element, element_of
+
+FILLER = "armor/wood-shield"
+
+CURTAIN = "armor/rainbow-curtain"
+WALL = "miracles/wall"
+TURBULENCE = "miracles/turbulence"
+FLAME = "miracles/flame"
+REFLECTION_SWORD = "weapons/reflection-sword"
+LEATHER_CLOTHES = "armor/leather-clothes"
+
+SATURN = int(godfield_core.GuardianType.SATURN)
+MOON = int(godfield_core.GuardianType.MOON)
 
 
-def test_reaction_wall_un_elemental_only():
+# ============================================================================
+# ＜壁＞: 無属性の物理攻撃だけを阻止できる
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    ("weapon", "wall_is_legal"),
+    [
+        ("weapons/punch", True),    # 無属性
+        ("weapons/torch", False),   # 火属性
+    ],
+    ids=["無属性攻撃には出せる", "有属性攻撃には出せない"],
+)
+def test_wall_only_blocks_un_elemental_physical_attacks(board, weapon, wall_is_legal):
+    """＜壁＞が無属性の物理攻撃にしか出せないことを検証します。"""
+    assert (element_of(weapon) == Element.ELEM_NONE) is wall_is_legal, (
+        "テストの前提（武器の属性）がカードマスタと食い違っています"
+    )
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[weapon]),
+        p1=Side(hp=40, mp=10, hand=[WALL]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(weapon)
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1)
+
+    if wall_is_legal:
+        g.expect_legal([WALL])
+    else:
+        g.expect_illegal([WALL])
+
+
+def test_wall_blocks_the_attack_entirely(board):
+    """＜壁＞が成立すると被弾が0になり、そのままターンが終わることを検証します。"""
+    g = board(
+        p0=Side(hp=40, mp=10, hand=["weapons/punch"]),
+        p1=Side(hp=40, mp=10, hand=[WALL]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack("weapons/punch")
+    g.defend(WALL)
+
+    assert card_feature("weapons/punch", "attack_power") > 0, (
+        "攻撃力が0ならこのテストは阻止を検証していない"
+    )
+    g.expect(p1_hp=40, phase=GamePhase.PHASE_MAIN)
+
+
+# ============================================================================
+# 虹のカーテン: 攻撃を無属性化する（1枚目のみ）
+# ============================================================================
+
+
+def test_rainbow_curtain_unlocks_the_wall_against_an_elemental_attack(board):
+    """有属性攻撃でも、虹のカーテンで無属性化すれば＜壁＞を重ねられることを検証します。"""
+    torch = "weapons/torch"
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[torch]),
+        p1=Side(hp=40, mp=10, hand=[CURTAIN, WALL]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(torch)
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1)
+
+    # カーテンを置く前は、属性が合わないので＜壁＞は出せない
+    g.expect_legal([CURTAIN])
+    g.expect_illegal([WALL])
+
+    g.select(CURTAIN)
+
+    # 無属性化は合法手の判定に反映される（pending_attack_element の書き換えは解決時）
+    g.expect_legal([WALL])
+
+    g.defend(WALL)
+    g.expect(p1_hp=40, phase=GamePhase.PHASE_MAIN)
+
+
+def test_rainbow_curtain_can_only_be_the_first_card(board):
+    """虹のカーテンを2枚目以降に重ねられないことを検証します。"""
+    torch = "weapons/torch"
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[torch]),
+        p1=Side(hp=40, mp=10, hand=[CURTAIN, CURTAIN]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(torch)
+    g.select_slots(0)  # 1枚目のカーテン
+
+    actions = g.legal_actions()
+    assert actions[ActionType.ACTION_SELECT_HAND_1] is False, (
+        "2枚目の虹のカーテンは重ねられないべきです"
+    )
+
+
+def test_rainbow_curtain_locks_out_reactions_but_unlocks_plain_armor(board):
+    """奇跡攻撃に虹のカーテンを置くと、リアクションは封じられる代わりに一般防具が使えるようになることを検証します。
+
+    無属性化によって「属性が合わないので出せなかった防具」が解禁される一方、
+    ＜乱気流＞のようなリアクションはカーテンの後には重ねられません。
     """
-    検証内容: ＜壁＞は無属性の物理武器攻撃のみ阻止可能。有属性の攻撃に対しては直接選択できない。
+    armor = "armor/wood-shield"
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[FLAME]),
+        p1=Side(hp=40, mp=10, hand=[CURTAIN, TURBULENCE, armor]),
+    )
+    g.rng.deck_always(armor)
+
+    g.attack(FLAME)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE)
+
+    # カーテンとリアクションは出せるが、属性の合わない一般防具はまだ出せない
+    g.expect_legal([CURTAIN, TURBULENCE])
+    g.expect_illegal([armor])
+
+    g.select(CURTAIN)
+
+    # 無属性化で一般防具が解禁される一方、リアクションは重ねられなくなる
+    g.expect_legal([armor])
+    g.expect_illegal([TURBULENCE])
+
+    g.defend(armor)
+
+    damage = card_feature(FLAME, "attack_power") - card_feature(armor, "defense_power")
+    g.expect(p1_hp=40 - damage, phase=GamePhase.PHASE_MAIN)
+
+
+@pytest.mark.parametrize(
+    "attack",
+    [FLAME, "weapons/flare-axe"],
+    ids=["火属性の奇跡攻撃", "火属性の武器攻撃"],
+)
+def test_rainbow_curtain_unlocks_every_element_of_armor(board, attack):
+    """虹のカーテンの後は、全属性の防具が2枚目として出せることを検証します。
+
+    防具はカードマスタから属性ごとに引くため、カードデータが増減しても
+    「たまたま手札に入れた数種類」しか見ていない状態になりません。
     """
-    runner = SimulationRunner()
-    punch_id = find_card_by_name("weapons/punch")  # 無属性武器
-    fire_sword_id = find_card_by_name("weapons/torch")  # 火属性武器
-    wall_id = find_card_by_name("miracles/wall")  # 阻止カード
+    elements = [
+        Element.ELEM_NONE,
+        Element.ELEM_FIRE,
+        Element.ELEM_WATER,
+        Element.ELEM_WOOD,
+        Element.ELEM_STONE,
+        Element.ELEM_LIGHT,
+    ]
+    # 属性ごとに「通常の防御フェイズにしか出せない素の防具」を1枚ずつ選ぶ。
+    # リアクションや別フェイズ用のカードが混ざると、解禁の理由が属性以外に
+    # なってしまい、何を検証しているのか分からなくなる。
+    armors = []
+    for elem in elements:
+        plain = [
+            cid
+            for cid in cards_of_element(elem, "defense")
+            if not card_feature(cid, "reaction_type", None)
+            and card_feature(cid, "usage_timing", []) == ["atk_defence_phase"]
+        ]
+        assert plain, f"属性 {Element(elem).name} の素の防具がカードマスタにありません"
+        armors.append(plain[0])
 
-    # 1. 無属性武器攻撃に対して壁が合法手となるか
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-    runner.state.set_true_hand(0, 0, punch_id)
-    runner.state.set_true_hand(1, 0, wall_id)
+    g = board(
+        p0=Side(hp=99, mp=20, hand=[attack]),
+        p1=Side(hp=99, mp=20, hand=[CURTAIN, *armors]),
+    )
+    g.rng.deck_always(FILLER)
+    if card_feature(attack, "accuracy", 100) < 100:
+        g.rng.hits(always=True)
 
-    # プレイヤー0がパンチで攻撃
-    runner.perform_attack([0])
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
+    g.attack(attack)
+    assert g.state.pending_attack_element != Element.ELEM_NONE, (
+        "無属性攻撃ではカーテンの効果を検証できない"
+    )
 
-    # プレイヤー1の合法手を取得
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True  # ＜壁＞が合法手であること
+    # カーテンを置く前は、対抗属性の防具しか出せない
+    g.expect_illegal([a for a in armors if element_of(a) == Element.ELEM_NONE])
 
-    # 2. 火属性武器攻撃に対して壁が非合法となるか
-    runner.reset_state()
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-    runner.state.set_true_hand(0, 0, fire_sword_id)
-    runner.state.set_true_hand(1, 0, wall_id)
-
-    # プレイヤー0がたいまつ(火)で攻撃
-    runner.perform_attack([0])
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-
-    # プレイヤー1の合法手を取得
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is False  # 有属性のため壁は非合法であること
+    g.select(CURTAIN)
+    g.expect_legal(armors)
 
 
-def test_rainbow_curtain_wall_and_reflection_sword_synergy():
+def test_rainbow_curtain_still_allows_a_reaction_armor(board):
+    """虹のカーテンの後でも、リアクション「防具」は2枚目として出せることを検証します。
+
+    リアクション「奇跡」（＜乱気流＞など）が封じられるのとは扱いが異なります。
     """
-    検証内容: 有属性の物理武器攻撃に対し、最初に「虹のカーテン」を置くことで無属性化（ELEM_NONE）され、
-    2枚目に「＜壁＞」や「反射剣」を選択可能になる。また、虹のカーテン自体は1枚目にしか置けない。
+    meteor = "miracles/meteor"
+    sky_armor = "armor/sky-armor"
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[meteor]),
+        p1=Side(hp=40, mp=20, hand=[CURTAIN, sky_armor]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(meteor)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE)
+
+    g.select(CURTAIN)
+    g.expect_legal([sky_armor])
+
+    g.defend(sky_armor)
+
+    guard = card_feature(CURTAIN, "defense_power") + card_feature(sky_armor, "defense_power")
+    damage = max(0, card_feature(meteor, "attack_power") - guard)
+    g.expect(p1_hp=40 - damage)
+
+
+def test_countering_element_armor_is_legal_against_a_miracle_without_the_curtain(board):
+    """奇跡攻撃には、カーテンなしでも対抗属性の防具だけが出せることを検証します。"""
+    aqua = "armor/aqua-shoes"      # 水属性（火に対抗）
+    plain = "armor/leather-cap"    # 無属性（対抗しない）
+    assert element_of(aqua) == Element.ELEM_WATER
+    assert element_of(plain) == Element.ELEM_NONE
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[FLAME]),
+        p1=Side(hp=40, mp=10, hand=[CURTAIN, aqua, plain]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(FLAME)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE)
+
+    g.expect_legal([CURTAIN, aqua])
+    g.expect_illegal([plain])
+
+    g.defend(aqua)
+
+    damage = card_feature(FLAME, "attack_power") - card_feature(aqua, "defense_power")
+    g.expect(p1_hp=40 - damage, phase=GamePhase.PHASE_MAIN)
+
+
+# ============================================================================
+# 反射・弾き
+# ============================================================================
+
+
+def test_rainbow_curtain_enables_the_reflection_sword(board):
+    """有属性の武器攻撃でも、カーテンで無属性化すれば反射剣で反射できることを検証します。"""
+    torch = "weapons/torch"
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[torch, LEATHER_CLOTHES]),
+        p1=Side(hp=40, mp=10, hand=[CURTAIN, REFLECTION_SWORD]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(torch)
+    g.expect_illegal([REFLECTION_SWORD])
+
+    g.select(CURTAIN)
+    g.expect_legal([REFLECTION_SWORD])
+
+    g.defend(REFLECTION_SWORD)
+
+    # 攻守が入れ替わり、無属性化されたまま元の攻撃者へ跳ね返る
+    g.expect(
+        attacker=1,
+        defender=0,
+        actor=0,
+        phase=GamePhase.PHASE_DEFENSE,
+        pending_element=Element.ELEM_NONE,
+    )
+    g.expect_legal([LEATHER_CLOTHES])
+
+    g.defend(LEATHER_CLOTHES)
+
+    damage = max(
+        0,
+        card_feature(torch, "attack_power") - card_feature(LEATHER_CLOTHES, "defense_power"),
+    )
+    g.expect(p0_hp=40 - damage, phase=GamePhase.PHASE_MAIN)
+
+
+def test_bouncing_sword_swaps_attacker_and_defender_on_success(board):
+    """乱弾武剣で弾きに成功すると攻守が交代し、元の攻撃者が被弾することを検証します。"""
+    boomerang = "weapons/boomerang"
+    sword = "weapons/bouncing-sword"
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[boomerang, LEATHER_CLOTHES]),
+        p1=Side(hp=40, mp=10, hand=[sword]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=True)
+
+    g.attack(boomerang)
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1)
+
+    g.defend(sword)
+
+    g.expect(attacker=1, defender=0, actor=0, phase=GamePhase.PHASE_DEFENSE, p1_hp=40)
+    g.expect_legal([LEATHER_CLOTHES])
+
+    g.defend(LEATHER_CLOTHES)
+
+    damage = card_feature(boomerang, "attack_power") - card_feature(LEATHER_CLOTHES, "defense_power")
+    assert damage > 0, "被弾0ではダメージが正しく攻撃者へ渡ったか検証できない"
+    g.expect(p0_hp=40 - damage, phase=GamePhase.PHASE_MAIN)
+
+
+def test_bouncing_sword_failure_leaves_the_defender_taking_the_hit(board):
+    """乱弾武剣の弾きに失敗すると、そのまま自分が被弾することを検証します。"""
+    boomerang = "weapons/boomerang"
+    sword = "weapons/bouncing-sword"
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[boomerang]),
+        p1=Side(hp=40, mp=10, hand=[sword]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=False)
+
+    g.attack(boomerang)
+    g.defend(sword)
+
+    # 弾きに失敗した乱弾武剣は防御力を持たないので、攻撃力がそのまま通る
+    g.expect(p1_hp=40 - card_feature(boomerang, "attack_power"), phase=GamePhase.PHASE_MAIN)
+
+
+def bounce_scenario(board, *, success: bool, defender_hp: int):
+    """P0 の＜吸収＞を P1 が＜乱気流＞で弾く局面を解決します。
+
+    ＜弾く＞は50%判定なので、従来はこの成否を得るために最大200回のシード探索を
+    行っていました。現在は判定を直接固定します。
     """
-    # 1. 虹のカーテン ＋ 壁
-    runner = SimulationRunner()
-    fire_sword_id = find_card_by_name("weapons/torch")
-    curtain_id = find_card_by_name("armor/rainbow-curtain")
-    wall_id = find_card_by_name("miracles/wall")
-
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-    runner.state.set_true_hand(0, 0, fire_sword_id)
-    runner.state.set_true_hand(1, 0, curtain_id)
-    runner.state.set_true_hand(1, 1, wall_id)
-
-    # プレイヤー0がたいまつ(火)で攻撃
-    runner.perform_attack([0])
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-
-    # 1枚目に壁は置けないが、カーテンは置ける
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is False  # 壁はまだ不可
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True  # カーテンは可能
-
-    # カーテンを選択
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # カーテンを置いた後は、カーテンを追加することはできない（1枚目限定ルール）
-    runner.state.set_true_hand(1, 2, curtain_id)
-    actions2 = godfield_core.get_legal_actions(runner.state)
-    assert actions2[ActionType.ACTION_SELECT_HAND_2] is False  # 2枚目には置けない
-
-    # カーテンによって攻撃が無属性化されたため、壁が選択可能になる
-    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True  # 壁が解禁される
-
-    # 壁を選択して決定
-    runner.perform_defense([1])
-
-    # 阻止成功により被弾0、ターン終了
-    assert runner.state.get_hp(1) == 40
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN  # ターン終了してメインへ
-
-    # 2. 虹のカーテン ＋ 反射剣 -> 相手に反射して攻守交代
-    runner.reset_state()
-    reflection_sword_id = find_card_by_name("weapons/reflection-sword")
-    leather_clothes_id = find_card_by_name("armor/leather-clothes")
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-    runner.state.set_true_hand(0, 0, fire_sword_id)
-    runner.state.set_true_hand(0, 1, leather_clothes_id)  # 反射後の防御用
-    runner.state.set_true_hand(1, 0, curtain_id)
-    runner.state.set_true_hand(1, 1, reflection_sword_id)
-
-    # プレイヤー0が攻撃
-    runner.perform_attack([0])
-
-    # プレイヤー1が カーテン ＋ 反射剣 を選択
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    runner.perform_defense([1])
-
-    # 反射成功により、プレイヤー0が防御側（PHASE_DEFENSE）、プレイヤー1が攻撃側へと入れ替わる
-    assert runner.state.attacker_id == 1
-    assert runner.state.defender_id == 0
-    assert runner.state.current_actor_id == 0
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-
-    # カーテンによって攻撃が無属性（ELEM_NONE）になっていることを検証
-    assert runner.state.pending_attack_element == godfield_core.Element.ELEM_NONE
-
-    # P0 が無属性防御カード（木盾）で防御可能か確認
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True
-
-    runner.perform_defense([1])
-
-    # たいまつ(1) - 木盾(2) = 0 ダメージ。HPは 40 のまま維持
-    assert runner.state.get_hp(0) == 40
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
+    g = board(
+        p0=Side(hp=40, mp=10, hand=["miracles/absorption"]),
+        p1=Side(hp=defender_hp, mp=10, hand=[TURBULENCE]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=success)
+    g.attack("miracles/absorption")
+    g.defend(TURBULENCE)
+    return g
 
 
-def test_miracle_defense_reaction_rules():
+def test_bounce_success_swaps_attacker_and_defender(board):
+    """＜弾く＞成功時に攻守が入れ替わり、弾いた本人が無傷であることを検証します。"""
+    g = bounce_scenario(board, success=True, defender_hp=5)
+
+    g.expect(
+        attacker=1,
+        defender=0,
+        actor=0,
+        phase=GamePhase.PHASE_MIRACLE_DEFENSE,
+        p1_hp=5,  # 弾いた本人は無傷
+    )
+
+
+def test_bounce_failure_reflects_the_attack_onto_the_defender(board):
+    """＜弾く＞失敗時に攻撃が自分へ跳ね返り、自傷として解決されることを検証します。
+
+    ＜吸収＞は与えたダメージ分だけ回復するため、自傷では損失と回復が相殺されます。
+    吸収が効いていなければHPが減るので、この等価性が吸収の検証にもなっています。
     """
-    検証内容:
-    1. 奇跡攻撃に対し、虹のカーテンの後に「＜乱気流＞」を重ねることは非合法（奇跡防御での虹のカーテン後のリアクション禁止）。
-    2. 属性奇跡に対し、虹のカーテンを置いて無属性化した後、無属性の一般防具（木盾等）を重ねてダメージ軽減するルートは合法。
+    power = card_feature("miracles/absorption", "attack_power")
+    g = bounce_scenario(board, success=False, defender_hp=20)
+
+    g.expect(p1_hp=20, phase=GamePhase.PHASE_MAIN)
+    assert power > 0, "吸収の攻撃力が0ならこのテストは何も検証していない"
+
+
+def test_bounce_failure_absorption_revives_from_zero_before_death_check(board):
+    """吸収の自傷でHPが0に張り付いても、死亡判定の前に回復して生存することを検証します。
+
+    HP5 に対して攻撃力10の吸収を自傷すると、いったん0にクランプされたあと
+    同じ解決ステップ内で +10 されるため、最終HPは10になります。
     """
-    runner = SimulationRunner()
-    flame_id = find_card_by_name("miracles/flame")  # 炎 (火奇跡)
-    curtain_id = find_card_by_name("armor/rainbow-curtain")
-    turbulence_id = find_card_by_name("miracles/turbulence")  # 奇跡リアクション
-    wood_shield_id = find_card_by_name("armor/wood-shield")  # 一般防具 (守2)
+    power = card_feature("miracles/absorption", "attack_power")
+    g = bounce_scenario(board, success=False, defender_hp=5)
 
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-    runner.state.set_true_hand(0, 0, flame_id)
-    runner.state.set_true_hand(1, 0, curtain_id)
-    runner.state.set_true_hand(1, 1, turbulence_id)
-    runner.state.set_true_hand(1, 2, wood_shield_id)
-
-    # プレイヤー0が炎で攻撃
-    runner.perform_attack([0])
-    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
-
-    # 最初はカーテンも乱気流も一般防具（対抗属性ではない木盾は非合法）もチェック
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True  # カーテンは1枚目なので可能
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True  # 乱気流も可能
-    assert actions[ActionType.ACTION_SELECT_HAND_2] is False  # 木盾は属性が合わないので不可
-
-    # カーテンを選択
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # カーテン選択後は、乱気流（リアクション）は非合法になるが、無属性化したため木盾（一般防具）が合法になること
-    actions2 = godfield_core.get_legal_actions(runner.state)
-    assert actions2[ActionType.ACTION_SELECT_HAND_1] is False  # 乱気流は非合法！
-    assert actions2[ActionType.ACTION_SELECT_HAND_2] is True  # 木盾は合法！
-
-    # 木盾を選択して決定
-    runner.perform_defense([2])
-
-    # 炎(10) - 木盾(2) = 8 ダメージを受けて生存、ターン終了
-    assert runner.state.get_hp(1) == 32
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
+    g.expect(p1_hp=power, is_done=False, phase=GamePhase.PHASE_MAIN)
 
 
-def test_miracle_fire_defense_dress_and_shoes():
+@pytest.mark.parametrize("bounced", [True, False], ids=["弾きに成功", "弾きに失敗"])
+def test_sky_harpoon_reacts_to_a_miracle_attack(board, bounced):
+    """武器でありながら奇跡防御で弾けるスカイハープーンの、成否それぞれを検証します。
+
+    従来は `assert hp == 40 or hp == 30` と書かれており、弾きの成否どちらでも
+    通るため、リアクションが機能しなくなっても検出できませんでした。
     """
-    ユーザー報告事象の検証テスト:
-    - 相手の<炎> (火ATK10の奇跡) に対し、防御側が「きらきらドレス」(光DEF10) と「アクアシューズ」(水DEF1) を持つ。
-    - 10のドレスを出した後でも、水属性防具（アクアシューズ）を出せる選択肢が残ること。
-    - ドレスを出した後に勝手に自動進行せず、プレイヤーが選択操作可能であること。
+    harpoon = "weapons/sky-harpoon"
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[FLAME, LEATHER_CLOTHES]),
+        p1=Side(hp=40, mp=20, hand=[harpoon]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=bounced)
+
+    g.attack(FLAME)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE, actor=1)
+    g.expect_legal([harpoon])
+
+    g.defend(harpoon)
+
+    if bounced:
+        # 弾いた本人は無傷で、攻撃が元の攻撃者へ渡る
+        g.expect(p1_hp=40, attacker=1, defender=0, actor=0)
+    else:
+        g.expect(p1_hp=40 - card_feature(FLAME, "attack_power"), phase=GamePhase.PHASE_MAIN)
+
+
+def test_angel_bow_blocks_a_miracle_attack(board):
+    """エンゼルの弓が奇跡防御で「阻止」として働き、被弾を0にすることを検証します。"""
+    bow = "weapons/angel-bow"
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[FLAME]),
+        p1=Side(hp=40, mp=20, hand=[bow]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(FLAME)
+    g.expect_legal([bow])
+
+    g.defend(bow)
+
+    assert card_feature(FLAME, "attack_power") > 0, "攻撃力が0では阻止を検証できない"
+    g.expect(p1_hp=40, phase=GamePhase.PHASE_MAIN)
+
+
+# ============================================================================
+# 守護神・超常現象による攻撃への反射
+#
+# 旧テストは pending_attack_* を直接代入して防御フェイズを組み立てていたため、
+# 「その攻撃力・属性が本当にその発生源から出るのか」を一切検証していませんでした。
+# ここでは実際に超常現象・守護神行動を発生させて同じ局面に到達します。
+# ============================================================================
+
+
+def test_gigantic_tub_is_a_light_attack_reflectable_through_the_curtain(board):
+    """巨大なタライ（光属性）が、虹のカーテン経由で反射剣により反射できることを検証します。"""
+    tub = "phenomena/gigantic-tub"
+    assert element_of(tub) == Element.ELEM_LIGHT
+
+    g = board(
+        p0=Side(hp=99, mp=10, hand=["sundries/string-of-fate", LEATHER_CLOTHES]),
+        p1=Side(hp=99, mp=10, hand=[CURTAIN, REFLECTION_SWORD]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(PhenomenonType.GIGANTIC_TUB)
+    g.rng.force(godfield_core.RollKind.PHENOMENON_TUB_TARGET, 1)  # P1 を狙う
+
+    g.attack("sundries/string-of-fate", to_self=True)
+
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        actor=1,
+        pending_element=Element.ELEM_LIGHT,
+        pending_power=card_feature(tub, "attack_power"),
+    )
+
+    # 有属性なので、カーテンなしでは反射剣を置けない
+    g.expect_illegal([REFLECTION_SWORD])
+    g.select(CURTAIN)
+    g.expect_legal([REFLECTION_SWORD])
+
+    g.defend(REFLECTION_SWORD)
+    g.expect(actor=0, phase=GamePhase.PHASE_DEFENSE, pending_element=Element.ELEM_NONE)
+
+
+def test_diamond_axe_is_a_stone_attack_reflectable_through_the_curtain(board):
+    """土星神のダイヤモンドアクス（土属性）が、カーテン経由で反射できることを検証します。"""
+    axe = "gurdians/diamond-axe"
+    assert element_of(axe) == Element.ELEM_STONE
+
+    # 反射剣を持っていると「祈る」が非合法になるため、捨て札でターンを終える
+    g = board(
+        p0=Side(hp=99, mp=10, hand=[CURTAIN, REFLECTION_SWORD, "armor/leather-cap"]),
+        p1=Side(hp=99, mp=10, guardian=SATURN, hand=[LEATHER_CLOTHES]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.guardian_action_card(SATURN, axe)
+
+    g.discard("armor/leather-cap")
+
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        actor=0,
+        pending_element=Element.ELEM_STONE,
+        pending_power=card_feature(axe, "attack_power"),
+    )
+
+    g.expect_illegal([REFLECTION_SWORD])
+    g.select(CURTAIN)
+    g.expect_legal([REFLECTION_SWORD])
+
+    g.defend(REFLECTION_SWORD)
+    g.expect(actor=1, phase=GamePhase.PHASE_DEFENSE, pending_element=Element.ELEM_NONE)
+
+
+def test_full_moon_blade_is_un_elemental_and_directly_reflectable(board):
+    """月神の満月刀（無属性）が、カーテンなしで直接反射できることを検証します。
+
+    満月刀は月神が＜オーラ＞を引いたときの物理攻撃として現れます。
     """
-    runner = SimulationRunner()
-    fire_id = find_card_by_name("＜炎＞")
-    dress_id = find_card_by_name("きらきらドレス")
-    shoes_id = find_card_by_name("アクアシューズ")
+    blade = "gurdians/full-moon-blade"
+    assert element_of(blade) == Element.ELEM_NONE
 
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-    runner.state.set_true_hand(0, 0, fire_id)
-    runner.state.set_true_hand(1, 0, dress_id)
-    runner.state.set_true_hand(1, 1, shoes_id)
+    g = board(
+        p0=Side(hp=99, mp=10, hand=[REFLECTION_SWORD, "armor/leather-cap"]),
+        p1=Side(hp=99, mp=10, guardian=MOON, hand=[LEATHER_CLOTHES]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.guardian_act(acts=True)
+    g.rng.moon_miracle("miracles/aura")
 
-    # 1. P0が炎(10)でP1に奇跡攻撃
-    runner.perform_attack([0])
+    g.discard("armor/leather-cap")
 
-    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
-    assert runner.state.current_actor_id == 1
+    # ＜オーラ＞は威力2倍の奇跡なので、満月刀の攻撃力の2倍で撃たれる
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        actor=0,
+        pending_element=Element.ELEM_NONE,
+        pending_power=card_feature(blade, "attack_power") * 2,
+    )
 
-    # 最初はドレス(0)もシューズ(1)も出せる
-    actions1 = godfield_core.get_legal_actions(runner.state)
-    assert actions1[ActionType.ACTION_SELECT_HAND_0] is True
-    assert actions1[ActionType.ACTION_SELECT_HAND_1] is True
+    # 無属性なので、カーテンを挟まずそのまま反射剣を置ける
+    g.expect_legal([REFLECTION_SWORD])
+    g.defend(REFLECTION_SWORD)
 
-    # 2. P1がドレス(光10)を選択
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # ドレスを出した後でもシューズ(1)が出せること！
-    actions2 = godfield_core.get_legal_actions(runner.state)
-    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True
-
-    # また、自動進行せず PHASE_MIRACLE_DEFENSE でP1の入力を待っていること！
-    assert godfield_core.get_single_legal_action(runner.state) == -1
-    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
-
-    # 3. シューズ(水1)も追加し、確定
-    runner.perform_defense([1])
-
-    # 10 + 1 = 11 ガードで 0 ダメージ（完全ノーダメージで生存）
-    assert runner.state.get_hp(1) == 40
+    g.expect(actor=1, phase=GamePhase.PHASE_DEFENSE)
 
 
-def test_miracle_fire_defense_shoes_and_dress():
+# ============================================================================
+# 攻守兼用カード
+# ============================================================================
+
+
+def test_sword_shield_guards_with_its_defense_power(board):
+    """武器であるソードシールドを防御に使うと、防御力が仮置き防御力へ加算されることを検証します。"""
+    sword_shield = "weapons/sword-shield"
+    attack = "weapons/plate-of-strike"
+    guard = card_feature(sword_shield, "defense_power")
+    power = card_feature(attack, "attack_power")
+    assert guard >= power, "完全にガードできる組み合わせである前提のテスト"
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[attack]),
+        p1=Side(hp=40, mp=10, hand=[sword_shield]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1)
+    g.expect_legal([sword_shield])
+
+    g.select(sword_shield)
+    g.expect(pending_defense=guard)
+
+    g.confirm()
+    g.expect(p1_hp=40)
+
+
+def test_ogre_gauntlet_adds_its_attack_power_in_the_attack_plus_phase(board):
+    """防具である鬼の小手を攻撃プラスで重ねると、攻撃力が加算されることを検証します。"""
+    gauntlet = "armor/ogre-s-gauntlet"
+    attack = "weapons/plate-of-strike"
+    total = card_feature(attack, "attack_power") + card_feature(gauntlet, "attack_power")
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[attack, gauntlet]),
+        p1=Side(hp=40, mp=10),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(attack)
+    g.expect(phase=GamePhase.PHASE_ATTACK_PLUS)
+    g.expect_legal([gauntlet])
+
+    g.select(gauntlet)
+    g.expect(pending_power=total)
+
+    g.target_opp()
+    g.take_hit()
+
+    g.expect(p1_hp=40 - total)
+
+
+# ============================================================================
+# 精霊系カードによる MP 消費の相殺
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    ("attack", "reaction", "spiritual", "phase"),
+    [
+        (FLAME, TURBULENCE, "weapons/spiritual-staff", GamePhase.PHASE_MIRACLE_DEFENSE),
+        ("weapons/punch", WALL, "armor/spiritual-socks", GamePhase.PHASE_DEFENSE),
+    ],
+    ids=["乱気流＋精霊の杖", "＜壁＞＋精霊の足袋"],
+)
+def test_a_spiritual_card_lets_you_afford_a_reaction_you_could_not_pay_for(
+    board, attack, reaction, spiritual, phase
+):
+    """MPが足りないリアクションでも、精霊系カードを重ねれば出せることを検証します。
+
+    精霊系はリアクションを仮置きした「あと」でしか選べないため、
+    仮置き前後で合法手が変わることも確認します。
     """
-    アクアシューズ(水1)を先に出してから きらきらドレス(光10) を重ねて出した場合でも、
-    水属性11ガードが維持されノーダメージで防げることを確認する逆順検証テスト。
+    cost = card_feature(reaction, "mp_cost")
+    mp = cost - 1
+    assert mp >= 0, "MPが足りない状況を作れる消費コストである前提のテスト"
+
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[attack]),
+        p1=Side(hp=40, mp=mp, hand=[reaction, spiritual]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.expect(phase=phase, actor=1)
+
+    g.expect_legal([reaction])
+
+    g.select(reaction)
+
+    # MPが足りないので、精霊を重ねるまでは確定できない
+    g.expect_actions(confirm=False)
+    g.expect_legal([spiritual])
+
+    g.select(spiritual)
+    g.expect_actions(confirm=True)
+
+    g.confirm()
+
+    g.expect(p1_mp=mp)  # 消費が0になるのでMPは減らない
+
+
+# ============================================================================
+# 閃光: 防具を1枚しか置けない
+# ============================================================================
+
+
+def test_flash_prevents_stacking_and_therefore_unaffordable_reactions(board):
+    """閃光状態では防具を1枚しか置けないため、精霊で相殺する前提のカードが出せなくなることを検証します。"""
+    doll = "sundries/spiritual-doll"
+    cost = card_feature(WALL, "mp_cost")
+    assert cost > 0, "MP消費0のカードでは閃光の制約を検証できない"
+
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["weapons/punch"]),
+        p1=Side(hp=40, mp=0, curses=[CurseType.CURSE_FLASH], hand=[WALL, doll, LEATHER_CLOTHES]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack("weapons/punch")
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1)
+
+    # ＜壁＞は精霊を重ねられないと払えないが、閃光で重ねられないので非合法
+    g.expect_illegal([WALL, doll])
+    g.expect_legal([LEATHER_CLOTHES])
+
+    g.select(LEATHER_CLOTHES)
+
+    # 1枚置いた時点で、確定以外の選択肢が消える
+    g.expect_actions(confirm=True)
+    g.expect_illegal([WALL, doll])
+
+    g.confirm()
+
+    damage = card_feature("weapons/punch", "attack_power") - card_feature(
+        LEATHER_CLOTHES, "defense_power"
+    )
+    g.expect(p1_hp=40 - damage)
+
+
+def test_flash_still_allows_a_single_free_armor(board):
+    """閃光でもMP消費のない防具1枚は問題なく出せることを検証します（制約が強すぎないこと）。"""
+    g = board(
+        p0=Side(hp=40, mp=20, hand=["weapons/punch"]),
+        p1=Side(hp=40, mp=0, curses=[CurseType.CURSE_FLASH], hand=[FILLER, LEATHER_CLOTHES]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack("weapons/punch")
+    g.expect_legal([FILLER, LEATHER_CLOTHES])
+
+    g.defend(FILLER)
+
+    damage = max(
+        0,
+        card_feature("weapons/punch", "attack_power") - card_feature(FILLER, "defense_power"),
+    )
+    g.expect(p1_hp=40 - damage, phase=GamePhase.PHASE_MAIN)
+
+
+# ============================================================================
+# 光属性防具は対抗属性と併用できる
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "order",
+    [
+        ["armor/glittering-dress", "armor/aqua-shoes"],
+        ["armor/aqua-shoes", "armor/glittering-dress"],
+    ],
+    ids=["ドレスが先", "シューズが先"],
+)
+def test_light_armor_can_be_combined_with_a_countering_element(board, order):
+    """火の奇跡に対し、光属性防具と水属性防具を順序に関わらず重ねられることを検証します。
+
+    光属性は中立なので、対抗属性（水）の防具と組み合わせても弾かれません。
+    重ねている途中で勝手に自動進行せず、プレイヤーの入力を待つことも確認します。
     """
-    runner = SimulationRunner()
-    fire_id = find_card_by_name("＜炎＞")
-    dress_id = find_card_by_name("きらきらドレス")
-    shoes_id = find_card_by_name("アクアシューズ")
+    total_defense = sum(card_feature(c, "defense_power") for c in order)
+    assert total_defense >= card_feature(FLAME, "attack_power"), (
+        "完全に防ぎ切れる組み合わせである前提のテスト"
+    )
 
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-    runner.state.set_true_hand(0, 0, fire_id)
-    runner.state.set_true_hand(1, 0, shoes_id)
-    runner.state.set_true_hand(1, 1, dress_id)
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[FLAME]),
+        p1=Side(hp=40, mp=20, hand=list(order)),
+    )
+    g.rng.deck_always(FILLER)
 
-    # P0が炎(10)で攻撃
-    runner.perform_attack([0])
+    g.attack(FLAME)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE, actor=1)
+    g.expect_legal(order)
 
-    # P1が先にシューズ(水1)を選択
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
+    g.select(order[0])
 
-    # その後にドレス(光10)も選択可能
-    actions2 = godfield_core.get_legal_actions(runner.state)
-    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True
+    # 1枚目を置いた後も2枚目が選べ、かつ自動進行せず入力を待っていること
+    g.expect_legal([order[1]])
+    assert godfield_core.get_single_legal_action(g.state) == -1, (
+        "選択肢が残っているので自動進行してはいけない"
+    )
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE)
 
-    runner.perform_defense([1])
+    g.defend(order[1])
 
-    # 水属性11ガードで火攻撃10を完全防御
-    assert runner.state.get_hp(1) == 40
+    g.expect(p1_hp=40)  # 合計ガードが攻撃力以上なので無傷
 
 
-def find_bounce_seeds():
+def test_confirm_is_illegal_while_staged_cards_cost_more_mp_than_you_have(board):
+    """MPが足りないカードを仮置きしている間は確定できないことを検証します。"""
+    doll = "sundries/spiritual-doll"
+    cost = card_feature(TURBULENCE, "mp_cost")
+    mp = cost - 1
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[FLAME]),
+        p1=Side(hp=40, mp=mp, hand=[TURBULENCE, doll]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=False)
+
+    g.attack(FLAME)
+
+    # 精霊のぬいぐるみが手元にあるので、乱気流の仮置きそのものは合法
+    g.expect_legal([TURBULENCE])
+    g.select(TURBULENCE)
+
+    g.expect_actions(confirm=False)
+    g.expect_legal([doll])
+
+    g.select(doll)
+    g.expect_actions(confirm=True)
+
+    g.confirm()
+    g.expect(p1_mp=mp)
+
+
+def test_the_cards_named_in_this_file_still_have_the_roles_assumed():
+    """このファイルが名指ししているカードが、実在し想定どおりの種別であることを確認します。
+
+    「反射剣が反射カードであること」のような前提が崩れると、上のテストは
+    落ちずに別のことを検証し始めます。前提そのものを1箇所で押さえます。
     """
-    弾く（Bounce）カードのRNGシードを取得するヘルパー。
-    成功（相手に反射）するシードと、失敗（自傷）するシードを探索して返します。
-    """
-    absorption_id = find_card_by_name("miracles/absorption")
-    turbulence_id = find_card_by_name("miracles/turbulence")
-    success_seed = None
-    failure_seed = None
-
-    for seed in range(200):
-        runner = SimulationRunner()
-        runner.state.seed_rng(seed)
-        runner.set_status(0, hp=40, mp=10)
-        runner.set_status(1, hp=5, mp=10)
-        runner.state.set_true_hand(0, 0, absorption_id)
-        runner.state.set_true_hand(1, 0, turbulence_id)
-
-        runner.perform_attack([0])
-        runner.perform_defense([0])
-
-        if runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE:
-            success_seed = seed
-        else:
-            failure_seed = seed
-
-        if success_seed is not None and failure_seed is not None:
-            break
-
-    return success_seed, failure_seed
-
-
-def test_bounce_success_swaps_attacker_defender():
-    """
-    検証内容: 弾く（Bounce）が成功した場合の反射（攻守交代）テスト。
-    - 弾き（乱気流）が成功した際、本来の攻撃者（P0）が防御側（defender）になり、本来の防御者（P1）が攻撃側（attacker）にスワップして、フェイズが PHASE_MIRACLE_DEFENSE のままアクターが P0 に交代することを確認します。
-    - 弾いた本人（P1）は無傷（HP 5 のまま）であることを確認します。
-    """
-    success_seed, _ = find_bounce_seeds()
-    assert success_seed is not None, "反射成功用のシードが見つかりませんでした"
-
-    runner = SimulationRunner()
-    runner.state.seed_rng(success_seed)
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=5, mp=10)
-
-    absorption_id = find_card_by_name("miracles/absorption")
-    turbulence_id = find_card_by_name("miracles/turbulence")
-    runner.state.set_true_hand(0, 0, absorption_id)
-    runner.state.set_true_hand(1, 0, turbulence_id)
-
-    # 攻撃 & 弾き発動
-    runner.perform_attack([0])
-    runner.perform_defense([0])
-
-    # 攻守交代の確認
-    assert runner.state.attacker_id == 1
-    assert runner.state.defender_id == 0
-    assert runner.state.current_actor_id == 0
-    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
-    assert runner.state.get_hp(1) == 5
-
-
-def test_bounce_failure_causes_self_injury():
-    """
-    検証内容: 弾く（Bounce）が失敗した場合の自傷ダメージ適用テスト。
-    - 弾きが失敗した際、攻撃が自分に跳ね返り、自分が自分を攻撃した扱いとして効果解決されることを確認します。
-    - 自傷によるダメージでHPが減少することを確認します。
-    """
-    _, failure_seed = find_bounce_seeds()
-    assert failure_seed is not None, "弾き失敗用のシードが見つかりませんでした"
-
-    runner = SimulationRunner()
-    runner.state.seed_rng(failure_seed)
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=20, mp=10)  # HP20から開始
-
-    absorption_id = find_card_by_name("miracles/absorption")
-    turbulence_id = find_card_by_name("miracles/turbulence")
-    runner.state.set_true_hand(0, 0, absorption_id)
-    runner.state.set_true_hand(1, 0, turbulence_id)
-
-    runner.perform_attack([0])
-    runner.perform_defense([0])
-
-    # 自傷ダメージ（10）と自傷HP吸収回復（+10）が相殺されるため、結果としてHPは 20 のままで生存する
-    # ※もし吸収が無く単にダメージを自傷した場合、HPが減る。
-    assert runner.state.get_hp(1) == 20
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-
-
-def test_bounce_failure_absorb_self_healing_survival():
-    """
-    検証内容: 吸収攻撃の自傷時におけるHP 5 -> 0 -> 10 生存ロジックテスト。
-    - 弾き失敗（自傷）時に、HP 5 から攻撃力 10 の吸収攻撃を被弾した場合に、HPが一時的に 0 にクランプされつつも、死亡判定を行う前に同じ解決ステップ内で +10 回復し、最終HPが 10 となって生存（is_done = False）することを確認します。
-    """
-    _, failure_seed = find_bounce_seeds()
-    assert failure_seed is not None, "弾き失敗用のシードが見つかりませんでした"
-
-    runner = SimulationRunner()
-    runner.state.seed_rng(failure_seed)
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=5, mp=10)  # HP 5 から開始
-
-    absorption_id = find_card_by_name("miracles/absorption")
-    turbulence_id = find_card_by_name("miracles/turbulence")
-    runner.state.set_true_hand(0, 0, absorption_id)
-    runner.state.set_true_hand(1, 0, turbulence_id)
-
-    runner.perform_attack([0])
-    runner.perform_defense([0])
-
-    # 自傷解決: HP 5 - 10 (0にクランプ) + 10 = 10 で生存
-    assert runner.state.is_done is False
-    assert runner.state.get_hp(1) == 10
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-
-
-def test_confirm_illegal_when_staged_mp_exceeds_current_mp():
-    """
-    検証内容: 防御側がMP不足の状態で防具を仮置き（staged）している場合、
-    精霊等のMP0化カードを追加で重ねるまでは ACTION_CONFIRM が非合法手になること。
-    """
-    runner = SimulationRunner()
-    flame_id = find_card_by_name("miracles/flame")  # 炎
-    turbulence_id = find_card_by_name("miracles/turbulence")  # 乱気流 (MP 5)
-    doll_id = find_card_by_name("精霊のぬいぐるみ")  # 精霊のぬいぐるみ
-
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=2)  # P1のMPを2にセット (乱気流のMP 5より少ない)
-
-    runner.state.set_true_hand(0, 0, flame_id)
-    runner.state.set_true_hand(1, 0, turbulence_id)
-    runner.state.set_true_hand(1, 1, doll_id)
-
-    # 1. プレイヤー0が奇跡で攻撃
-    runner.perform_attack([0])
-    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
-
-    # 2. プレイヤー1が乱気流を選択
-    # 手元に「精霊のぬいぐるみ」があるため、乱気流の選択は合法手である
-    actions1 = godfield_core.get_legal_actions(runner.state)
-    assert actions1[ActionType.ACTION_SELECT_HAND_0] is True
-
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # 3. 乱気流を仮置きした段階で、MP 5 に対して MP 2 しかないため、
-    # 精霊を追加するまでは CONFIRM は非合法手であるべき
-    actions2 = godfield_core.get_legal_actions(runner.state)
-    assert actions2[ActionType.ACTION_CONFIRM] is False
-    assert actions2[ActionType.ACTION_SELECT_HAND_1] is True  # 精霊のぬいぐるみは選択可能
-
-    # 4. 精霊のぬいぐるみを選択して追加
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-
-    # 5. 精霊を追加したことで合計MPコストが0になり、CONFIRMが合法手になること
-    actions3 = godfield_core.get_legal_actions(runner.state)
-    assert actions3[ActionType.ACTION_CONFIRM] is True
-
-    # 6. 確定して解決
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # MPが減らずに2のまま維持されていることを確認
-    assert runner.state.get_mp(1) == 2
-
-
-def test_bouncing_sword_flow():
-    """
-    検証内容: 乱弾武剣（weapons/bouncing-sword）で弾きが成功した場合の全フローの検証。
-    - 攻撃者（P0）がブーメラン（無属性物理武器）で攻撃する。
-    - 防御者（P1）が乱弾武剣で防御し、弾きが成功する。
-    - 攻守が交代し、攻撃者（P0）が防御側（defender）となり、フェイズが PHASE_DEFENSE のままアクターが P0 になることを確認。
-    - 攻撃者（P0）が防御（パス、または盾等）を行い、正しくダメージが P0 に適用されることを確認。
-    """
-    boomerang_id = find_card_by_name("weapons/boomerang")
-    bouncing_sword_id = find_card_by_name("weapons/bouncing-sword")
-    leather_clothes_id = find_card_by_name("armor/leather-clothes")
-
-    # 弾きが成功するRNGシードを探索
-    success_seed = None
-    for seed in range(100):
-        runner = SimulationRunner()
-        runner.state.seed_rng(seed)
-        runner.set_status(0, hp=40, mp=10)
-        runner.set_status(1, hp=40, mp=10)
-        runner.state.set_true_hand(0, 0, boomerang_id)
-        runner.state.set_true_hand(1, 0, bouncing_sword_id)
-
-        runner.perform_attack([0])
-        runner.perform_defense([0])
-
-        if runner.state.current_phase == GamePhase.PHASE_DEFENSE and runner.state.defender_id == 0:
-            success_seed = seed
-            break
-
-    assert success_seed is not None, "乱弾武剣の反射成功シードが見つかりませんでした"
-
-    # テスト開始
-    runner = SimulationRunner()
-    runner.state.seed_rng(success_seed)
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-    runner.state.set_true_hand(0, 0, boomerang_id)
-    runner.state.set_true_hand(0, 1, leather_clothes_id)  # 反射されたとき用の盾
-    runner.state.set_true_hand(1, 0, bouncing_sword_id)
-
-    # 1. P0 がブーメランで攻撃
-    runner.perform_attack([0])
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 1
-
-    # 2. P1 が乱弾武剣で対抗し、決定
-    runner.perform_defense([0])
-
-    # 弾きが成功したため、攻守が交代し、アクターが P0 になり、フェイズは PHASE_DEFENSE のまま
-    assert runner.state.attacker_id == 1
-    assert runner.state.defender_id == 0
-    assert runner.state.current_actor_id == 0
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-
-    # 3. P0 が防御カードとして革の服（守2）を使用可能か検証
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True  # 盾が選択可能
-
-    # 4. P0 が革の服を使用して防御確定
-    runner.perform_defense([1])
-
-    # ブーメランの攻撃力3 - 革の服の守備力2 = 1ダメージ。
-    # P0のHPは 40 - 1 = 39 になるはずです。
-    assert runner.state.get_hp(0) == 39
-    # ターンが終了してメインフェイズに戻ることを確認
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-
-
-def test_miracle_defense_physical_armor_strictly_illegal():
-    """
-    検証内容:
-    1. 奇跡攻撃（例：ダメージのある火奇跡＜炎＞）に対し、虹のカーテンがない場合、
-       対抗属性の物理防具（例：アクアシューズ）を出すことは合法であること。非対抗（例：革の帽子）は非合法。
-    2. 対抗防具のみで防御した場合、ダメージが完全に相殺（0ダメージ）されること。
-    3. 虹のカーテンを1枚目に出した後は、無属性の一般物理防具（例：革の帽子）を出すことが合法になること。
-    """
-    # パターンA: 対抗属性防具を直接出して相殺
-    runner = SimulationRunner()
-    flame_id = find_card_by_name("miracles/flame")  # ＜炎＞ (火属性奇跡, 攻4)
-    curtain_id = find_card_by_name("armor/rainbow-curtain")
-    aqua_shoes_id = find_card_by_name("armor/aqua-shoes")  # アクアシューズ (水属性/物理防具, 守1)
-    leather_cap_id = find_card_by_name("armor/leather-cap")  # 革の帽子 (無属性/物理防具, 守1)
-
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-    runner.state.set_true_hand(0, 0, flame_id)
-    runner.state.set_true_hand(1, 0, curtain_id)
-    runner.state.set_true_hand(1, 1, aqua_shoes_id)
-    runner.state.set_true_hand(1, 2, leather_cap_id)
-
-    # P0 が ＜炎＞ で攻撃
-    runner.perform_attack([0])
-    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
-
-    # 虹のカーテンなしの状態での判定
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True  # カーテンは合法
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True  # アクアシューズ（対抗属性）は合法！
-    assert actions[ActionType.ACTION_SELECT_HAND_2] is False  # 革の帽子（無属性非対抗）は非合法
-
-    # アクアシューズを直接選択して決定
-    runner.perform_defense([1])
-
-    # 対抗属性により防御が成立し、通常の防御減算のみ (10 - 1 = 9被弾) -> 40 - 9 = 31
-    assert runner.state.get_hp(1) == 31
-    assert runner.state.current_phase == GamePhase.PHASE_MAIN
-
-    # パターンB: カーテン + 一般防具
-    runner2 = SimulationRunner()
-    runner2.set_status(0, hp=40, mp=10)
-    runner2.set_status(1, hp=40, mp=10)
-    runner2.state.set_true_hand(0, 0, flame_id)
-    runner2.state.set_true_hand(1, 0, curtain_id)
-    runner2.state.set_true_hand(1, 1, aqua_shoes_id)
-    runner2.state.set_true_hand(1, 2, leather_cap_id)
-
-    runner2.perform_attack([0])
-
-    # 1枚目にカーテンを選択
-    runner2.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # カーテン選択後は、無属性化したため物理防具である革の帽子も合法になる
-    actions2 = godfield_core.get_legal_actions(runner2.state)
-    assert actions2[ActionType.ACTION_SELECT_HAND_2] is True
-
-    # 革の帽子を選択して決定
-    runner2.perform_defense([2])
-
-    # カーテンで中和されたため、通常の防御力減算のみ (10 - 1 = 9被弾) -> 40 - 9 = 31
-    assert runner2.state.get_hp(1) == 31
-    assert runner2.state.current_phase == GamePhase.PHASE_MAIN
-
-
-def test_special_weapons_reflection():
-    """
-    検証内容: 巨大なタライ、ブラックホール、ダイヤモンドアクス、満月刀が
-    物理武器攻撃として反射剣などで反射可能であることの検証。
-    - 属性持ち（タライ＝光、ブラックホール＝闇、ダイヤモンドアクス＝土）は虹のカーテンが必要。
-    - 無属性（満月刀）は直接反射剣で反射可能。
-    """
-    curtain_id = find_card_by_name("armor/rainbow-curtain")
-    ref_sword_id = find_card_by_name("weapons/reflection-sword")
-    leather_clothes_id = find_card_by_name("armor/leather-clothes")
-
-    # 1. 巨大なタライ (光50) -> カーテン+反射剣
-    runner = SimulationRunner()
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-    runner.state.set_true_hand(1, 0, curtain_id)
-    runner.state.set_true_hand(1, 1, ref_sword_id)
-    runner.state.set_true_hand(0, 0, leather_clothes_id) # 反射後の受防用
-
-    runner.state.pending_attack_source_id = find_card_by_name("phenomena/gigantic-tub")
-    runner.state.pending_attack_power = 50
-    runner.state.pending_attack_element = godfield_core.Element.ELEM_LIGHT
-    runner.state.attacker_id = 0
-    runner.state.defender_id = 1
-    runner.state.current_actor_id = 1
-    runner.state.current_phase = GamePhase.PHASE_DEFENSE
-
-    # 虹のカーテンなしでは反射剣は置けない
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is False
-
-    # カーテンを置く
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True
-
-    # 反射剣を置いて決定 -> 反射成立で攻守交代
-    runner.perform_defense([1])
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 0
-
-    # 2. ダイヤモンドアクス (土15) -> カーテン+反射剣
-    runner2 = SimulationRunner()
-    runner2.set_status(0, hp=40, mp=10)
-    runner2.set_status(1, hp=40, mp=10)
-    runner2.state.set_true_hand(1, 0, curtain_id)
-    runner2.state.set_true_hand(1, 1, ref_sword_id)
-    runner2.state.set_true_hand(0, 0, leather_clothes_id)
-
-    runner2.state.pending_attack_source_id = find_card_by_name("gurdians/diamond-axe")
-    runner2.state.pending_attack_power = 15
-    runner2.state.pending_attack_element = godfield_core.Element.ELEM_STONE
-    runner2.state.attacker_id = 0
-    runner2.state.defender_id = 1
-    runner2.state.current_actor_id = 1
-    runner2.state.current_phase = GamePhase.PHASE_DEFENSE
-
-    # カーテンなしでは不可
-    actions = godfield_core.get_legal_actions(runner2.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is False
-
-    runner2.step(ActionType.ACTION_SELECT_HAND_0)
-    actions = godfield_core.get_legal_actions(runner2.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True
-
-    # 反射決定
-    runner2.perform_defense([1])
-    assert runner2.state.current_phase == GamePhase.PHASE_DEFENSE
-    assert runner2.state.current_actor_id == 0
-
-    # 3. 満月刀 (無10) -> 直接反射剣可能
-    runner3 = SimulationRunner()
-    runner3.set_status(0, hp=40, mp=10)
-    runner3.set_status(1, hp=40, mp=10)
-    runner3.state.set_true_hand(1, 0, ref_sword_id)
-    runner3.state.set_true_hand(0, 0, leather_clothes_id)
-
-    runner3.state.pending_attack_source_id = find_card_by_name("gurdians/full-moon-blade")
-    runner3.state.pending_attack_power = 10
-    runner3.state.pending_attack_element = godfield_core.Element.ELEM_NONE
-    runner3.state.attacker_id = 0
-    runner3.state.defender_id = 1
-    runner3.state.current_actor_id = 1
-    runner3.state.current_phase = GamePhase.PHASE_DEFENSE
-
-    # 無属性なので直接反射剣が置ける
-    actions = godfield_core.get_legal_actions(runner3.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True
-
-    runner3.perform_defense([0])
-    assert runner3.state.current_phase == GamePhase.PHASE_DEFENSE
-    assert runner3.state.current_actor_id == 0
-
-
-def test_dual_use_sword_shield_defense():
-    """
-    検証内容: ソードシールド（武器タイプ、ATK10 / DEF10）を防御フェイズで防具として仮置きした際、
-    pending_defense_power に 10 が正しく反映され、攻撃を完全ガードできることのテスト。
-    """
-    runner = SimulationRunner()
-    sword_shield_id = find_card_by_name("ソードシールド")
-    atk_card_id = find_card_by_name("打撃の鉄板") # ATK 5
-
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-
-    runner.state.set_true_hand(0, 0, atk_card_id)
-    runner.state.set_true_hand(1, 0, sword_shield_id)
-
-    # P0が打撃の鉄板(ATK5)で攻撃
-    runner.perform_attack([0])
-
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-    assert runner.state.current_actor_id == 1
-
-    # P1がソードシールド(DEF10)を出してガード
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True, "ソードシールドが防御の合法手であること"
-
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.pending_defense_power == 10, "仮置き防御力 pending_defense_power が 10 になること"
-
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # 5 - 10 <= 0 で完全ガード成功
-    assert runner.state.get_hp(1) == 40
-
-
-def test_dual_use_demon_gauntlet_attack():
-    """
-    検証内容: 鬼の小手（防具タイプ、DEF5 / ATK10）を攻撃プラスフェイズで攻撃アイテムとして仮置き・使用した際、
-    pending_attack_power に 10 が正しく反映され、相手に 10 ダメージを与えられることのテスト。
-    """
-    runner = SimulationRunner()
-    demon_gauntlet_id = find_card_by_name("鬼の小手")
-    atk_card_id = find_card_by_name("打撃の鉄板") # ATK 5
-
-    runner.set_status(0, hp=40, mp=10)
-    runner.set_status(1, hp=40, mp=10)
-
-    runner.state.set_true_hand(0, 0, atk_card_id)
-    runner.state.set_true_hand(0, 1, demon_gauntlet_id)
-
-    # P0が打撃の鉄板(ATK5)を出して攻撃プラスフェイズへ
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-    assert runner.state.current_phase == GamePhase.PHASE_ATTACK_PLUS
-
-    # 鬼の小手(ATK10)をプラス攻撃として重ね出し
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "鬼の小手が攻撃プラスの合法手であること"
-
-    runner.step(ActionType.ACTION_SELECT_HAND_1)
-    assert runner.state.pending_attack_power == 15, "合計攻撃力 pending_attack_power が 5 + 10 = 15 になること"
-
-    runner.step(ActionType.ACTION_TARGET_OPP)
-
-    # P1が防御せずスルー
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # 40 - 15 = 25 HP になること
-    assert runner.state.get_hp(1) == 25
-
-
-def test_sky_harpoon_and_angel_bow_miracle_defense():
-    """
-    検証内容: 武器タイプでありながら奇跡リアクション効果を持つ「スカイハープーン」(bounce) や
-    「エンゼルの弓」(block) が、奇跡攻撃に対する防御フェイズで正しくリアクション手として機能することのテスト。
-    """
-    runner = SimulationRunner()
-    fire_miracle_id = find_card_by_name("＜炎＞")
-    sky_harpoon_id = find_card_by_name("スカイハープーン")
-    angel_bow_id = find_card_by_name("エンゼルの弓")
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, fire_miracle_id)
-    runner.state.set_true_hand(1, 0, sky_harpoon_id)
-    runner.state.set_true_hand(1, 1, angel_bow_id)
-
-    # P0が＜炎＞(10)でP1に奇跡攻撃
-    runner.perform_attack([0])
-
-    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
-    assert runner.state.current_actor_id == 1
-
-    # P1の合法手に「スカイハープーン」(0) も「エンゼルの弓」(1) も含まれていること！
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_0] is True, "スカイハープーンが奇跡防御の合法手であること"
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "エンゼルの弓が奇跡防御の合法手であること"
-
-    # スカイハープーンで奇跡を弾く（50%弾く）
-    runner.perform_defense([0])
-
-    # 奇跡攻撃に対するリアクション解決が正しく行われること
-    assert runner.state.get_hp(1) == 40 or runner.state.get_hp(1) == 30
-
-
-def test_miracle_reaction_plus_spiritual_card_mp0():
-    """
-    検証内容: 奇跡リアクションカード(＜乱気流＞や＜壁＞)を仮置きした後、
-    例外的にその直後に「精霊系カード」(精霊の杖等)を重ね出しして MP 消費を 0 にできることをテスト。
-    """
-    runner = SimulationRunner()
-    fire_miracle_id = find_card_by_name("miracles/flame") # ＜炎＞ 奇跡
-    turbulence_id = find_card_by_name("miracles/turbulence") # ＜乱気流＞ 奇跡リアクション (MP3)
-    spirit_staff_id = find_card_by_name("weapons/spiritual-staff") # 精霊の杖 (精霊系)
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=2) # MPが2しかない状態（乱気流の通常消費3MPには足りない）
-
-    runner.state.set_true_hand(0, 0, fire_miracle_id)
-    runner.state.set_true_hand(1, 0, turbulence_id)
-    runner.state.set_true_hand(1, 1, spirit_staff_id)
-
-    # P0が＜炎＞でP1に奇跡攻撃
-    runner.perform_attack([0])
-
-    assert runner.state.current_phase == GamePhase.PHASE_MIRACLE_DEFENSE
-
-    # P1が1枚目に＜乱気流＞(スロット0)を仮置き
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # ＜乱気流＞が仮置きされた直後、手札スロット1の「精霊の杖」が合法手になること！
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "奇跡リアクションの後に精霊カードが選択可能であること"
-
-    # P1が精霊の杖(スロット1)を選択して確定
-    runner.perform_defense([1])
-
-    # MP消費が0になるため、MPは減らずに2のまま維持されること！
-    assert runner.state.get_mp(1) == 2
-
-
-def test_wall_miracle_reaction_plus_spiritual_card_mp0():
-    """
-    検証内容: 無属性物理武器攻撃に対し、奇跡リアクションカードである＜壁＞(MP3)を仮置きした後、
-    直後に「精霊系カード」(精霊の足袋等)を重ね出しして MP 消費を 0 にできることをテスト。
-    """
-    runner = SimulationRunner()
-    punch_id = find_card_by_name("weapons/punch") # パンチ (無属性物理武器)
-    wall_id = find_card_by_name("miracles/wall") # ＜壁＞ 奇跡物理リアクション (MP3)
-    spirit_tabi_id = find_card_by_name("armor/spiritual-socks") # 精霊の足袋 (精霊系)
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=2) # MPが2しかない状態
-
-    runner.state.set_true_hand(0, 0, punch_id)
-    runner.state.set_true_hand(1, 0, wall_id)
-    runner.state.set_true_hand(1, 1, spirit_tabi_id)
-
-    # P0がパンチでP1に無属性物理攻撃
-    runner.perform_attack([0])
-
-    assert runner.state.current_phase == GamePhase.PHASE_DEFENSE
-
-    # P1が1枚目に＜壁＞(スロット0)を仮置き
-    runner.step(ActionType.ACTION_SELECT_HAND_0)
-
-    # ＜壁＞が仮置きされた直後、手札スロット1の「精霊の足袋」が合法手になること！
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is True, "＜壁＞の後に精霊の足袋が選択可能であること"
-
-    # P1が精霊の足袋(スロット1)を選択して確定
-    runner.perform_defense([1])
-
-    # ＜壁＞の攻撃阻止が成功し、MP消費が0になるため、MPは減らずに2のまま維持されること！
-    assert runner.state.get_mp(1) == 2
-
-
-# ==========================================
-# Merged from: tests/core/test_flash_defense.py
-# ==========================================
-
-
-
-def test_flash_prevents_unaffordable_wall():
-    """
-    検証内容: 閃光（CurseType.CURSE_FLASH）状態における防具制限とMP制限。
-    - 閃光状態のプレイヤーがMP 0の時、手札に「＜壁＞」（消費MP6）と「精霊のぬいぐるみ」（MP相殺）があっても、
-      閃光状態のため1枚しか防具カードを置けず、MPが足りない「＜壁＞」を置くことは非合法（False）であること。
-    - 精霊のぬいぐるみ単体は防具カードではないため、最初には選択できない（False）。
-    - 木の盾（無消費）は合法手（True）であること。
-    """
-    runner = SimulationRunner()
-
-    wall = find_card_by_name("＜壁＞")
-    plushie = find_card_by_name("精霊のぬいぐるみ")
-    leather_clothes = find_card_by_name("armor/leather-clothes")
-
-    # 攻撃情報をセット
-    runner.state.current_phase = GamePhase.PHASE_DEFENSE
-    runner.state.current_actor_id = 0
-    runner.state.pending_attack_element = godfield_core.Element.ELEM_NONE
-    runner.state.pending_attack_power = 10
-    runner.state.set_hp(0, 40)
-    runner.state.set_mp(0, 0)  # MP = 0
-
-    # プレイヤー0を手札と閃光状態にセット
-    runner.state.set_num_staged_cards(0, 0)
-    runner.state.set_true_hand(0, 0, wall)
-    runner.state.set_true_hand(0, 1, plushie)
-    runner.state.set_true_hand(0, 2, leather_clothes)
-    runner.state.set_curses(0, CurseType.CURSE_FLASH, True)  # 閃光状態
-
-    # 合法手を取得
-    legal_actions = godfield_core.get_legal_actions(runner.state)
-
-    # 閃光かつMP 0なので：
-    # - 「＜壁＞」は消費6 MPで、精霊のぬいぐるみを重ねられないため非合法 (False)
-    assert legal_actions[ActionType.ACTION_SELECT_HAND_0] == False
-
-    # - 「精霊のぬいぐるみ」は単体では防御を開始できないため非合法 (False)
-    assert legal_actions[ActionType.ACTION_SELECT_HAND_1] == False
-
-    # - 「革の服」はMP消費0なので合法 (True)
-    assert legal_actions[ActionType.ACTION_SELECT_HAND_2] == True
-
-    # 実際に革の服で受ける
-    runner.step(ActionType.ACTION_SELECT_HAND_2)
-
-    # 閃光状態のため、1枚置いた時点でACTION_CONFIRM以外の選択（他の手札選択）が非合法になることを検証
-    legal_actions_after = godfield_core.get_legal_actions(runner.state)
-    assert legal_actions_after[ActionType.ACTION_CONFIRM] == True
-    assert legal_actions_after[ActionType.ACTION_SELECT_HAND_0] == False
-    assert legal_actions_after[ActionType.ACTION_SELECT_HAND_1] == False
-
-    # 防御を確定して完了
-    runner.step(ActionType.ACTION_CONFIRM)
-
-    # 革の服（防御力2）で10ダメージを減算し、40 - (10 - 2) = 32 HPになること
-    assert runner.state.get_hp(0) == 32
-
-# ==========================================
-# Merged from: tests/core/test_rainbow_curtain_bug.py
-# ==========================================
-
-# -*- coding: utf-8 -*-
-
-
-def test_rainbow_curtain_followed_by_elemental_armors_miracle():
-    """
-    検証内容: 相手の火属性奇跡攻撃(＜炎＞)に対し、防御側が1枚目に「虹のカーテン」を出した直後、
-    手札にある各属性の防具(水属性、木属性、土属性、無属性等)がすべて合法手として選択可能かを検証。
-    """
-    runner = SimulationRunner()
-
-    fire_miracle_id = find_card_by_name("miracles/flame") # 火属性奇跡
-    rainbow_curtain_id = find_card_by_name("armor/rainbow-curtain") # 虹のカーテン
-    ice_boots_id = find_card_by_name("armor/ice-boots") # 水属性防具
-    grove_shield_id = find_card_by_name("armor/grove-shield") # 木属性防具
-    iron_shield_id = find_card_by_name("armor/iron-shield") # 無属性防具
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, fire_miracle_id)
-    runner.state.set_true_hand(1, 0, rainbow_curtain_id)
-    runner.state.set_true_hand(1, 1, ice_boots_id)
-    runner.state.set_true_hand(1, 2, grove_shield_id)
-    runner.state.set_true_hand(1, 3, iron_shield_id)
-
-    # P0が＜炎＞でP1に奇跡攻撃
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
-
-    # P1が1枚目に「虹のカーテン」(スロット0)を選択・仮置き
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # 虹のカーテン仮置き後のP1の合法手を取得
-    actions = godfield_core.get_legal_actions(runner.state)
-
-    print("スロット1 (水属性 アイスブーツ):", actions[godfield_core.ActionType.ACTION_SELECT_HAND_1])
-    print("スロット2 (木属性 林の盾):", actions[godfield_core.ActionType.ACTION_SELECT_HAND_2])
-    print("スロット3 (無属性 アイアンシールド):", actions[godfield_core.ActionType.ACTION_SELECT_HAND_3])
-
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_1] is True, "水属性防具が選択可能であること"
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_2] is True, "木属性防具が選択可能であること"
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_3] is True, "無属性防具が選択可能であること"
-
-
-def test_rainbow_curtain_followed_by_elemental_armors_weapon():
-    """
-    検証内容: 相手の火属性武器攻撃(フレアアクス)に対し、防御側が1枚目に「虹のカーテン」を出した直後、
-    手札にある各属性の防具(水属性、木属性、土属性、無属性等)がすべて合法手として選択可能かを検証。
-    """
-    runner = SimulationRunner()
-
-    flare_axe_id = find_card_by_name("weapons/flare-axe") # 火属性武器
-    rainbow_curtain_id = find_card_by_name("armor/rainbow-curtain") # 虹のカーテン
-    ice_boots_id = find_card_by_name("armor/ice-boots") # 水属性防具
-    grove_shield_id = find_card_by_name("armor/grove-shield") # 木属性防具
-    iron_shield_id = find_card_by_name("armor/iron-shield") # 無属性防具
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, flare_axe_id)
-    runner.state.set_true_hand(1, 0, rainbow_curtain_id)
-    runner.state.set_true_hand(1, 1, ice_boots_id)
-    runner.state.set_true_hand(1, 2, grove_shield_id)
-    runner.state.set_true_hand(1, 3, iron_shield_id)
-
-    # P0がフレアアクスでP1に物理属性攻撃
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_DEFENSE
-
-    # P1が1枚目に「虹のカーテン」(スロット0)を選択・仮置き
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # 虹のカーテン仮置き後のP1の合法手を取得
-    actions = godfield_core.get_legal_actions(runner.state)
-
-    print("スロット1 (水属性 アイスブーツ):", actions[godfield_core.ActionType.ACTION_SELECT_HAND_1])
-    print("スロット2 (木属性 林の盾):", actions[godfield_core.ActionType.ACTION_SELECT_HAND_2])
-    print("スロット3 (無属性 アイアンシールド):", actions[godfield_core.ActionType.ACTION_SELECT_HAND_3])
-
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_1] is True, "水属性防具が選択可能であること"
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_2] is True, "木属性防具が選択可能であること"
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_3] is True, "無属性防具が選択可能であること"
-
-
-def test_rainbow_curtain_all_element_armors_available():
-    """
-    検証内容: 虹のカーテンを1枚目に出した後は、攻撃属性が無属性化されるため、
-    手札の火・水・木・土・光・無属性の全防具が合法手として正しく選択できることを網羅検証。
-    """
-    runner = SimulationRunner()
-
-    fire_miracle_id = find_card_by_name("miracles/flame") # 火属性攻撃
-    rainbow_curtain_id = find_card_by_name("armor/rainbow-curtain") # 虹のカーテン
-    sparkle_glove_id = find_card_by_name("armor/sparkle-glove") # 火属性
-    aqua_shoes_id = find_card_by_name("armor/aqua-shoes") # 水属性
-    wood_shield_id = find_card_by_name("armor/wood-shield") # 木属性
-    bedrock_id = find_card_by_name("armor/bedrock") # 土属性
-    leather_cap_id = find_card_by_name("armor/leather-cap") # 無属性
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, fire_miracle_id)
-    runner.state.set_true_hand(1, 0, rainbow_curtain_id)
-    runner.state.set_true_hand(1, 1, sparkle_glove_id)
-    runner.state.set_true_hand(1, 2, aqua_shoes_id)
-    runner.state.set_true_hand(1, 3, wood_shield_id)
-    runner.state.set_true_hand(1, 4, bedrock_id)
-    runner.state.set_true_hand(1, 5, leather_cap_id)
-
-    # 奇跡攻撃
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-
-    # 1枚目に虹のカーテンを仮置き
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    actions = godfield_core.get_legal_actions(runner.state)
-
-    # 2枚目として全属性の防具が合法手になっていることを確認
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_1] is True, "火属性防具が選択可能"
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_2] is True, "水属性防具特防具が選択可能"
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_3] is True, "木属性防具が選択可能"
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_4] is True, "土属性防具が選択可能"
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_5] is True, "無属性防具が選択可能"
-
-
-def test_rainbow_curtain_plus_sky_armor_against_meteor():
-    """
-    検証内容: 相手から＜流星＞(光属性奇跡 ATK 10) を撃たれ、
-    防御側が1枚目に「虹のカーテン」を出した後、2枚目としてリアクション防具である「スカイアーマー」(Def 9)
-    が正しく合法手として選択でき、防御力9が計算に加算されることをテスト。
-    """
-    runner = SimulationRunner()
-
-    meteor_id = find_card_by_name("miracles/meteor") # ＜流星＞ (光属性奇跡 ATK 10)
-    rainbow_curtain_id = find_card_by_name("armor/rainbow-curtain") # 虹のカーテン
-    sky_armor_id = find_card_by_name("armor/sky-armor") # ススカイアーマー (reaction: bounce, def: 9)
-
-    runner.set_status(0, hp=40, mp=20)
-    runner.set_status(1, hp=40, mp=20)
-
-    runner.state.set_true_hand(0, 0, meteor_id)
-    runner.state.set_true_hand(1, 0, rainbow_curtain_id)
-    runner.state.set_true_hand(1, 1, sky_armor_id)
-
-    # P0が＜流星＞でP1に光属性奇跡攻撃
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-    runner.step(godfield_core.ActionType.ACTION_TARGET_OPP)
-
-    assert runner.state.current_phase == godfield_core.GamePhase.PHASE_MIRACLE_DEFENSE
-
-    # P1が1枚目に「虹のカーテン」(スロット0)を選択・仮置き
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_0)
-
-    # 虹のカーテン仮置き後、手札スロット1の「スカイアーマー」が合法手になっていることをアサート！
-    actions = godfield_core.get_legal_actions(runner.state)
-    assert actions[godfield_core.ActionType.ACTION_SELECT_HAND_1] is True, "虹のカーテンの後にスカイアーマーが選択可能であること"
-
-    # P1がスカイアーマー(スロット1)を選択して確定
-    runner.step(godfield_core.ActionType.ACTION_SELECT_HAND_1)
-    runner.step(godfield_core.ActionType.ACTION_CONFIRM)
-
-    # ＜流星＞(ATK 10) に対して スカイアーマー(Def 9) で防御したため、ダメージは 10 - 9 = 1 ダメージ
-    # P1のHPは 40 - 1 = 39 になること！
-    assert runner.state.get_hp(1) == 39
+    assert card_feature(CURTAIN, "type") == "defense"
+    assert card_feature(WALL, "type") == "miracle"
+    assert card_feature(TURBULENCE, "type") == "miracle"
+    assert card_feature(REFLECTION_SWORD, "reaction_type") == "reflect"
+    assert card_feature("weapons/bouncing-sword", "reaction_type") == "bounce"
+    assert card_feature("weapons/sky-harpoon", "reaction_type") == "bounce"
+    assert card_feature("weapons/angel-bow", "reaction_type") == "block"
+    assert card_id(CURTAIN) >= 0
