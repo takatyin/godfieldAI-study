@@ -634,6 +634,48 @@ def test_zero_power_guardian_curses_can_be_reflected(board, guardian, action_car
 
 
 @pytest.mark.parametrize(
+    ("guardian", "action_card"),
+    [
+        (VENUS, "gurdians/fine"),
+        (VENUS, "gurdians/bribe"),
+        (JUPITER, "gurdians/colored-leaves"),
+    ],
+    ids=["罰金", "わいろ", "木星神の紅葉"],
+)
+def test_guardian_records_itself_as_the_initiator(board, guardian, action_card):
+    """守護神が雑貨扱いの行動を仕掛けたとき、仕掛けた側が記録されることを検証します。
+
+    スーパーミラーで反射されると attacker/defender が入れ替わるため、解決時には
+    pending_initiator を見るしかありません。守護神の経路だけこれを記録しておらず、
+    実ゲーム（pending_initiator の初期値が -1）では受諾した瞬間に例外で落ちていました。
+
+    テスト側の clear_state() がゼロ埋めのままで pending_initiator を 0 にしていたため、
+    盤面が本番より甘く、この不具合を素通りさせていました。
+    """
+    g = board(
+        p0=Side(hp=40, mp=40, money=20, hand=[DISCARD_CARD]),
+        p1=Side(hp=40, mp=40, money=20, guardian=guardian),
+    )
+    assert g.state.pending_initiator == -1, "開始局面では未設定であるべきです"
+
+    g.rng.deck_always(FILLER)
+    g.rng.guardian_action_card(guardian, action_card)
+    g.discard(DISCARD_CARD)
+
+    g.expect(phase=GamePhase.PHASE_SUNDRY_SELECT_MIRROR, actor=0)
+    assert g.state.pending_initiator == 1, (
+        "仕掛けたのは守護神の持ち主（P1）であるべきです"
+    )
+
+    # 解決してターンが移ると、持ち越さずに未設定へ戻る
+    g.take_hit()
+    g.expect(phase=GamePhase.PHASE_MAIN)
+    assert g.state.pending_initiator == -1, (
+        "ターンをまたいで残すと、次の記録漏れを前ターンの値で隠してしまいます"
+    )
+
+
+@pytest.mark.parametrize(
     ("guardian", "action_card", "curse"),
     [
         (JUPITER, "gurdians/colored-leaves", CurseType.CURSE_DREAM),

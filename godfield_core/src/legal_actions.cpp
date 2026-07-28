@@ -2,6 +2,9 @@
 #include "game_logic_internal.h"
 #include "generated_card_ids.h"
 
+// 仮置き場の読み出しは staged_card_id()（combat_resolution.cpp）に一本化してある。
+// 直接 staged_cards[p][i] を手札の添字に使わないこと。StagedEntry のコメントを参照。
+
 template <typename Func>
 void get_legal_hand_actions(const InternalState &state, int me, Func&& func) {
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
@@ -68,10 +71,11 @@ void legal_phase_main_target_select(const InternalState &state, bool legal_actio
 void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     bool has_unstable_accuracy = false;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
-        if (card_id == CARD_EMPTY) continue;
-        CardFeatures &f = get_registry_size() > 0 ? g_card_registry[card_id] : g_card_registry[0]; // safety fallback
-        if (f.accuracy < 100) has_unstable_accuracy = true;
+        int card_id = staged_card_id(state, me, i);
+        // 以前は「登録簿が空なら0番を使う」という無意味なフォールバックがあり、
+        // 肝心の card_id の範囲は検査していなかった。
+        if (card_id < 0 || card_id >= get_registry_size()) continue;
+        if (g_card_registry[card_id].accuracy < 100) has_unstable_accuracy = true;
     }
 
     const bool owes_mp = owes_staged_mp(state, me);
@@ -96,7 +100,7 @@ void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTI
     });
 
     if (state.num_staged_cards[me] > 0) {
-        int first_card = state.apparent_hand[me][state.staged_cards[me][0]];
+        int first_card = staged_card_id(state, me, 0);
         if (first_card != CARD_EMPTY) {
             const CardFeatures &first_feat = g_card_registry[first_card];
             if (first_feat.usage_timing & TIMING_MAIN_ATK) {
@@ -112,14 +116,9 @@ void legal_phase_attack_plus(const InternalState &state, bool legal_actions[ACTI
 void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     bool has_mirage = false;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int idx = state.staged_cards[me][i];
-        if (idx >= 0 && idx < MAX_HAND_SIZE) {
-            int card_id = state.apparent_hand[me][idx];
-            if (card_id < 0) card_id = state.true_hand[me][idx];
-            if (card_id == ID_MIRAGE) {
-                has_mirage = true;
-                break;
-            }
+        if (staged_card_id(state, me, i) == ID_MIRAGE) {
+            has_mirage = true;
+            break;
         }
     }
 
@@ -131,8 +130,8 @@ void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACT
                 if (card_id < 0) card_id = state.true_hand[me][i];
                 // MPを借りている間は、返済手段である精霊系カードしか置けない
                 if (owes_mp && !is_spiritual_zero_mp_card(card_id)) continue;
-                if (card_id > 0 && card_id < 300) {
-                    if (card_id == ID_MIRAGE || card_id == ID_AURA || is_spiritual_zero_mp_card(card_id) || card_id == ID_WAND_OF_IGNITION || card_id == ID_WAND_OF_MYSTIC_WATER) {
+                if (card_id > 0 && card_id < get_registry_size()) {  // 300 という直書きだった
+                    if (card_id == ID_MIRAGE || card_id == ID_AURA || is_spiritual_zero_mp_card(card_id) || is_element_overriding_wand(card_id)) {
                         if (can_afford_staged_plus_card(state, me, i)) {
                             legal_actions[ACTION_SELECT_HAND_0 + i] = true;
                         }
@@ -143,7 +142,7 @@ void legal_phase_group_weapon(const InternalState &state, bool legal_actions[ACT
     }
 
     if (state.num_staged_cards[me] > 0) {
-        int first_card = state.apparent_hand[me][state.staged_cards[me][0]];
+        int first_card = staged_card_id(state, me, 0);
         if (first_card != CARD_EMPTY) {
             const CardFeatures &first_feat = g_card_registry[first_card];
             if (first_feat.usage_timing & TIMING_MAIN_ATK) {
@@ -170,7 +169,7 @@ void legal_phase_group_miracle(const InternalState &state, bool legal_actions[AC
     }
 
     if (state.num_staged_cards[me] > 0) {
-        int first_card = state.apparent_hand[me][state.staged_cards[me][0]];
+        int first_card = staged_card_id(state, me, 0);
         if (first_card != CARD_EMPTY) {
             const CardFeatures &first_feat = g_card_registry[first_card];
             if (first_feat.usage_timing & TIMING_MAIN_MIRACLE) {
@@ -215,7 +214,7 @@ static DefenseStagedState evaluate_defense_staged_state(const InternalState &sta
     dst.effective_atk_element = state.pending_attack_element;
 
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
+        int card_id = staged_card_id(state, me, i);
         if (card_id == ID_RAINBOW_CURTAIN) {
             dst.rainbow = true;
             dst.effective_atk_element = ELEM_NONE;
@@ -223,7 +222,7 @@ static DefenseStagedState evaluate_defense_staged_state(const InternalState &sta
     }
 
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
+        int card_id = staged_card_id(state, me, i);
         if (card_id == CARD_EMPTY) continue;
         const CardFeatures &f = g_card_registry[card_id];
         if (card_id == ID_RAINBOW_CURTAIN) continue;
@@ -236,7 +235,7 @@ static DefenseStagedState evaluate_defense_staged_state(const InternalState &sta
     }
 
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
+        int card_id = staged_card_id(state, me, i);
         if (card_id == CARD_EMPTY) continue;
         if (card_id == ID_RAINBOW_CURTAIN) continue;
         const CardFeatures &f = g_card_registry[card_id];
@@ -278,8 +277,8 @@ static bool is_legal_defense_card(const InternalState &state, int me, int card_i
     if (is_react) {
         bool allowed_as_first = false;
         if (defense_phase == GamePhase::PHASE_DEFENSE) {
-            allowed_as_first = (state.num_staged_cards[me] == 0) || 
-                               (state.num_staged_cards[me] == 1 && state.apparent_hand[me][state.staged_cards[me][0]] == ID_RAINBOW_CURTAIN);
+            allowed_as_first = (state.num_staged_cards[me] == 0) ||
+                               (state.num_staged_cards[me] == 1 && staged_card_id(state, me, 0) == ID_RAINBOW_CURTAIN);
         } else {
             allowed_as_first = (state.num_staged_cards[me] == 0);
         }
@@ -376,7 +375,7 @@ void legal_phase_defense(const InternalState &state, bool legal_actions[ACTION_S
 void legal_phase_miracle_plus(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     bool has_unstable_accuracy = false;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = state.apparent_hand[me][state.staged_cards[me][i]];
+        int card_id = staged_card_id(state, me, i);
         if (card_id == CARD_EMPTY) continue;
         CardFeatures &f = g_card_registry[card_id];
         if (f.accuracy < 100) has_unstable_accuracy = true;
@@ -398,7 +397,7 @@ void legal_phase_miracle_plus(const InternalState &state, bool legal_actions[ACT
     });
 
     if (state.num_staged_cards[me] > 0) {
-        int first_card = state.apparent_hand[me][state.staged_cards[me][0]];
+        int first_card = staged_card_id(state, me, 0);
         if (first_card != CARD_EMPTY) {
             const CardFeatures &first_feat = g_card_registry[first_card];
             if (first_feat.usage_timing & TIMING_MAIN_MIRACLE) {
@@ -467,8 +466,10 @@ void legal_phase_sell_select_mirror(const InternalState &state, bool legal_actio
  */
 void legal_phase_buy(const InternalState &state, bool legal_actions[ACTION_SPACE_SIZE], int me, int opp) {
     legal_actions[ACTION_DEAL_NO] = true;
-    int revealed_idx = state.staged_cards[opp][0];
-    int card_id = state.apparent_hand[opp][revealed_idx];
+    // 出品カードが解決できない場合（番兵しか無い等）は買えないので、拒否だけを残す。
+    // ここは g_card_registry を直接引くため、CARD_EMPTY のまま進むと登録簿の範囲外を読む。
+    int card_id = staged_card_id(state, opp, 0);
+    if (card_id == CARD_EMPTY) return;
     CardFeatures &f = g_card_registry[card_id];
     if (state.money[me] >= f.price) {
         legal_actions[ACTION_DEAL_YES] = true;

@@ -72,6 +72,15 @@ void update_staged_pending_info(InternalState &state, int player_id);
  */
 bool is_spiritual_zero_mp_card(int card_id);
 
+/**
+ * @brief 同じカードの組み合わせが複数箇所で列挙されていたものを述語にしたもの。
+ *
+ * 片方だけ直す事故を防ぐため、2箇所以上で同じ列挙が現れるものはここに集約する。
+ */
+bool is_non_damage_ring_counter(int card_id);   // 反撃がHPダメージを伴わない指輪5枚
+bool is_element_overriding_wand(int card_id);   // 属性を無条件で上書きするワンド
+bool is_opponent_discarding_sundry(int card_id); // 相手の手札・奇跡を破棄する雑貨
+
 struct StagedAttackInfo {
     int mp_cost;
     int attack_power;
@@ -220,6 +229,37 @@ bool is_active_reaction_card(const InternalState &state, int card_id, GamePhase 
  */
 StagedCardIds get_staged_card_ids(const InternalState &state, int player);
 
+/**
+ * @brief 仮置き場の i 番目が指すカードIDを返します。仮置き場を読む唯一の入口です。
+ *
+ * 手札由来なら手札から解決し（夢で見た目が変わるためIDはキャッシュしない）、
+ * 守護神由来の仮想カードならそのIDを返します。範囲外なら CARD_EMPTY。
+ *
+ * 直接 staged_cards[p][i] を手札の添字に使わないこと。守護神が仕掛けた取引では
+ * 手札スロットではないエントリが入るため、範囲外を読んで静かに壊れます。
+ */
+int staged_card_id(const InternalState &state, int player, int i);
+
+/**
+ * @brief 仮置き場の i 番目が指す手札スロットを返します。手札由来でなければ -1。
+ *
+ * 「そのカードを消費する」「使用済みにする」など、手札そのものを触る場合に使います。
+ */
+int staged_hand_slot(const InternalState &state, int player, int i);
+
+/**
+ * @brief 手札スロットのカードIDを返します（未確定なら見た目、無ければ真の手札）。
+ *
+ * 「apparent を見て、負なら true を見る」という同じ2行が11箇所に散っており、
+ * 一部だけ範囲検査があるという不統一になっていました。ここに集約します。
+ */
+inline int card_id_in_hand(const InternalState &state, int player, int slot) {
+    if (slot < 0 || slot >= MAX_HAND_SIZE) return CARD_EMPTY;
+    int card_id = state.apparent_hand[player][slot];
+    if (card_id < 0) card_id = state.true_hand[player][slot];
+    return card_id;
+}
+
 
 // ============================================================================
 // 取引・戦闘解決 / Combat & Trade Resolutions (combat_resolution.cpp)
@@ -262,6 +302,8 @@ std::vector<int> get_guardian_action_cards(int guardian);
  * @brief 終末の時に出る悪魔カードの一覧（テストが悪魔名から指示値を逆引きするために公開）。
  */
 std::vector<int> get_apocalypse_devils();
+std::vector<int> get_apocalypse_devil_percents();
+std::vector<int> get_guardian_action_percents();
 
 /**
  * @brief HP吸収を持つカードの一覧（テストが全種を網羅するために公開）。
@@ -275,6 +317,41 @@ void confirm_all_staged_cards(InternalState &state, int player);
 void apply_damage(InternalState &state, int player_id, int damage, bool absorption = false, bool deal_same_damage = false);
 
 /**
+ * @brief HPをダメージ分減らし、守護神の退散判定だけを行います（お守りでの復活はしない）。
+ *
+ * 復活を挟まずに続けて別のHP操作を行いたい場合に使います。闇属性即死のように
+ * 「ダメージを与えた直後にHPを0にする」処理で apply_damage() を使うと、
+ * 途中の復活でお守りが二重に消費されてしまうため、こちらを使ってください。
+ * 呼び出し側は適切なタイミングで run_immediate_revive() を呼ぶ責任があります。
+ */
+void apply_damage_without_revive(InternalState &state, int player_id, int damage);
+
+/**
+ * @brief 闇属性攻撃による即死を適用します（防御力を貫通してHPが0になる）。
+ *
+ * 守護神の退散判定は「攻撃のダメージでHPが減ったこと」に対して行うものであり、
+ * このHPを0にする処理自体は退散判定の対象外です。呼び出し側は先に
+ * apply_damage_without_revive() でダメージを適用しておいてください。
+ */
+void apply_darkness_instant_death(InternalState &state, int player_id);
+
+/**
+ * @brief 自分自身に闇属性攻撃を撃った場合の死亡処理をまとめて行います。
+ *
+ * 武器・雑貨経路と奇跡経路の2箇所から呼ばれます。以前は奇跡経路に即死処理が
+ * 無く、自分に＜闇＞を撃っても攻撃力分のダメージしか入りませんでした。
+ */
+void apply_darkness_self_death(InternalState &state, int player_id, int damage);
+
+/**
+ * @brief 天国病の発作による死亡を適用します。
+ *
+ * 闇属性即死と違い、発作は病気による死なので守護神の退散判定を行い、
+ * 太陽のお守りによる復活も発生します。
+ */
+void apply_heaven_seizure_death(InternalState &state, int player_id);
+
+/**
  * @brief ダメージによってHPが減少した際、一定確率で守護神を離脱させます。
  * @param hp_decreased このダメージ適用でHPが実際に減少したか。
  */
@@ -284,6 +361,22 @@ void try_guardian_leave(InternalState &state, int player_id, bool hp_decreased);
  * @brief プレイヤーに病気を適用・悪化させます。
  */
 void apply_sickness(InternalState &state, int player_id, SicknessType new_sick);
+
+/**
+ * @brief 病気を無条件で上書きします（悪化の規則を適用しない）。
+ * 「必ずこの病気にする」効果に使います。SICKNESS_NONE を渡した場合は
+ * cure_sickness() に委譲されます。
+ */
+void set_sickness(InternalState &state, int player_id, SicknessType sick);
+
+/**
+ * @brief 病気を治します。病気でなければ何もしません。
+ *
+ * 直接 state.sickness に SICKNESS_NONE を代入すると EFFECT_SICKNESS イベントが
+ * 出ず、イベント履歴（観測に入る）から「治った」ことが読み取れなくなります。
+ * 呪いの remove_curse() と対になるヘルパーです。
+ */
+void cure_sickness(InternalState &state, int player_id);
 
 
 /**

@@ -9,18 +9,13 @@ constexpr int ASCENSION_BOW_HIT_RATE = 75;
 constexpr int SICKNESS_WORSEN_RATE = 5;
 constexpr int GUARDIAN_ACT_RATE = 25;
 
-// 守護神が行動する際、5種の行動のどれを選ぶかの累積閾値（0..99 の抽選値と比較する）。
-// roll < 30 なら行動1、roll < 55 なら行動2 ... のように先頭から判定する。
-// テスト側はこの表から「行動 N を狙う代表値」を導出するため、閾値をここ以外に書かないこと。
-constexpr int GUARDIAN_ACT_CHOICE_COUNT = 5;
-constexpr int GUARDIAN_ACT_CHOICE_THRESHOLDS[GUARDIAN_ACT_CHOICE_COUNT] = {30, 55, 75, 90, 100};
+// 守護神が持つ行動の数。各行動の確率は combat_resolution.cpp の
+// GUARDIAN_ACTION_PERCENT が行動カード表の隣で持つ。
+constexpr int GUARDIAN_ACTION_COUNT = 5;
 
-// 終末の時（APOCALYPSE_TURN 以降）のドローで悪魔カードが出る累積確率（%）。
-// 0..100 の抽選値と先頭から比較し、どれにも当たらなければ通常の山札抽選になる。
-// 対応するカードは combat_resolution.cpp の APOCALYPSE_DEVILS が持つ。
-// テスト側はこの表から「狙った悪魔を引く代表値」を導出するため、閾値をここ以外に書かないこと。
+// 終末の時のドローで出る悪魔カードの種類数。
+// カードとその出現率は combat_resolution.cpp の APOCALYPSE_DEVILS が組で持つ。
 constexpr int APOCALYPSE_DEVIL_COUNT = 5;
-constexpr int APOCALYPSE_DEVIL_THRESHOLDS[APOCALYPSE_DEVIL_COUNT] = {7, 12, 15, 20, 25};
 
 // 夢状態でドローしたカードが偽装される確率（%）。残りはそのまま正しく見える。
 // 偽装される場合は同じ夢グループの「自分以外」のカードから一様に選ばれるため、
@@ -35,6 +30,17 @@ constexpr int SUN_AMULET_REVIVE_HP = 10;
 
 // 昇天弓がターン終了時に発射されるときの攻撃力（手札上の攻撃力とは別物）。
 constexpr int ASCENSION_BOW_TRIGGERED_POWER = 30;
+
+// 新しいゲームの初期値 / New game setup
+constexpr int INITIAL_HP = 40;
+constexpr int INITIAL_MP = 10;
+constexpr int INITIAL_MONEY = 20;
+constexpr int INITIAL_HAND_SIZE = 9;
+
+// 初期配牌の強制手を消化した結果いきなり決着してしまった場合に、
+// シードを変えて配り直す上限回数。使い切った場合は例外を投げる
+// （決着済みの状態を「開始局面」として返すと、学習側が壊れた遷移を集める）。
+constexpr int MAX_NEW_GAME_ATTEMPTS = 8;
 
 // Observation 配列次元 / Observation Array Dimensions
 constexpr int NUM_SICKNESS_TYPES = 5;

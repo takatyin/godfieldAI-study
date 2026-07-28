@@ -16,6 +16,34 @@ bool is_discardable_card(int card_id) {
 }
 
 /**
+ * @brief その指輪の反撃が「HPダメージを伴わない」か。
+ *
+ * ダメージが無いので防具で防ぐ意味がなく、防御フェイズではなく反射確認フェイズ
+ * （スーパーミラーで跳ね返す）へ遷移する。
+ *   金星: お金を徴収 / 水星: 霧 / 木星: 夢 / 天王: 閃光 / 冥王: 暗雲
+ * 一方でダメージを与える火星・土星は防御フェイズへ、海王は反撃を予約しない。
+ */
+bool is_non_damage_ring_counter(int card_id) {
+    return card_id == ID_VENUS_RING || card_id == ID_MERCURY_RING ||
+           card_id == ID_JUPITER_RING || card_id == ID_URANUS_RING ||
+           card_id == ID_PLUTO_RING;
+}
+
+/**
+ * @brief 属性を無条件で上書きするワンドか。
+ */
+bool is_element_overriding_wand(int card_id) {
+    return card_id == ID_WAND_OF_IGNITION || card_id == ID_WAND_OF_MYSTIC_WATER;
+}
+
+/**
+ * @brief 相手の手札・展開済み奇跡を破棄する雑貨か（対象が相手側になる）。
+ */
+bool is_opponent_discarding_sundry(int card_id) {
+    return card_id == ID_NOCTURNAL_BROOM || card_id == ID_GODDESS_S_SOAP;
+}
+
+/**
  * @brief 指定されたカードが奇跡の消費MPを0にする「精霊の神器」であるかを判定します。
  */
 bool is_spiritual_zero_mp_card(int card_id) {
@@ -146,7 +174,7 @@ void confirm_card(InternalState &state, int player_id, int slot_idx) {
 }
 
 void clear_all_status_effects(InternalState &state, int player_id) {
-    state.sickness[player_id] = SICKNESS_NONE;
+    cure_sickness(state, player_id);
     for (int j = 0; j < 4; ++j) {
         remove_curse(state, player_id, static_cast<CurseType>(j));
     }
@@ -349,41 +377,45 @@ int calculate_staged_mp_cost(const InternalState &state, int player_id) {
  * @brief 指定したカードを仮置き場に加えたと仮定し、そのMPコストが支払えるかを判定します。
  */
 bool can_afford_staged_plus_card(const InternalState &state, int player_id, int next_hand_idx) {
-    InternalState temp = state;
-    if (temp.num_staged_cards[player_id] >= MAX_HAND_SIZE) {
+    const int num_staged = state.num_staged_cards[player_id];
+    if (num_staged >= MAX_HAND_SIZE) {
         return false;
     }
 
     // 閃光状態かつ防御フェイズの場合は、同時に1枚しかカードを仮置きできない
-    bool has_flash = temp.curses[player_id][CURSE_TYPE_FLASH];
-    bool is_defense = (temp.current_phase == GamePhase::PHASE_DEFENSE || temp.current_phase == GamePhase::PHASE_MIRACLE_DEFENSE);
+    bool has_flash = state.curses[player_id][CURSE_TYPE_FLASH];
+    bool is_defense = (state.current_phase == GamePhase::PHASE_DEFENSE || state.current_phase == GamePhase::PHASE_MIRACLE_DEFENSE);
     bool restrict_flash = has_flash && is_defense;
 
-    if (restrict_flash && temp.num_staged_cards[player_id] >= 1) {
+    if (restrict_flash && num_staged >= 1) {
         return false;
     }
 
-    temp.staged_cards[player_id][temp.num_staged_cards[player_id]] = next_hand_idx;
-    temp.num_staged_cards[player_id]++;
-    
+    // 「next_hand_idx を仮置きしたと仮定した場合」の仮置き列。
+    // 以前はこの1枚を足すためだけに InternalState を丸ごとコピーしていたが、
+    // この関数は合法手の計算で手札スロットごとに呼ばれるため、コピーが支配的なコストになっていた。
+    // 状態は変更せず、末尾に1枚足した列として読むだけにする。
+    const int hypothetical_count = num_staged + 1;
+    // 仮の1枚は手札由来なので、既存分は staged_hand_slot()、末尾だけ next_hand_idx。
+    auto slot_at = [&](int i) {
+        return (i < num_staged) ? staged_hand_slot(state, player_id, i) : next_hand_idx;
+    };
+    auto card_at = [&](int i) {
+        return (i < num_staged) ? staged_card_id(state, player_id, i)
+                                : card_id_in_hand(state, player_id, next_hand_idx);
+    };
+
     // 1. 仮置き場以外の手札に残っている、未使用の「消費MPを0にする精霊系カード」の個数 U をカウント
     int U = 0;
     if (!restrict_flash) { // 閃光状態かつ防御フェイズでなければ、将来的な精霊カードの重ねがけを考慮する
-        bool is_staged[MAX_HAND_SIZE];
-        for (int j = 0; j < MAX_HAND_SIZE; ++j) {
-            is_staged[j] = false;
-        }
-        for (int i = 0; i < temp.num_staged_cards[player_id]; ++i) {
-            int slot = temp.staged_cards[player_id][i];
-            // 守護神由来の仮置きは番兵 -1 を置くため、手札スロットとして使う前に範囲を検査する
-            if (slot >= 0 && slot < MAX_HAND_SIZE) {
-                is_staged[slot] = true;
-            }
+        bool is_staged[MAX_HAND_SIZE] = {};
+        for (int i = 0; i < hypothetical_count; ++i) {
+            int slot = slot_at(i);
+            if (slot != NO_HAND_SLOT) is_staged[slot] = true;
         }
         for (int j = 0; j < MAX_HAND_SIZE; ++j) {
-            int card_id = temp.apparent_hand[player_id][j];
-            if (card_id < 0) card_id = temp.true_hand[player_id][j];
-            if (card_id != CARD_EMPTY && !temp.is_used[player_id][j] && !is_staged[j]) {
+            int card_id = card_id_in_hand(state, player_id, j);
+            if (card_id != CARD_EMPTY && !state.is_used[player_id][j] && !is_staged[j]) {
                 if (is_spiritual_zero_mp_card(card_id)) {
                     U++;
                 }
@@ -392,26 +424,24 @@ bool can_afford_staged_plus_card(const InternalState &state, int player_id, int 
     }
 
     // 2. 仮置き場にある奇跡カードのうち、直後に精霊系カードが置かれていないもののMPコストをリスト化
-    std::vector<int> miracle_costs;
+    //    枚数は仮置き上限（MAX_HAND_SIZE）を超えないので固定長で足りる（従来は毎回 vector を確保していた）。
+    int miracle_costs[MAX_HAND_SIZE];
+    int num_miracles = 0;
     int base_non_miracle_cost = 0;
-    int num_cards = temp.num_staged_cards[player_id];
-    for (int i = 0; i < num_cards; ++i) {
-        int idx = temp.staged_cards[player_id][i];
-        int card_id = temp.apparent_hand[player_id][idx];
-        if (card_id < 0) card_id = temp.true_hand[player_id][idx];
+    for (int i = 0; i < hypothetical_count; ++i) {
+        int card_id = card_at(i);
+        if (card_id == CARD_EMPTY) continue;  // 番兵などカードを指していないエントリ
         const CardFeatures &f = g_card_registry[card_id];
         if (f.is_miracle()) {
             bool followed_by_spiritual = false;
-            if (i + 1 < num_cards) {
-                int next_idx = temp.staged_cards[player_id][i + 1];
-                int next_card_id = temp.apparent_hand[player_id][next_idx];
-                if (next_card_id < 0) next_card_id = temp.true_hand[player_id][next_idx];
+            if (i + 1 < hypothetical_count) {
+                int next_card_id = card_at(i + 1);
                 if (is_spiritual_zero_mp_card(next_card_id)) {
                     followed_by_spiritual = true;
                 }
             }
             if (!followed_by_spiritual) {
-                miracle_costs.push_back(f.mp_cost);
+                miracle_costs[num_miracles++] = f.mp_cost;
             }
         } else {
             base_non_miracle_cost += f.mp_cost;
@@ -419,15 +449,13 @@ bool can_afford_staged_plus_card(const InternalState &state, int player_id, int 
     }
 
     // 3. 奇跡コストの高い順にソートし、残りの精霊系カード U 枚で削減できる最大分を引く
-    std::sort(miracle_costs.rbegin(), miracle_costs.rend());
+    std::sort(miracle_costs, miracle_costs + num_miracles, [](int a, int b) { return a > b; });
     int total_min_cost = base_non_miracle_cost;
-    for (size_t i = 0; i < miracle_costs.size(); ++i) {
-        if (static_cast<int>(i) >= U) {
-            total_min_cost += miracle_costs[i];
-        }
+    for (int i = U; i < num_miracles; ++i) {
+        total_min_cost += miracle_costs[i];
     }
 
-    return temp.mp[player_id] >= total_min_cost;
+    return state.mp[player_id] >= total_min_cost;
 }
 
 /**
@@ -552,21 +580,42 @@ void apply_devil_fairy(InternalState &state, int player_id) {
 }
 
 /**
- * @brief 終末の時のドローで出る悪魔カード（APOCALYPSE_DEVIL_THRESHOLDS の各区間に対応）。
+ * @brief 終末の時（APOCALYPSE_TURN 以降）のドローで出る悪魔カードと、その出現率（%）。
+ *
+ * カードと確率を1行にまとめて持つ。以前はカード一覧をここに、確率を constants.h に
+ * 累積和で置いており、「並び順が一致していること」だけが両者の対応を保証していた。
+ * 累積和は1つ挿すと後続を全部書き直す必要があり、値を見ても各カードの確率が読めない。
+ *
+ * 合計が100未満の残り（現在は75%）は通常の山札抽選になる。
  */
-static const int APOCALYPSE_DEVILS[APOCALYPSE_DEVIL_COUNT] = {
-    ID_SMALL_DEVIL,    // 小悪魔: 10ダメージ
-    ID_MEDIUM_DEVIL,   // 中悪魔: 20ダメージ
-    ID_LARGE_DEVIL,    // 大悪魔: 30ダメージ
-    ID_TRICKSTER,      // イタズラマン: 手札を2枚破棄
-    ID_CHARITY_FAIRY,  // めぐみの妖精: HP/MP/お金のいずれかが+10
+struct ApocalypseDevil {
+    int card_id;
+    int percent;
+};
+static const ApocalypseDevil APOCALYPSE_DEVILS[APOCALYPSE_DEVIL_COUNT] = {
+    {ID_SMALL_DEVIL,   7},  // 小悪魔: 10ダメージ
+    {ID_MEDIUM_DEVIL,  5},  // 中悪魔: 20ダメージ
+    {ID_LARGE_DEVIL,   3},  // 大悪魔: 30ダメージ
+    {ID_TRICKSTER,     5},  // イタズラマン: 手札を2枚破棄
+    {ID_CHARITY_FAIRY, 5},  // めぐみの妖精: HP/MP/お金のいずれかが+10
 };
 
 /**
  * @brief 終末の時に出る悪魔カードの一覧（テストが悪魔名から指示値を逆引きするために公開）。
  */
 std::vector<int> get_apocalypse_devils() {
-    return std::vector<int>(APOCALYPSE_DEVILS, APOCALYPSE_DEVILS + APOCALYPSE_DEVIL_COUNT);
+    std::vector<int> out;
+    for (const ApocalypseDevil &d : APOCALYPSE_DEVILS) out.push_back(d.card_id);
+    return out;
+}
+
+/**
+ * @brief 悪魔カードの出現率（%）の一覧。並びは get_apocalypse_devils() と対応する。
+ */
+std::vector<int> get_apocalypse_devil_percents() {
+    std::vector<int> out;
+    for (const ApocalypseDevil &d : APOCALYPSE_DEVILS) out.push_back(d.percent);
+    return out;
 }
 
 int draw_card_with_apocalypse(InternalState &state, int player_id) {
@@ -577,11 +626,14 @@ int draw_card_with_apocalypse(InternalState &state, int player_id) {
         bool is_apocalypse = (state.current_turn >= APOCALYPSE_TURN);
         int card_id = CARD_EMPTY;
         if (is_apocalypse) {
-            // 閾値は constants.h の APOCALYPSE_DEVIL_THRESHOLDS を唯一の定義元とする
-            double r = roll_real(state, RollKind::APOCALYPSE_DRAW, 0.0, 100.0);
-            for (int i = 0; i < APOCALYPSE_DEVIL_COUNT; ++i) {
-                if (r < static_cast<double>(APOCALYPSE_DEVIL_THRESHOLDS[i])) {
-                    card_id = APOCALYPSE_DEVILS[i];
+            // 出現率は APOCALYPSE_DEVILS が各カードと一緒に持つ。ここで走査しながら
+            // 足し込むので、確率を変えるときに触るのは表の1行だけで済む。
+            int roll = roll_range(state, RollKind::APOCALYPSE_DRAW, 0, 99);
+            int acc = 0;
+            for (const ApocalypseDevil &d : APOCALYPSE_DEVILS) {
+                acc += d.percent;
+                if (roll < acc) {
+                    card_id = d.card_id;
                     break;
                 }
             }
@@ -696,13 +748,28 @@ void cleanup_phase_end(InternalState &state) {
 /**
  * @brief 仮置きされているカードの実際のIDリストを取得します。
  */
+int staged_card_id(const InternalState &state, int player, int i) {
+    if (i < 0 || i >= state.num_staged_cards[player]) return CARD_EMPTY;
+    const StagedEntry &e = state.staged_cards[player][i];
+    if (!e.is_from_hand()) return e.virtual_card;
+    // 手札由来はIDをキャッシュせず毎回解決する。夢のカードは確定時に
+    // apparent_hand が true_hand へ切り替わるため、キャッシュすると古い値が残る。
+    int card_id = state.apparent_hand[player][e.slot];
+    if (card_id < 0) card_id = state.true_hand[player][e.slot];
+    return card_id;
+}
+
+int staged_hand_slot(const InternalState &state, int player, int i) {
+    if (i < 0 || i >= state.num_staged_cards[player]) return NO_HAND_SLOT;
+    const StagedEntry &e = state.staged_cards[player][i];
+    return e.is_from_hand() ? e.slot : NO_HAND_SLOT;
+}
+
 StagedCardIds get_staged_card_ids(const InternalState &state, int player) {
     StagedCardIds result;
     for (int i = 0; i < state.num_staged_cards[player]; ++i) {
-        int idx = state.staged_cards[player][i];
-        if (idx >= 0 && idx < MAX_HAND_SIZE) {
-            int card_id = state.apparent_hand[player][idx];
-            if (card_id < 0) card_id = state.true_hand[player][idx];
+        int card_id = staged_card_id(state, player, i);
+        if (card_id != CARD_EMPTY) {
             result.ids[result.count++] = card_id;
         }
     }
@@ -712,6 +779,32 @@ StagedCardIds get_staged_card_ids(const InternalState &state, int player) {
 // Note: Sickness/Curse status values and event flags (such as FLAG_WORSENED)
 // are bitwise OR-ed and packed into the float `value` field of GameEvent
 // to keep the observation representation uniform for RL neural network input.
+/**
+ * @brief 病気を無条件で上書きします（悪化の規則を適用しません）。
+ *
+ * apply_sickness() は「同等以下の病気を与えると1段階進む」規則を持つため、
+ * 「必ずこの病気にする」効果には使えません。夕焼けのように全員を特定の病気に
+ * 揃える効果はこちらを使います。
+ */
+void cure_sickness(InternalState &state, int player_id) {
+    SicknessType cured = state.sickness[player_id];
+    if (cured == SICKNESS_NONE) return;
+    state.sickness[player_id] = SICKNESS_NONE;
+    push_event(state, player_id, EventType::EFFECT_SICKNESS, -1, player_id,
+               static_cast<float>(static_cast<int>(cured) | SicknessEvent::FLAG_CURED));
+}
+
+void set_sickness(InternalState &state, int player_id, SicknessType sick) {
+    if (sick == SICKNESS_NONE) {
+        // 「病気を無くす」は悪化ではなく治癒なので、専用のイベントを出します。
+        cure_sickness(state, player_id);
+        return;
+    }
+    state.sickness[player_id] = sick;
+    push_event(state, player_id, EventType::EFFECT_SICKNESS, -1, player_id,
+               static_cast<float>(static_cast<int>(sick) | SicknessEvent::FLAG_WORSENED));
+}
+
 void apply_sickness(InternalState &state, int player_id, SicknessType new_sick) {
     if (new_sick <= SICKNESS_NONE) return;
     SicknessType cur_sick = state.sickness[player_id];
@@ -725,9 +818,7 @@ void apply_sickness(InternalState &state, int player_id, SicknessType new_sick) 
             target_sick = new_sick;
         } else {
             if (cur_sick == SICKNESS_HEAVEN) {
-                state.hp[player_id] = 0;
-                push_event(state, player_id, EventType::EFFECT_SICKNESS, -1, player_id,
-                           static_cast<float>(SicknessEvent::TYPE_HEAVEN | SicknessEvent::FLAG_SEIZURE));
+                apply_heaven_seizure_death(state, player_id);
                 return;
             } else {
                 target_sick = static_cast<SicknessType>(cur_sick + 1);
@@ -795,9 +886,12 @@ static void resolve_string_of_fate(InternalState &state, int user_id) {
     int opp = 1 - user_id;
     push_event(state, user_id, EventType::TRIGGER_PHENOMENON, ID_STRING_OF_FATE, -1, static_cast<float>(phenomenon));
 
-    if (phenomenon == PHENOMENON_SUNSET) { // 夕焼け: 全員熱病
-        apply_sickness(state, 0, SICKNESS_FEVER);
-        apply_sickness(state, 1, SICKNESS_FEVER);
+    if (phenomenon == PHENOMENON_SUNSET) { // 夕焼け: 全員を熱病にする（強制上書き）
+        // apply_sickness は「同等以下なら1段階進む」規則なので使えない。
+        // それを通していた頃は、熱病の相手が地獄病に、地獄病なら天国病に進み、
+        // 天国病のプレイヤーは発作でHP0になっていた（夕焼けで即死しうる状態だった）。
+        set_sickness(state, 0, SICKNESS_FEVER);
+        set_sickness(state, 1, SICKNESS_FEVER);
     }
     else if (phenomenon == PHENOMENON_DENSE_FOG) { // 濃霧: 全員霧
         apply_curse(state, 0, CURSE_TYPE_FOG);
@@ -807,8 +901,11 @@ static void resolve_string_of_fate(InternalState &state, int user_id) {
         state.mushroom_turns += 6;
     }
     else if (phenomenon == PHENOMENON_TORNADO) { // 竜巻: 全員HP ➡ 1
-        state.hp[0] = 1;
-        state.hp[1] = 1;
+        // ダメージではなくHPの強制上書きなので、守護神の退散判定は行いません。
+        // 既に死亡しているプレイヤーを蘇生させないよう、生存者だけを対象にします。
+        for (int p = 0; p < 2; ++p) {
+            if (state.hp[p] > 0) state.hp[p] = 1;
+        }
     }
     else if (phenomenon == PHENOMENON_GIGANTIC_TUB) { // 巨大なタライ: 自分か相手に光属性攻50
         int target_player = roll_range(state, RollKind::PHENOMENON_TUB_TARGET, 0, 1);
@@ -855,7 +952,7 @@ static void resolve_string_of_fate(InternalState &state, int user_id) {
                 if (cid != CARD_EMPTY) {
                     bool is_staged = false;
                     for (int k = 0; k < state.num_staged_cards[p]; ++k) {
-                        if (state.staged_cards[p][k] == i) {
+                        if (staged_hand_slot(state, p, k) == i) {
                             is_staged = true;
                             break;
                         }
@@ -979,7 +1076,7 @@ void apply_card_effect_to_target(InternalState &state, int target_id, int card_i
     } else if (card_id == ID_TONE || card_id == ID_SMILE_SHELL) {
         // 風邪・熱病のみ治し、霧と閃光を解除する
         if (state.sickness[target_id] == SICKNESS_COLD || state.sickness[target_id] == SICKNESS_FEVER) {
-            state.sickness[target_id] = SICKNESS_NONE;
+            cure_sickness(state, target_id);
         }
         remove_curse(state, target_id, CURSE_TYPE_FOG);
         remove_curse(state, target_id, CURSE_TYPE_FLASH);
@@ -1042,31 +1139,21 @@ void execute_money_deduction(InternalState &state, int player, int amount) {
  * @brief 「売る」アクションにおける商品の引き渡しおよび決済の解決を行います。
  */
 void execute_sell_resolution(InternalState &state, int seller, int buyer) {
-    // 1. 最初に対象アイテムを売り出したオリジナル売り手を特定する
-    // スーパーミラーによる反射が発生している可能性があるため、staged_cards を見て "売る" カードを所持している側を探す
-    int original_seller = -1;
-    if (state.num_staged_cards[0] > 0 && state.staged_cards[0][0] >= 0 && state.staged_cards[0][0] < MAX_HAND_SIZE && state.true_hand[0][state.staged_cards[0][0]] == ID_SELL) {
-        original_seller = 0;
-    } else if (state.num_staged_cards[1] > 0 && state.staged_cards[1][0] >= 0 && state.staged_cards[1][0] < MAX_HAND_SIZE && state.true_hand[1][state.staged_cards[1][0]] == ID_SELL) {
-        original_seller = 1;
-    // 地球神が仕掛けた「売る」は、売るカード自体が手札に存在しないため staged_cards[p][0] に
-    // -1 の番兵を置き、[1] に売り出すアイテムの手札インデックスを入れている。
-    // （「買う」の番兵は num_staged_cards == 1 なので >= 2 の条件で区別できる）
-    } else if (state.num_staged_cards[0] >= 2 && state.staged_cards[0][0] == -1) {
-        original_seller = 0;
-    } else if (state.num_staged_cards[1] >= 2 && state.staged_cards[1][0] == -1) {
-        original_seller = 1;
-    }
-    
-    // 見つからなかった場合のセーフティフォールバック
-    if (original_seller == -1) {
-        original_seller = seller;
+    // 1. 出品した側を特定する。
+    // スーパーミラーで反射されると attacker/defender が入れ替わるため、引数の seller は
+    // 「今の売り手」であって「出品した人」とは限らない。以前はここで仮置き場を逆算して
+    // 探しており、見つからなければ黙って引数の seller を使っていた（売り手を取り違える原因）。
+    // 現在は仕掛けた時点で pending_initiator に記録してある。
+    int original_seller = state.pending_initiator;
+    if (original_seller < 0 || original_seller > 1) {
+        // 記録されていないのは実装の不整合。黙って推測すると誤った相手に決済されるので落とす。
+        throw std::runtime_error("売却の解決で、出品した側が記録されていません。");
     }
 
     // 2. 売り出したアイテムカードのIDと、その価格を取得する
-    // staged_cards[original_seller][1] には売り出すアイテムの手札インデックスが入っている
-    int idx = state.staged_cards[original_seller][1];
-    int card_id = state.true_hand[original_seller][idx];
+    // 仮置きの [1] が出品カード（[0] は「売る」カード自体、または守護神の仮想カード）
+    int idx = staged_hand_slot(state, original_seller, 1);
+    int card_id = staged_card_id(state, original_seller, 1);
     CardFeatures &f_sold = g_card_registry[card_id];
     int price = f_sold.price;
 
@@ -1137,7 +1224,7 @@ bool try_execute_super_mirror_reflection(InternalState &state, ActionType action
     if (action >= ACTION_SELECT_HAND_0 && action <= ACTION_SELECT_HAND_17) {
         int idx = action - ACTION_SELECT_HAND_0;
         if (state.true_hand[me][idx] == ID_SUPER_MIRROR) {
-            state.staged_cards[me][state.num_staged_cards[me]++] = idx;
+            state.staged_cards[me][state.num_staged_cards[me]++] = StagedEntry::from_hand(idx);
             state.is_used[me][idx] = true;
             state.is_known_to_opp[me][idx] = true;
             push_event(state, me, EventType::REFLECT_MIRROR, ID_SUPER_MIRROR, opp, 0.0f);
@@ -1194,8 +1281,7 @@ void apply_defense_gear_effects(InternalState &state, int player_id) {
     bool has_dreaming_hat = false;
 
     for (int i = 0; i < state.num_staged_cards[player_id]; ++i) {
-        int h_idx = state.staged_cards[player_id][i];
-        int card_id = state.true_hand[player_id][h_idx];
+        int card_id = staged_card_id(state, player_id, i);
         if (card_id == ID_FEVER_MASK) {
             num_fever_masks++;
         } else if (card_id == ID_DREAMING_HAT) {
@@ -1211,11 +1297,8 @@ void apply_defense_gear_effects(InternalState &state, int player_id) {
         apply_curse(state, player_id, CURSE_TYPE_DREAM);
         bool is_staged[MAX_HAND_SIZE] = {false};
         for (int k = 0; k < state.num_staged_cards[player_id]; ++k) {
-            int slot = state.staged_cards[player_id][k];
-            // 守護神由来の仮置きは番兵 -1 を置くため、手札スロットとして使う前に範囲を検査する
-            if (slot >= 0 && slot < MAX_HAND_SIZE) {
-                is_staged[slot] = true;
-            }
+            int slot = staged_hand_slot(state, player_id, k);
+            if (slot != NO_HAND_SLOT) is_staged[slot] = true;
         }
         for (int j = 0; j < MAX_HAND_SIZE; ++j) {
             if (!is_staged[j]) {
@@ -1284,12 +1367,17 @@ void try_guardian_leave(InternalState &state, int player_id, bool hp_decreased) 
     }
 }
 
-void apply_damage(InternalState &state, int player_id, int damage, bool absorption, bool deal_same_damage) {
+void apply_damage_without_revive(InternalState &state, int player_id, int damage) {
     if (damage <= 0) return;
     int hp_before = state.hp[player_id];
-
-    state.hp[player_id] = std::max(0, state.hp[player_id] - damage);
+    state.hp[player_id] = std::clamp(state.hp[player_id] - damage, 0, 99);
     try_guardian_leave(state, player_id, state.hp[player_id] < hp_before);
+}
+
+void apply_damage(InternalState &state, int player_id, int damage, bool absorption, bool deal_same_damage) {
+    if (damage <= 0) return;
+
+    apply_damage_without_revive(state, player_id, damage);
 
     if (absorption) {
         state.hp[player_id] = std::min(99, state.hp[player_id] + damage);
@@ -1298,11 +1386,31 @@ void apply_damage(InternalState &state, int player_id, int damage, bool absorpti
     run_immediate_revive(state);
 
     if (deal_same_damage) {
-        int hp_before_recoil = state.hp[player_id];
-        state.hp[player_id] = std::max(0, state.hp[player_id] - damage);
-        try_guardian_leave(state, player_id, state.hp[player_id] < hp_before_recoil);
+        apply_damage_without_revive(state, player_id, damage);
         run_immediate_revive(state);
     }
+}
+
+void apply_darkness_instant_death(InternalState &state, int player_id) {
+    state.hp[player_id] = 0;
+    push_event(state, player_id, EventType::INSTANT_DEATH, -1, player_id, 0.0f);
+}
+
+void apply_darkness_self_death(InternalState &state, int player_id, int damage) {
+    apply_damage_without_revive(state, player_id, damage);
+    push_event(state, player_id, EventType::TAKE_DAMAGE, -1, player_id,
+               static_cast<float>(damage));
+    apply_darkness_instant_death(state, player_id);
+    run_immediate_revive(state);
+}
+
+void apply_heaven_seizure_death(InternalState &state, int player_id) {
+    int hp_before = state.hp[player_id];
+    state.hp[player_id] = 0;
+    try_guardian_leave(state, player_id, state.hp[player_id] < hp_before);
+    push_event(state, player_id, EventType::EFFECT_SICKNESS, -1, player_id,
+               static_cast<float>(SicknessEvent::TYPE_HEAVEN | SicknessEvent::FLAG_SEIZURE));
+    run_immediate_revive(state);
 }
 
 bool run_death_check(InternalState &state) {
@@ -1335,7 +1443,13 @@ bool run_death_check(InternalState &state) {
                     state.num_staged_cards[1 - p] = 0; // 防御側の仮置き場をクリア
                     // 昇天弓は状態異常付与もCP奪取も行わない。cleanup_phase_end はターン終了処理の
                     // CLEANUP まで走らないため、直前の攻撃の効果はここで確実に打ち消す必要がある。
-                    set_pending_attack(state, ID_ASCENSION_BOW, ASCENSION_BOW_TRIGGERED_POWER, ELEM_LIGHT, false);
+                    //
+                    // 攻撃力と命中率は手札から撃つ場合と意図的に異なる（ATK1/命中25% ではなく
+                    // ASCENSION_BOW_TRIGGERED_POWER/ASCENSION_BOW_HIT_RATE）が、全体攻撃かどうかは
+                    // カードそのものの性質なのでマスタから引く。ここに true を直書きすると、
+                    // マスタ側を変えたときに黙って食い違う。
+                    set_pending_attack(state, ID_ASCENSION_BOW, ASCENSION_BOW_TRIGGERED_POWER, ELEM_LIGHT,
+                                       g_card_registry[ID_ASCENSION_BOW].is_group_attack);
                     return true; // 防御フェイズへ移行するため一時中断
                 } else {
                     push_event(state, p, EventType::ATTACK_MISS, ID_ASCENSION_BOW, 1 - p, 0.0f);
@@ -1437,6 +1551,11 @@ static bool setup_guardian_attack_defense(InternalState &state, int attacker, in
     }
     state.attacker_id = attacker;
     state.defender_id = defender;
+    // 仕掛けたのは守護神の持ち主。スーパーミラーで反射されると attacker/defender が
+    // 入れ替わるため、ここで記録しておかないと解決時に誰が仕掛けたか分からなくなる。
+    // 仕掛けたのは守護神の持ち主。スーパーミラーで反射されると attacker/defender が
+    // 入れ替わるため、ここで記録しておかないと解決時に誰が仕掛けたか分からなくなる。
+    state.pending_initiator = attacker;
     state.current_actor_id = defender;
     set_pending_attack(state, source_id,
                        (override_power != -1) ? override_power : feat.attack_power,
@@ -1470,14 +1589,15 @@ bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, 
         int r = roll_range(state, RollKind::MORTAR_VICTIM, 0, total_mortars - 1);
         int victim = (r < count_attacker) ? attacker : defender;
 
-        state.hp[victim] = std::clamp(state.hp[victim] - 99, 0, 99);
+        // apply_damage を通す（守護神の離脱判定と即時復活を含む）。
+        // 以前はHPを直接いじっており、離脱判定だけが抜けていた。
+        apply_damage(state, victim, 99);
         for (int j = 0; j < MAX_HAND_SIZE; ++j) {
             if (state.true_hand[victim][j] == ID_DANGEROUS_MORTAR && !state.is_used[victim][j]) {
                 state.is_used[victim][j] = true;
                 break;
             }
         }
-        run_immediate_revive(state);
         state.current_phase = GamePhase::PHASE_END;
         if (is_guardian) state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
         return true;
@@ -1495,9 +1615,8 @@ bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, 
         }
 
         if (actual_target == attacker) {
-            // 自傷：直撃ダメージ
-            state.hp[attacker] = std::clamp(state.hp[attacker] - 30, 0, 99);
-            run_immediate_revive(state);
+            // 自傷：直撃ダメージ（apply_damage が離脱判定と即時復活を行う）
+            apply_damage(state, attacker, 30);
             state.current_phase = GamePhase::PHASE_END;
             if (is_guardian) state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
             return true;
@@ -1560,18 +1679,11 @@ bool execute_attack_from_staged_cards(InternalState &state, int attacker, int ta
         int times = state.remaining_attacks;
         if (times <= 0) times = 1;
         for (int t = 0; t < times; ++t) {
-            if (info.attack_power > 0) {
-                int intended_damage = info.attack_power;
-                state.hp[attacker] = std::clamp(state.hp[attacker] - info.attack_power, 0, 99);
-                if (state.pending_absorption) {
-                    state.hp[attacker] = std::clamp(state.hp[attacker] + intended_damage, 0, 99);
-                }
-                run_immediate_revive(state);
-                if (state.pending_deal_same_damage) {
-                    state.hp[attacker] = std::clamp(state.hp[attacker] - intended_damage, 0, 99);
-                    run_immediate_revive(state);
-                }
-            }
+            // 以前はここでHPを直接いじっており、apply_damage() が行う守護神の離脱判定が
+            // 抜けていた。同じ「自傷でHPが減った」でも、奇跡（apply_damage 経由）では
+            // 判定が走り、武器では走らないという食い違いになっていた。
+            apply_damage(state, attacker, info.attack_power,
+                         state.pending_absorption, state.pending_deal_same_damage);
             apply_card_effects_to_target(state, attacker, used_cards);
             if (state.pending_attack_curse != CURSE_NONE) {
                 apply_curse_to_player(state, attacker, state.pending_attack_curse);
@@ -1618,6 +1730,23 @@ struct GuardianAttackActions {
     GuardianType guardian;
     int cards[5];
 };
+
+/**
+ * @brief 守護神が行動する際、5種の行動それぞれが選ばれる確率（%）。合計100。
+ *
+ * どの守護神も確率配分は共通で、行動カードの中身だけが異なる。そのため確率は
+ * 1本だけ持ち、以下の行動カード表と同じ並び順（強い行動から順）で対応する。
+ * 以前は累積和 {30,55,75,90,100} を constants.h に置いていたが、
+ * 行動カードと離れた場所にあるうえ、各行動の確率が値から読めなかった。
+ */
+constexpr int GUARDIAN_ACTION_PERCENT[GUARDIAN_ACTION_COUNT] = {30, 25, 20, 15, 10};
+static_assert(GUARDIAN_ACTION_PERCENT[0] + GUARDIAN_ACTION_PERCENT[1] + GUARDIAN_ACTION_PERCENT[2] +
+                  GUARDIAN_ACTION_PERCENT[3] + GUARDIAN_ACTION_PERCENT[4] == 100,
+              "守護神の行動確率の合計は100でなければならない");
+
+std::vector<int> get_guardian_action_percents() {
+    return std::vector<int>(GUARDIAN_ACTION_PERCENT, GUARDIAN_ACTION_PERCENT + GUARDIAN_ACTION_COUNT);
+}
 
 static const GuardianAttackActions GUARDIAN_ATTACK_ACTIONS[] = {
     {GUARDIAN_MARS,    {ID_FIRE_SHOUT, ID_FIRE_ROAR, ID_FIRE_BUZZ, ID_FIRE_TWEET, ID_FIRE_WHISPER}},
@@ -1753,6 +1882,238 @@ std::vector<int> get_absorption_sources() {
     return std::vector<int>(ABSORPTION_SOURCES, ABSORPTION_SOURCES + ABSORPTION_SOURCE_COUNT);
 }
 
+
+// ============================================================================
+// 守護神ごとの行動 / Guardian actions
+// ============================================================================
+// 以前は resolve_turn_end_steps の GUARDIAN_ACT ケースに、攻撃系6神・海王神・
+// 金星神・地球神・月神の処理が 231行・最大インデント73文字で詰め込まれていた。
+// 守護神ごとに切り出す。
+//
+// 引数の意味は元のケースと同じ:
+//   me  = ターンが終了した側（守護神の行動を受ける側）
+//   opp = 守護神の持ち主
+// 戻り値: 防御フェイズなどを開いて処理を中断した場合は true。
+//         呼び出し側はそのまま return し、プレイヤーの入力を待つ。
+
+/**
+ * @brief 海王神: 5行動すべてが持ち主自身への雑貨的な効果。
+ */
+static bool resolve_neptune_action(InternalState &state, int me, int opp, int act_idx) {
+    const GuardianType g_id = GUARDIAN_NEPTUNE;
+        int source_id = NEPTUNE_ACTIONS[act_idx - 1];
+        apply_card_effect_to_target(state, opp, source_id);
+        state.pending_attack_source_id = source_id;
+        push_event(state, opp, EventType::EFFECT_GUARDIAN, source_id, opp, static_cast<float>(g_id));
+    return false;
+}
+
+/**
+ * @brief 金星神: お金にまつわる5行動。わいろ・罰金だけは相手を対象に取り、反射されうる。
+ */
+static bool resolve_venus_action(InternalState &state, int me, int opp, int act_idx) {
+    const GuardianType g_id = GUARDIAN_VENUS;
+        // act_idx とカードの対応は VENUS_ACTIONS が唯一の定義元。
+        // 以前は各分岐で act_idx の数値を直接見ていたため、対応表が
+        // 分岐に散らばっていた。
+        int venus_card = VENUS_ACTIONS[act_idx - 1];
+
+        // わいろ・罰金は相手を対象に取るため、スーパーミラー等で反射される機会がある
+        if (venus_card == ID_BRIBE) { // わいろ: 相手にお金+5
+            return setup_guardian_attack_defense(state, opp, me, ID_BRIBE, GamePhase::PHASE_DEFENSE, false, 5);
+        }
+        if (venus_card == ID_FINE) { // 罰金: 相手からお金3を没収
+            return setup_guardian_attack_defense(state, opp, me, ID_FINE, GamePhase::PHASE_DEFENSE, false, 3);
+        }
+
+        // 残る3行動はお金が増えるだけで、反射の機会はない
+        if (venus_card == ID_COIN_SCATTERING) { // 小銭ばらまき: 両者にお金+1
+            apply_card_effect_to_target(state, 0, ID_COIN_SCATTERING);
+            apply_card_effect_to_target(state, 1, ID_COIN_SCATTERING);
+            state.pending_attack_source_id = ID_COIN_SCATTERING;
+            push_event(state, opp, EventType::EFFECT_GUARDIAN, ID_COIN_SCATTERING, -1, static_cast<float>(g_id));
+        } else { // 豪華なアクセサリー / つまらない物: 持ち主自身にお金
+            apply_card_effect_to_target(state, opp, venus_card);
+            state.pending_attack_source_id = venus_card;
+            push_event(state, opp, EventType::EFFECT_GUARDIAN, venus_card, opp, static_cast<float>(g_id));
+        }
+    return false;
+}
+
+/**
+ * @brief 地球神: 山札から1枚引き、そのカードの種別ごとに違う効果を起こす。
+ */
+static bool resolve_earth_action(InternalState &state, int me, int opp) {
+        int drawn_card_id = draw_card_with_apocalypse(state, opp);
+        if (drawn_card_id != CARD_EMPTY) {
+            const CardFeatures &feat = g_card_registry[drawn_card_id];
+
+            // 1. 防具、奇跡、またはメインで使用できない雑貨 ➡ 手札に加わる
+            bool is_passive_sundry = feat.is_sundry() && !(feat.usage_timing & TIMING_MAIN_SUNDRY);
+            if (feat.is_defense() || feat.is_miracle() || is_passive_sundry) {
+                int empty_slot = -1;
+                for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+                    if (state.true_hand[opp][i] == CARD_EMPTY) {
+                        empty_slot = i;
+                        break;
+                    }
+                }
+                if (empty_slot != -1) {
+                    add_card_to_hand_slot(state, opp, empty_slot, drawn_card_id, true);
+                    state.is_known_to_opp[opp][empty_slot] = false;
+                    state.is_used[opp][empty_slot] = false;
+                } else {
+                    std::vector<int> candidates;
+                    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+                        if (!state.is_used[opp][i]) {
+                            candidates.push_back(i);
+                        }
+                    }
+                    if (!candidates.empty()) {
+                        int rand_idx = roll_range(state, RollKind::EARTH_DISCARD_SLOT, 0,
+                                                  static_cast<int>(candidates.size()) - 1);
+                        int discard_slot = candidates[rand_idx];
+                        add_card_to_hand_slot(state, opp, discard_slot, drawn_card_id, true);
+                        state.is_known_to_opp[opp][discard_slot] = false;
+                        state.is_used[opp][discard_slot] = false;
+                    }
+                }
+            }
+            // 2. 両替 (ID_EXCHANGE) ➡ 自分に使う
+            else if (drawn_card_id == ID_EXCHANGE) {
+                int sum = state.hp[opp] + state.mp[opp] + state.money[opp];
+                auto hp_range = get_exchange_hp_range(sum);
+                if (hp_range.first <= hp_range.second) {
+                    int chosen_hp = roll_range(state, RollKind::EARTH_EXCHANGE_HP,
+                                               hp_range.first, hp_range.second);
+                    auto mp_range = get_exchange_mp_range(sum, chosen_hp);
+                    if (mp_range.first <= mp_range.second) {
+                        int chosen_mp = roll_range(state, RollKind::EARTH_EXCHANGE_MP,
+                                                   mp_range.first, mp_range.second);
+                        state.hp[opp] = chosen_hp;
+                        state.mp[opp] = chosen_mp;
+                        state.money[opp] = sum - chosen_hp - chosen_mp;
+                    }
+                }
+                if (state.hp[opp] == 0) {
+                    bool paused = run_death_check(state);
+                    if (paused || state.is_done) return true;
+                }
+            }
+            // 3. 売る (ID_SELL) ➡ 対戦相手に使う
+            else if (drawn_card_id == ID_SELL) {
+                // can_sell_card(state, opp, -1) は「is_sellable_card な枠が1つ以上ある」と
+                // 同値なので、候補を集めて空かどうかで判定すれば足りる
+                std::vector<int> sell_candidates;
+                for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+                    if (is_sellable_card(state, opp, i)) {
+                        sell_candidates.push_back(i);
+                    }
+                }
+                if (!sell_candidates.empty()) {
+                    int rand_idx = roll_range(state, RollKind::EARTH_SELL_SLOT, 0,
+                                              static_cast<int>(sell_candidates.size()) - 1);
+                    int sell_slot = sell_candidates[rand_idx];
+
+                    state.attacker_id = opp;
+                    state.defender_id = me;
+                    state.current_actor_id = me;
+                    // 地球神は「売る」カード自体を手札に持たないので、仮想カードとして置く
+                    state.staged_cards[opp][0] = StagedEntry::virtual_of(ID_SELL);
+                    state.staged_cards[opp][1] = StagedEntry::from_hand(sell_slot);
+                    state.num_staged_cards[opp] = 2;
+                    state.pending_initiator = opp;
+                    state.current_phase = GamePhase::PHASE_SELL_SELECT_MIRROR;
+                    state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
+                    return true;
+                }
+            }
+            // 4. 買う (ID_BUY) ➡ 対戦相手に使う
+            else if (drawn_card_id == ID_BUY) {
+                state.attacker_id = opp;
+                state.defender_id = me;
+                state.current_actor_id = me;
+                state.staged_cards[opp][0] = StagedEntry::virtual_of(ID_BUY);
+                state.num_staged_cards[opp] = 1;
+                state.pending_initiator = opp;
+                state.current_phase = GamePhase::PHASE_BUY_SELECT_MIRROR;
+                state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
+                return true;
+            }
+            // 5. 武器 ➡ 対戦相手に使う
+            else if (feat.is_weapon()) {
+                if (drawn_card_id == ID_DANGEROUS_PESTLE) {
+                    // あぶないキネ: ランダムな対象へ光属性30ダメージ（専用解決）
+                    return execute_dangerous_pestle(state, opp, me, true);
+                }
+                // 引いた武器そのものの威力・属性・命中率で攻撃する。
+                // 命中率が100未満の全体攻撃武器などは外れることもあり、その場合もイベントが残る。
+                return setup_guardian_attack_defense(state, opp, me, drawn_card_id, GamePhase::PHASE_DEFENSE,
+                                                     is_absorption_source(drawn_card_id));
+            }
+            // 6. その他の雑貨
+            //    夜のホウキと女神の石けんは相手の手札を削るカードなので対戦相手へ、
+            //    それ以外（回復や状態異常解除など）は持ち主自身へ使う。
+            else {
+                bool targets_opponent = is_opponent_discarding_sundry(drawn_card_id);
+                if (targets_opponent) {
+                    // 相手に使う雑貨は、通常プレイと同様にスーパーミラーで跳ね返せる。
+                    // 効果の適用は受諾（または反射）の解決時に行う。
+                    state.attacker_id = opp;
+                    state.defender_id = me;
+                    state.current_actor_id = me;
+                    state.num_staged_cards[opp] = 0; // 守護神の仮想カードは仮置き場を使わない
+                    state.pending_initiator = opp;
+                    set_pending_attack(state, drawn_card_id, 0, ELEM_NONE, false);
+                    state.current_phase = GamePhase::PHASE_SUNDRY_SELECT_MIRROR;
+                    state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
+                    push_event(state, opp, EventType::EFFECT_GUARDIAN, drawn_card_id, me, static_cast<float>(GUARDIAN_EARTH));
+                    return true;
+                }
+
+                push_event(state, opp, EventType::EFFECT_GUARDIAN, drawn_card_id, opp, static_cast<float>(GUARDIAN_EARTH));
+                apply_card_effect_to_target(state, opp, drawn_card_id);
+
+                // 「運命のひも」から巨大なタライ・ブラックホールが出た場合は防御フェイズが
+                // 起動しているため、ターン終了処理を中断して防御の解決へ移る
+                if (state.current_phase == GamePhase::PHASE_DEFENSE || state.current_phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
+                    state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
+                    return true;
+                }
+            }
+        }
+        // 早期 return しなかった経路は、いずれもクリーンアップ前の死亡判定へ進む
+        state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
+    return false;
+}
+
+/**
+ * @brief 月神: 奇跡を1つ発動する。オーラ・蜃気楼は満月刀の物理攻撃に読み替える。
+ */
+static bool resolve_moon_action(InternalState &state, int me, int opp) {
+        int chosen_miracle = MOON_MIRACLES[
+            roll_range(state, RollKind::MOON_MIRACLE, 0, MOON_MIRACLE_COUNT - 1)];
+
+        // オーラ・蜃気楼は攻撃奇跡ではないため、満月刀の物理攻撃に読み替える
+        if (chosen_miracle == ID_AURA) { // オーラ: 威力2倍相当の ATK20
+            return setup_guardian_attack_defense(state, opp, me, ID_FULL_MOON_BLADE, GamePhase::PHASE_DEFENSE, false, 20);
+        }
+        else if (chosen_miracle == ID_MIRAGE) { // 蜃気楼: ATK10 の全体攻撃
+            setup_guardian_attack_defense(state, opp, me, ID_FULL_MOON_BLADE, GamePhase::PHASE_DEFENSE, false, 10);
+            state.pending_is_group_attack = true;
+            return true; // 満月刀は命中率100%のため常に防御フェイズへ移行する
+        }
+        else if (is_support_miracle(chosen_miracle)) { // 補助系: 持ち主自身へ効果を適用
+            push_event(state, opp, EventType::EFFECT_GUARDIAN, chosen_miracle, opp, static_cast<float>(GUARDIAN_MOON));
+            apply_card_effect_to_target(state, opp, chosen_miracle);
+        }
+        else { // 残る攻撃奇跡: 奇跡防御フェイズを起動
+            return setup_guardian_attack_defense(state, opp, me, chosen_miracle, GamePhase::PHASE_MIRACLE_DEFENSE,
+                                                 is_absorption_source(chosen_miracle));
+        }
+    return false;
+}
+
 bool resolve_turn_end_steps(InternalState &state) {
     bool is_apocalypse = (state.current_turn >= APOCALYPSE_TURN);
     while (state.current_phase == GamePhase::PHASE_END && !state.is_done) {
@@ -1771,9 +2132,8 @@ bool resolve_turn_end_steps(InternalState &state) {
                     int roll = roll_range(state, RollKind::SICKNESS_WORSEN, 0, 99);
                     if (roll < SICKNESS_WORSEN_RATE) {
                         if (state.sickness[me] == SICKNESS_HEAVEN) { // 天国病悪化 -> 死亡 (発作)
-                            state.hp[me] = 0;
                             state.heaven_seizure_occurred[me] = true;
-                            push_event(state, me, EventType::EFFECT_SICKNESS, -1, me, static_cast<float>(SicknessEvent::TYPE_HEAVEN | SicknessEvent::FLAG_SEIZURE));
+                            apply_heaven_seizure_death(state, me);
                         } else if (state.sickness[me] == SICKNESS_COLD) { // 風邪 -> 熱病
                             apply_sickness(state, me, SICKNESS_FEVER);
                         } else if (state.sickness[me] == SICKNESS_FEVER) { // 熱病 -> 地獄病
@@ -1844,10 +2204,12 @@ bool resolve_turn_end_steps(InternalState &state) {
                     int roll = roll_range(state, RollKind::GUARDIAN_ACT, 0, 99);
                     if (roll < GUARDIAN_ACT_RATE) {
                         int roll_act = roll_range(state, RollKind::GUARDIAN_ACT_CHOICE, 0, 99);
-                        // 閾値表は constants.h に一元化してある（テスト側もこの表から代表値を導出する）
-                        int act_idx = GUARDIAN_ACT_CHOICE_COUNT;
-                        for (int i = 0; i < GUARDIAN_ACT_CHOICE_COUNT; ++i) {
-                            if (roll_act < GUARDIAN_ACT_CHOICE_THRESHOLDS[i]) {
+                        // 確率は GUARDIAN_ACTION_PERCENT が行動カード表の隣で持つ
+                        int act_idx = GUARDIAN_ACTION_COUNT;
+                        int acc = 0;
+                        for (int i = 0; i < GUARDIAN_ACTION_COUNT; ++i) {
+                            acc += GUARDIAN_ACTION_PERCENT[i];
+                            if (roll_act < acc) {
                                 act_idx = i + 1;
                                 break;
                             }
@@ -1863,200 +2225,17 @@ bool resolve_turn_end_steps(InternalState &state) {
                                                                  is_absorption_source(source_id));
                         }
 
-                        if (g_id == GUARDIAN_NEPTUNE) { // 海王神: 5行動すべてが持ち主自身への雑貨的な効果
-                            int source_id = NEPTUNE_ACTIONS[act_idx - 1];
-                            apply_card_effect_to_target(state, opp, source_id);
-                            state.pending_attack_source_id = source_id;
-                            push_event(state, opp, EventType::EFFECT_GUARDIAN, source_id, opp, static_cast<float>(g_id));
+                        if (g_id == GUARDIAN_NEPTUNE) {
+                            if (resolve_neptune_action(state, me, opp, act_idx)) return true;
                         }
-                        else if (g_id == GUARDIAN_VENUS) { // 金星神
-                            // act_idx とカードの対応は VENUS_ACTIONS が唯一の定義元。
-                            // 以前は各分岐で act_idx の数値を直接見ていたため、対応表が
-                            // 分岐に散らばっていた。
-                            int venus_card = VENUS_ACTIONS[act_idx - 1];
-
-                            // わいろ・罰金は相手を対象に取るため、スーパーミラー等で反射される機会がある
-                            if (venus_card == ID_BRIBE) { // わいろ: 相手にお金+5
-                                return setup_guardian_attack_defense(state, opp, me, ID_BRIBE, GamePhase::PHASE_DEFENSE, false, 5);
-                            }
-                            if (venus_card == ID_FINE) { // 罰金: 相手からお金3を没収
-                                return setup_guardian_attack_defense(state, opp, me, ID_FINE, GamePhase::PHASE_DEFENSE, false, 3);
-                            }
-
-                            // 残る3行動はお金が増えるだけで、反射の機会はない
-                            if (venus_card == ID_COIN_SCATTERING) { // 小銭ばらまき: 両者にお金+1
-                                apply_card_effect_to_target(state, 0, ID_COIN_SCATTERING);
-                                apply_card_effect_to_target(state, 1, ID_COIN_SCATTERING);
-                                state.pending_attack_source_id = ID_COIN_SCATTERING;
-                                push_event(state, opp, EventType::EFFECT_GUARDIAN, ID_COIN_SCATTERING, -1, static_cast<float>(g_id));
-                            } else { // 豪華なアクセサリー / つまらない物: 持ち主自身にお金
-                                apply_card_effect_to_target(state, opp, venus_card);
-                                state.pending_attack_source_id = venus_card;
-                                push_event(state, opp, EventType::EFFECT_GUARDIAN, venus_card, opp, static_cast<float>(g_id));
-                            }
+                        else if (g_id == GUARDIAN_VENUS) {
+                            if (resolve_venus_action(state, me, opp, act_idx)) return true;
                         }
-
-                        else if (g_id == GUARDIAN_EARTH) { // 地球神
-                            int drawn_card_id = draw_card_with_apocalypse(state, opp);
-                            if (drawn_card_id != CARD_EMPTY) {
-                                const CardFeatures &feat = g_card_registry[drawn_card_id];
-
-                                // 1. 防具、奇跡、またはメインで使用できない雑貨 ➡ 手札に加わる
-                                bool is_passive_sundry = feat.is_sundry() && !(feat.usage_timing & TIMING_MAIN_SUNDRY);
-                                if (feat.is_defense() || feat.is_miracle() || is_passive_sundry) {
-                                    int empty_slot = -1;
-                                    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-                                        if (state.true_hand[opp][i] == CARD_EMPTY) {
-                                            empty_slot = i;
-                                            break;
-                                        }
-                                    }
-                                    if (empty_slot != -1) {
-                                        add_card_to_hand_slot(state, opp, empty_slot, drawn_card_id, true);
-                                        state.is_known_to_opp[opp][empty_slot] = false;
-                                        state.is_used[opp][empty_slot] = false;
-                                    } else {
-                                        std::vector<int> candidates;
-                                        for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-                                            if (!state.is_used[opp][i]) {
-                                                candidates.push_back(i);
-                                            }
-                                        }
-                                        if (!candidates.empty()) {
-                                            int rand_idx = roll_range(state, RollKind::EARTH_DISCARD_SLOT, 0,
-                                                                      static_cast<int>(candidates.size()) - 1);
-                                            int discard_slot = candidates[rand_idx];
-                                            add_card_to_hand_slot(state, opp, discard_slot, drawn_card_id, true);
-                                            state.is_known_to_opp[opp][discard_slot] = false;
-                                            state.is_used[opp][discard_slot] = false;
-                                        }
-                                    }
-                                }
-                                // 2. 両替 (ID_EXCHANGE) ➡ 自分に使う
-                                else if (drawn_card_id == ID_EXCHANGE) {
-                                    int sum = state.hp[opp] + state.mp[opp] + state.money[opp];
-                                    auto hp_range = get_exchange_hp_range(sum);
-                                    if (hp_range.first <= hp_range.second) {
-                                        int chosen_hp = roll_range(state, RollKind::EARTH_EXCHANGE_HP,
-                                                                   hp_range.first, hp_range.second);
-                                        auto mp_range = get_exchange_mp_range(sum, chosen_hp);
-                                        if (mp_range.first <= mp_range.second) {
-                                            int chosen_mp = roll_range(state, RollKind::EARTH_EXCHANGE_MP,
-                                                                       mp_range.first, mp_range.second);
-                                            state.hp[opp] = chosen_hp;
-                                            state.mp[opp] = chosen_mp;
-                                            state.money[opp] = sum - chosen_hp - chosen_mp;
-                                        }
-                                    }
-                                    if (state.hp[opp] == 0) {
-                                        bool paused = run_death_check(state);
-                                        if (paused || state.is_done) return true;
-                                    }
-                                }
-                                // 3. 売る (ID_SELL) ➡ 対戦相手に使う
-                                else if (drawn_card_id == ID_SELL) {
-                                    // can_sell_card(state, opp, -1) は「is_sellable_card な枠が1つ以上ある」と
-                                    // 同値なので、候補を集めて空かどうかで判定すれば足りる
-                                    std::vector<int> sell_candidates;
-                                    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-                                        if (is_sellable_card(state, opp, i)) {
-                                            sell_candidates.push_back(i);
-                                        }
-                                    }
-                                    if (!sell_candidates.empty()) {
-                                        int rand_idx = roll_range(state, RollKind::EARTH_SELL_SLOT, 0,
-                                                                  static_cast<int>(sell_candidates.size()) - 1);
-                                        int sell_slot = sell_candidates[rand_idx];
-
-                                        state.attacker_id = opp;
-                                        state.defender_id = me;
-                                        state.current_actor_id = me;
-                                        // 地球神は「売る」カード自体を手札に持たないため、番兵 -1 を置いて
-                                        // [1] に出品カードの手札インデックスを入れる（execute_sell_resolution が参照）
-                                        state.staged_cards[opp][0] = -1;
-                                        state.staged_cards[opp][1] = sell_slot;
-                                        state.num_staged_cards[opp] = 2;
-                                        state.current_phase = GamePhase::PHASE_SELL_SELECT_MIRROR;
-                                        state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
-                                        return true;
-                                    }
-                                }
-                                // 4. 買う (ID_BUY) ➡ 対戦相手に使う
-                                else if (drawn_card_id == ID_BUY) {
-                                    state.attacker_id = opp;
-                                    state.defender_id = me;
-                                    state.current_actor_id = me;
-                                    state.staged_cards[opp][0] = -1; // 地球神フラグ
-                                    state.num_staged_cards[opp] = 1;
-                                    state.current_phase = GamePhase::PHASE_BUY_SELECT_MIRROR;
-                                    state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
-                                    return true;
-                                }
-                                // 5. 武器 ➡ 対戦相手に使う
-                                else if (feat.is_weapon()) {
-                                    if (drawn_card_id == ID_DANGEROUS_PESTLE) {
-                                        // あぶないキネ: ランダムな対象へ光属性30ダメージ（専用解決）
-                                        return execute_dangerous_pestle(state, opp, me, true);
-                                    }
-                                    // 引いた武器そのものの威力・属性・命中率で攻撃する。
-                                    // 命中率が100未満の全体攻撃武器などは外れることもあり、その場合もイベントが残る。
-                                    return setup_guardian_attack_defense(state, opp, me, drawn_card_id, GamePhase::PHASE_DEFENSE,
-                                                                         is_absorption_source(drawn_card_id));
-                                }
-                                // 6. その他の雑貨
-                                //    夜のホウキと女神の石けんは相手の手札を削るカードなので対戦相手へ、
-                                //    それ以外（回復や状態異常解除など）は持ち主自身へ使う。
-                                else {
-                                    bool targets_opponent = (drawn_card_id == ID_NOCTURNAL_BROOM || drawn_card_id == ID_GODDESS_S_SOAP);
-                                    if (targets_opponent) {
-                                        // 相手に使う雑貨は、通常プレイと同様にスーパーミラーで跳ね返せる。
-                                        // 効果の適用は受諾（または反射）の解決時に行う。
-                                        state.attacker_id = opp;
-                                        state.defender_id = me;
-                                        state.current_actor_id = me;
-                                        state.num_staged_cards[opp] = 0; // 守護神の仮想カードは仮置き場を使わない
-                                        set_pending_attack(state, drawn_card_id, 0, ELEM_NONE, false);
-                                        state.current_phase = GamePhase::PHASE_SUNDRY_SELECT_MIRROR;
-                                        state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
-                                        push_event(state, opp, EventType::EFFECT_GUARDIAN, drawn_card_id, me, static_cast<float>(GUARDIAN_EARTH));
-                                        return true;
-                                    }
-
-                                    push_event(state, opp, EventType::EFFECT_GUARDIAN, drawn_card_id, opp, static_cast<float>(GUARDIAN_EARTH));
-                                    apply_card_effect_to_target(state, opp, drawn_card_id);
-
-                                    // 「運命のひも」から巨大なタライ・ブラックホールが出た場合は防御フェイズが
-                                    // 起動しているため、ターン終了処理を中断して防御の解決へ移る
-                                    if (state.current_phase == GamePhase::PHASE_DEFENSE || state.current_phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
-                                        state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
-                                        return true;
-                                    }
-                                }
-                            }
-                            // 早期 return しなかった経路は、いずれもクリーンアップ前の死亡判定へ進む
-                            state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
+                        else if (g_id == GUARDIAN_EARTH) {
+                            if (resolve_earth_action(state, me, opp)) return true;
                         }
-                        else if (g_id == GUARDIAN_MOON) { // 月神
-                            int chosen_miracle = MOON_MIRACLES[
-                                roll_range(state, RollKind::MOON_MIRACLE, 0, MOON_MIRACLE_COUNT - 1)];
-
-                            // オーラ・蜃気楼は攻撃奇跡ではないため、満月刀の物理攻撃に読み替える
-                            if (chosen_miracle == ID_AURA) { // オーラ: 威力2倍相当の ATK20
-                                return setup_guardian_attack_defense(state, opp, me, ID_FULL_MOON_BLADE, GamePhase::PHASE_DEFENSE, false, 20);
-                            }
-                            else if (chosen_miracle == ID_MIRAGE) { // 蜃気楼: ATK10 の全体攻撃
-                                setup_guardian_attack_defense(state, opp, me, ID_FULL_MOON_BLADE, GamePhase::PHASE_DEFENSE, false, 10);
-                                state.pending_is_group_attack = true;
-                                return true; // 満月刀は命中率100%のため常に防御フェイズへ移行する
-                            }
-                            else if (is_support_miracle(chosen_miracle)) { // 補助系: 持ち主自身へ効果を適用
-                                push_event(state, opp, EventType::EFFECT_GUARDIAN, chosen_miracle, opp, static_cast<float>(GUARDIAN_MOON));
-                                apply_card_effect_to_target(state, opp, chosen_miracle);
-                            }
-                            else { // 残る攻撃奇跡: 奇跡防御フェイズを起動
-                                return setup_guardian_attack_defense(state, opp, me, chosen_miracle, GamePhase::PHASE_MIRACLE_DEFENSE,
-                                                                     is_absorption_source(chosen_miracle));
-                            }
+                        else if (g_id == GUARDIAN_MOON) {
+                            if (resolve_moon_action(state, me, opp)) return true;
                         }
                     }
                 }
@@ -2089,6 +2268,10 @@ bool resolve_turn_end_steps(InternalState &state) {
                 state.turn_end_state = TurnEndSubstep::DEATH_CHECK_START;
                 state.heaven_seizure_occurred[0] = false;
                 state.heaven_seizure_occurred[1] = false;
+                // 「誰が仕掛けたか」はターンをまたいで持ち越さない。残したままだと、
+                // 記録漏れがあっても前ターンの値で黙って解決してしまい、
+                // 「未設定なら落とす」というガードが機能しなくなる。
+                state.pending_initiator = -1;
                 state.current_turn++;
                 if (state.mushroom_turns > 0) {
                     state.mushroom_turns--;

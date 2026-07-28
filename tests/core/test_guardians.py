@@ -16,7 +16,7 @@
 import pytest
 
 import godfield_core
-from godfield_core import ActionType, Element, GamePhase, RollKind, SicknessType
+from godfield_core import ActionType, Element, EventType, GamePhase, RollKind, SicknessType
 from tests.core.dsl import (
     Game,
     Side,
@@ -114,6 +114,9 @@ def test_guardian_does_not_act_when_owner_is_dead(board):
     )
     # 決着するので手札補充のドローは発生しない（DECK_DRAW を指示すると空振りになる）
     g.rng.guardian_leave(leaves=False)
+    # あぶないキネは生存者からランダムに対象を選ぶ。相手を狙わせないと自傷になり、
+    # 「持ち主が死亡している」という前提そのものが作れない。
+    g.rng.force(RollKind.PESTLE_TARGET, 1)
     g.attack("weapons/dangerous-pestle")
     g.take_hit()  # P1 は防御せず 30 ダメージで死亡
 
@@ -165,7 +168,7 @@ def test_earth_sell_settles_at_the_offered_card_price(board):
 
 
 def test_earth_sell_offer_slot_is_recorded_with_sentinel(board):
-    """地球神: 「売る」は売るカード自体を持たないため、番兵 -1 と出品スロットが記録されます。
+    """地球神: 「売る」は売るカード自体を持たないため、仮想カードとして記録されます。
 
     execute_sell_resolution が staged_cards[p][1] を ID_SELL(=1) と比較していた頃は、
     出品スロットが偶然 1 のときだけ成立し、反射時に売り手を取り違えていました。
@@ -182,8 +185,43 @@ def test_earth_sell_offer_slot_is_recorded_with_sentinel(board):
     )
 
     g.expect(phase=GamePhase.PHASE_SELL_SELECT_MIRROR, attacker=1)
-    assert g.state.get_staged_card(1, 0) == -1, "地球神の番兵が置かれているべきです"
+    assert g.state.get_staged_card(1, 0) == -1, "手札に無いので手札スロットは -1"
+    assert g.state.get_staged_card_id(1, 0) == card_id("deals/sell"), "仮想カードとして解決できる"
     assert g.state.get_staged_card(1, 1) == offer_slot
+
+
+@pytest.mark.parametrize("deal", ["deals/sell", "deals/buy"], ids=["売る", "買う"])
+def test_reflecting_an_earth_deal_moves_the_virtual_card_to_the_actors_own_list(board, deal):
+    """反射すると、番兵を持つ仮置き列がそのまま「行動側の列」になることを固定します。
+
+    番兵が入るのは仕掛けた側（地球神の持ち主）の列で、手番は仕掛けられた側にあります。
+    そのため「番兵は行動していない側の列にしか無い」と考えたくなりますが、
+    スーパーミラーで反射すると current_actor_id が入れ替わるため成り立ちません。
+
+    合法手の計算がこの局面で仮置き列を直接添字にすると、番兵で範囲外を読み、
+    クラッシュせずに誤った合法手を返します。この前提を明示的に固定しておくことで、
+    反射確認フェイズの合法手に手を入れたときに気付けるようにします。
+    """
+    g = earth_turn(
+        deal,
+        p0=Side(hp=99, money=50, hand=["armor/super-mirror"]),
+        p1=Side(hp=40, money=50, guardian=EARTH, hand=[None] * 5 + [FILLER]),
+    )
+
+    owner = 1  # 地球神の持ち主 = 仕掛けた側
+    assert g.state.get_staged_card(owner, 0) == -1, "手札に無いカードなので手札スロットは -1"
+    assert g.state.current_actor_id != owner, "反射前の手番は仕掛けられた側"
+
+    g.select("armor/super-mirror")  # P0 が反射
+
+    assert g.state.current_actor_id == owner, (
+        "反射で手番が入れ替わり、番兵を持つ列が行動側の列になる"
+    )
+    assert g.state.get_staged_card_id(owner, 0) != godfield_core.CARD_EMPTY, "仮想カードは残っている"
+
+    # この状態でも合法手の計算が壊れず、確定して進めること
+    assert any(godfield_core.get_legal_actions(g.state)), "合法手が0件では進行不能になる"
+    g.confirm()
 
 
 def test_earth_sell_reflected_settles_the_offered_item_not_the_mirror(board):
@@ -545,3 +583,116 @@ def test_raw_action_path_still_works(board):
     g.rng.deck_always(FILLER)
     godfield_core.step_game(g.state, ActionType.ACTION_PRAY)
     g.expect(phase=GamePhase.PHASE_MAIN, actor=1)
+
+
+@pytest.mark.parametrize("reflected", [False, True], ids=["反射しない", "反射する"])
+def test_earth_deal_settles_with_the_recorded_initiator(board, reflected):
+    """地球神が仕掛けた取引が、反射の有無によらず正しい相手と決済されることを検証します。
+
+    反射すると attacker_id / defender_id が入れ替わるため、「今の攻撃側 = 仕掛けた人」は
+    成り立ちません。以前は仮置き場を逆算して出品者を探し、見つからなければ黙って
+    引数の seller を使っていました（売り手を取り違える原因で、実際にバグが出ています）。
+    現在は仕掛けた時点で pending_initiator に記録します。
+    """
+    offer_slot = 5
+    price = card_feature(FILLER, "price")
+    hand = ["armor/super-mirror"] if reflected else [FILLER]
+
+    g = earth_turn(
+        "deals/sell",
+        p0=Side(hp=99, money=50, hand=hand),
+        p1=Side(hp=40, money=50, guardian=EARTH, hand=[None] * offer_slot + [FILLER]),
+    )
+
+    # 仕掛けたのは常に地球神の持ち主（P1）で、反射しても変わらない
+    assert g.state.pending_initiator == 1
+
+    if reflected:
+        g.select("armor/super-mirror")
+        assert g.state.pending_initiator == 1, "反射しても仕掛けた側は変わらない"
+
+    g.confirm()
+
+    if reflected:
+        # 反射されたので、仕掛けた側（P1）が買い取る
+        g.expect(p0_money=50 + price, p1_money=50 - price)
+    else:
+        g.expect(p0_money=50 - price, p1_money=50 + price)
+
+
+# ============================================================================
+# 全守護神 × 全行動の網羅
+#
+# 守護神の行動処理を守護神ごとの関数へ切り出したので、その切り出しが挙動を
+# 変えていないことの担保も兼ねます。カード表は C++ から取得するので、
+# 行動を足したり並べ替えたりしてもテストが自動で追随します。
+# ============================================================================
+
+ACTING_GUARDIANS = [
+    int(g)
+    for g in godfield_core.GuardianType.__members__.values()
+    if godfield_core.get_guardian_action_cards(int(g))
+]
+
+GUARDIAN_ACTION_CASES = [
+    (guardian, action)
+    for guardian in ACTING_GUARDIANS
+    for action in range(1, len(godfield_core.get_guardian_action_cards(guardian)) + 1)
+]
+
+
+@pytest.mark.parametrize(
+    ("guardian", "action"),
+    GUARDIAN_ACTION_CASES,
+    ids=[
+        f"{godfield_core.GuardianType(g).name}-{card_name(godfield_core.get_guardian_action_cards(g)[a - 1])}"
+        for g, a in GUARDIAN_ACTION_CASES
+    ],
+)
+def test_every_guardian_action_resolves_with_its_own_card(board, guardian, action):
+    """全守護神の全行動が、その行動カードを発生源として解決されることを検証します。
+
+    従来テストが名指ししていたのは一部の守護神だけで、水星神は1件もありませんでした。
+    どの行動も「行動カード表の N 番目」としか結び付いていないため、表の並びが
+    変わると黙って別の行動を検証してしまいます。カード名で照合します。
+    """
+    cards = godfield_core.get_guardian_action_cards(guardian)
+    expected_card = cards[action - 1]
+
+    g = board(
+        p0=Side(hp=99, mp=50, money=50, hand=[FILLER]),
+        p1=Side(hp=99, mp=50, money=50, guardian=guardian, hand=[FILLER]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.guardian_act(acts=True, action=action)
+    if card_feature(expected_card, "accuracy", 100) < 100:
+        g.rng.hits(always=True)
+
+    g.pray()
+
+    # どの行動でも、その行動カードが発生源として記録される
+    g.expect_events(ev(EventType.EFFECT_GUARDIAN, card=expected_card))
+
+    # 攻撃系の行動は防御フェイズを開き、支援系はそのままターンが進む
+    if card_feature(expected_card, "attack_power", 0):
+        assert g.state.pending_attack_source_id == card_id(expected_card), (
+            "攻撃の発生源が行動カードになっているべきです"
+        )
+
+
+@pytest.mark.parametrize("guardian", ACTING_GUARDIANS,
+                         ids=[godfield_core.GuardianType(g).name for g in ACTING_GUARDIANS])
+def test_guardian_action_cards_are_distinct(guardian):
+    """各守護神の5行動が重複していないことを検証します。
+
+    行動カード表に同じカードを2度書くと、テストは「行動 N を狙った」つもりで
+    別の行動を検証し始めます。表そのものの健全性をここで押さえます。
+    """
+    cards = godfield_core.get_guardian_action_cards(guardian)
+    assert len(cards) == len(set(cards)), (
+        f"{godfield_core.GuardianType(guardian).name} の行動カードが重複しています: "
+        f"{[card_name(c) for c in cards]}"
+    )
+    assert len(cards) == len(godfield_core.get_guardian_action_percents()), (
+        "行動カードの数と確率表の要素数が一致していません"
+    )

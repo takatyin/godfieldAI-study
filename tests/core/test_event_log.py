@@ -10,7 +10,7 @@ import pytest
 
 import godfield_core
 from godfield_core import CurseEvent, EventType, GamePhase, GuardianType
-from tests.core.dsl import Side, card_id, card_name
+from tests.core.dsl import Side, card_id, card_name, ev
 from visualizer.event_formatter import format_event_log
 
 FILLER = "armor/wood-shield"
@@ -145,6 +145,85 @@ def test_curse_applied_and_cleared_events(board):
 
     text = format_event_log(cleared, 0)["text"]
     assert "霧" in text and "回復した" in text
+
+
+@pytest.mark.parametrize(
+    ("card", "sickness"),
+    [
+        ("miracles/tone", godfield_core.SicknessType.SICKNESS_COLD),
+        ("miracles/tone", godfield_core.SicknessType.SICKNESS_FEVER),
+        ("miracles/song", godfield_core.SicknessType.SICKNESS_HELL),
+        ("sundries/heart-shell", godfield_core.SicknessType.SICKNESS_HEAVEN),
+    ],
+    ids=["音色で風邪", "音色で熱病", "歌で地獄病", "ハートの貝がらで天国病"],
+)
+def test_sickness_cured_event(board, card, sickness):
+    """病気の治癒が EFFECT_SICKNESS の FLAG_CURED として記録されることを検証します。
+
+    以前は治癒だけが state.sickness への直接代入で、イベントが一切出ていませんでした。
+    呪いは remove_curse() が FLAG_CLEARED を出しているのに対して非対称だったため、
+    履歴からは「相手の病気が治った」ことが読み取れませんでした。
+
+    `value` の下位4ビットには「治る前の病気」が入ります。何が治ったのか分からないと
+    履歴として意味がないためです。
+    """
+    g = board(
+        p0=Side(hp=40, mp=50, sickness=sickness, hand=[card]),
+        p1=Side(hp=40, mp=50),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(card, to_self=True)
+    g.confirm()
+
+    g.expect(p0_sickness=godfield_core.SicknessType.SICKNESS_NONE)
+
+    cured = events_of(g, EventType.EFFECT_SICKNESS)[-1]
+    assert int(cured.value) & int(godfield_core.SicknessEvent.FLAG_CURED), (
+        f"治癒が FLAG_CURED として記録されるべきです: value={int(cured.value)}"
+    )
+    assert (int(cured.value) & godfield_core.SicknessEvent.MASK_TYPE) == int(sickness), (
+        "治る前の病気の種別が記録されるべきです"
+    )
+
+    text = format_event_log(cured, 0)["text"]
+    assert "治った" in text
+
+
+def test_darkness_instant_death_is_logged_and_formatted(board):
+    """闇属性の即死が INSTANT_DEATH として記録され、専用の文言に整形されることを検証します。"""
+    g = board(
+        p0=Side(hp=99, mp=99, hand=["miracles/darkness"]),
+        p1=Side(hp=99, mp=10, hand=[FILLER]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack("miracles/darkness")
+    g.take_hit()
+
+    deaths = events_of(g, EventType.INSTANT_DEATH)
+    assert deaths
+    text = format_event_log(deaths[-1], 0)["text"]
+    assert "即死" in text
+
+
+def test_healthy_player_produces_no_cure_event(board):
+    """病気でないプレイヤーを治療しても、治癒イベントが出ないことを検証します。
+
+    呪いの apply_curse() / remove_curse() と同じく、状態が変わらないときは
+    イベントを出しません。これがないと上のテストは「常にイベントが出る」だけを
+    見ていることになります。
+    """
+    g = board(
+        p0=Side(hp=40, mp=50, hand=["miracles/song"]),
+        p1=Side(hp=40, mp=50),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack("miracles/song", to_self=True)
+    g.confirm()
+
+    assert not events_of(g, EventType.EFFECT_SICKNESS)
 
 
 def test_ascension_bow_use_is_logged(board):
@@ -283,3 +362,34 @@ def test_common_combat_events_are_formattable(board, event_type):
     for e in found:
         fmt = format_event_log(e, 0)
         assert fmt is not None and fmt.get("text"), f"{event_type.name} の整形に失敗しました"
+
+
+@pytest.mark.parametrize(
+    ("phase_name", "first", "extra"),
+    [
+        ("攻撃プラス", "weapons/punch", "weapons/blowgun"),
+        ("奇跡プラス", "miracles/fireball", "sundries/spiritual-doll"),
+    ],
+)
+def test_every_staging_phase_logs_the_card_it_stages(board, phase_name, first, extra):
+    """カードを重ねる操作が、どのフェイズでも STAGE_CARD として履歴に残ることを検証します。
+
+    以前は奇跡プラスだけが STAGE_CARD を発行しておらず、精霊系カードを重ねて
+    消費MPを0にする操作が履歴に残りませんでした。履歴は観測に含まれるため、
+    エージェントからはその操作だけが見えない状態でした。
+
+    仮置きフェイズは6つあり、他の5つは発行していたので、抜けと判断しています。
+    """
+    g = board(
+        p0=Side(hp=40, mp=20, hand=[first, extra]),
+        p1=Side(hp=40, mp=20),
+    )
+    g.rng.deck_always("armor/wood-shield")
+
+    g.select(first)
+    g.select(extra)
+
+    g.expect_events(
+        ev(EventType.STAGE_CARD, card=first),
+        ev(EventType.STAGE_CARD, card=extra),
+    )

@@ -3,6 +3,8 @@
 #include <vector>
 #include <algorithm>
 #include <cstring>
+#include <stdexcept>
+#include <string>
 
 
 /**
@@ -72,9 +74,7 @@ void step_game(InternalState& state, ActionType action) {
             
             // 1. 仮置きされているすべての手札の真偽状態を確定させる（Reveal）
             //    これにより is_confirmed[me][slot] = true となり、apparent_hand が true_hand の値に同期されます。
-            for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-                confirm_card(state, me, state.staged_cards[me][i]);
-            }
+            confirm_all_staged_cards(state, me);
             
             // 2. 公開された「真の手札情報」に基づいて、現在のアクションの合法性を再判定します。
             //    ※通常ルールでは、夢の偽装グループは使用タイミング（timing等）が一致する神器同士で厳密に
@@ -91,8 +91,8 @@ void step_game(InternalState& state, ActionType action) {
                 // 仮置きしていたカードをすべてプレイヤーの手札に戻します（使用フラグ is_used を false にクリア）。
                 // ただし、真の姿が公開（確定）された事実自体は維持されます。
                 for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-                    int slot = state.staged_cards[me][i];
-                    state.is_used[me][slot] = false;
+                    int slot = staged_hand_slot(state, me, i);
+                    if (slot != NO_HAND_SLOT) state.is_used[me][slot] = false;
                 }
                 state.num_staged_cards[me] = 0;
                 
@@ -306,6 +306,106 @@ int get_single_legal_action(const InternalState& state) {
     return -1;
 }
 
+/**
+ * @brief 「解決中の攻撃・取引」に関するフィールドを未設定の状態に戻します。
+ *
+ * これらは 0 が有効な値（プレイヤーID 0、カードID 0）になってしまうため、
+ * 番兵は -1 / CARD_EMPTY でなければなりません。ゼロ埋めしただけの状態を
+ * 「まっさらな盤面」として扱うと、pending_initiator が「プレイヤー0が仕掛けた」
+ * という意味を持ってしまい、記録漏れを検出できなくなります
+ * （実際にテスト側の clear_state がそうなっており、守護神の罰金・わいろで
+ * 実ゲームだけが例外で落ちる不具合を隠していました）。
+ */
+void reset_pending_resolution(InternalState &state) {
+    state.attacker_id = -1;
+    state.defender_id = -1;
+    state.pending_initiator = -1;
+    state.pending_attack_power = 0;
+    state.pending_attack_element = ELEM_NONE;
+    state.pending_absorption = false;
+    state.pending_deal_same_damage = false;
+    state.num_pending_counters = 0;
+    state.pending_attack_curse = CURSE_NONE;
+    state.pending_take_cp = false;
+    state.pending_attack_source_id = CARD_EMPTY;
+}
+
+/**
+ * @brief 新しいゲームの初期状態を組み立てます（強制手の消化は行いません）。
+ */
+static void setup_new_game_state(InternalState &state, int seed) {
+    // 以前はここで乱数エンジンを3回初期化していた（一時オブジェクトの既定構築、
+    // seed()、InternalState() の既定構築）。エンジンの状態をそのまま上書きするので、
+    // 素の代入と seed() の1回だけで足りる。
+    state = InternalState();
+    state.rng.seed(static_cast<uint32_t>(seed));
+
+    state.current_actor_id = 0;
+    state.current_turn = 0;
+    state.current_phase = GamePhase::PHASE_MAIN;
+    state.turn_end_state = TurnEndSubstep::DEATH_CHECK_START;
+
+    for (int p = 0; p < 2; ++p) {
+        state.hp[p] = INITIAL_HP;
+        state.mp[p] = INITIAL_MP;
+        state.money[p] = INITIAL_MONEY;
+        state.num_staged_cards[p] = 0;
+        state.sickness[p] = SICKNESS_NONE;
+        state.guardian[p] = GUARDIAN_NONE;
+        state.pending_ascension_bows[p] = 0;
+        state.heaven_seizure_occurred[p] = false;
+    }
+    std::memset(state.curses, 0, sizeof(state.curses));
+
+    reset_pending_resolution(state);
+
+    state.history_head = 0;
+    state.history_count = 0;
+    std::memset(state.history, 0, sizeof(state.history));
+
+    // 初期手札を配る
+    for (int p = 0; p < 2; ++p) {
+        for (int h = 0; h < MAX_HAND_SIZE; ++h) {
+            state.true_hand[p][h] = (h < INITIAL_HAND_SIZE) ? draw_card(state) : CARD_EMPTY;
+            state.apparent_hand[p][h] = state.true_hand[p][h];
+            state.is_confirmed[p][h] = true;
+            state.is_known_to_opp[p][h] = false;
+            state.is_used[p][h] = false;
+            state.is_deployed[p][h] = false;
+        }
+    }
+
+    state.is_done = false;
+    state.p0_reward = 0.0f;
+    state.p1_reward = 0.0f;
+}
+
+void init_new_game(InternalState &state, int seed) {
+    // 初期局面に強制手（合法手が1つしかない状況）が続くことがあるため、
+    // プレイヤーの入力が必要になるところまで進めてから返す。
+    //
+    // その過程でゲームが決着してしまうと、「開始局面」として決着済みの状態を
+    // 返すことになる。学習側は reset 直後を done=false として扱うので、
+    // 壊れた遷移を集めることになる。現在のカードデータでは開始直後に
+    // ダメージ源が無いため起きないが、カードや初期条件を変えたときに
+    // 静かに壊れないよう、シードを変えて配り直す。
+    for (int attempt = 0; attempt < MAX_NEW_GAME_ATTEMPTS; ++attempt) {
+        // 環境ごとのシード列と衝突しにくいよう、素数を掛けてずらす
+        setup_new_game_state(state, seed + attempt * 7919);
+
+        int auto_action;
+        while (!state.is_done && (auto_action = get_single_legal_action(state)) != -1) {
+            step_game(state, static_cast<ActionType>(auto_action));
+        }
+        if (!state.is_done) {
+            return;
+        }
+    }
+    throw std::runtime_error(
+        "初期局面が強制手だけで決着してしまい、" + std::to_string(MAX_NEW_GAME_ATTEMPTS) +
+        "回配り直しても開始できませんでした。カードデータか初期条件を確認してください。");
+}
+
 void make_observation(const InternalState& state, int player_id, Observation& obs) {
     std::memset(&obs, 0, sizeof(Observation));
     
@@ -353,9 +453,7 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
 
     int total_def = 0;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int h_idx = state.staged_cards[me][i];
-        int card_id = state.apparent_hand[me][h_idx];
-        if (card_id < 0) card_id = state.true_hand[me][h_idx];
+        int card_id = staged_card_id(state, me, i);
         if (card_id >= 0 && card_id < static_cast<int>(g_card_registry.size())) {
             total_def += g_card_registry[card_id].defense_power;
         }
@@ -380,10 +478,13 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
     }
 
     // Staged cards
+    // カードを解決できないエントリは飛ばし、opponent_hand_cards と同じく左詰めで格納する。
     std::fill(std::begin(obs.staged_cards), std::end(obs.staged_cards), static_cast<float>(CARD_EMPTY));
+    int staged_count = 0;
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int h_idx = state.staged_cards[me][i];
-        obs.staged_cards[i] = static_cast<float>(state.apparent_hand[me][h_idx]);
+        int card_id = staged_card_id(state, me, i);
+        if (card_id == CARD_EMPTY) continue;
+        obs.staged_cards[staged_count++] = static_cast<float>(card_id);
     }
 
     // Opponent hand cards (相手の公開手札のスロット位置リークを防ぐため、左詰めで格納する)
@@ -400,9 +501,11 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
     // Opponent staged cards
     std::fill(std::begin(obs.opponent_staged_cards), std::end(obs.opponent_staged_cards), static_cast<float>(CARD_EMPTY));
     if (state.num_staged_cards[opp] > 0) {
+        int opp_staged_count = 0;
         for (int i = 0; i < state.num_staged_cards[opp]; ++i) {
-            int h_idx = state.staged_cards[opp][i];
-            obs.opponent_staged_cards[i] = static_cast<float>(state.true_hand[opp][h_idx]);
+            int card_id = staged_card_id(state, opp, i);
+            if (card_id == CARD_EMPTY) continue;
+            obs.opponent_staged_cards[opp_staged_count++] = static_cast<float>(card_id);
         }
     } else if (state.pending_attack_source_id != CARD_EMPTY) {
         obs.opponent_staged_cards[0] = static_cast<float>(state.pending_attack_source_id);

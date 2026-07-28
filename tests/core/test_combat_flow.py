@@ -988,6 +988,38 @@ def test_the_ascension_bow_fires_only_after_every_attack_is_resolved(board):
     assert g.rng.consumed(RollKind.ASCENSION_BOW_HIT) == 1
 
 
+def test_the_fired_ascension_bow_keeps_the_group_attack_flag_from_the_master(board):
+    """発射された昇天弓が、カードマスタどおり全体攻撃として扱われることを検証します。
+
+    昇天弓は攻撃力と命中率が手札から撃つ場合と意図的に異なる（ATK1・命中25% ではなく
+    30・75%）ため、実装は pending_attack_* を個別に組み立てています。その際に
+    全体攻撃フラグだけが取りこぼされ、単体攻撃に落ちていました。
+
+    2人対戦では観測できる差が出ないので（全体攻撃フラグを読むのは攻撃側の
+    対象選択だけで、昇天弓の発射はそこを通らない）、状態を直接確認します。
+    """
+    assert card_feature(ASCENSION_BOW, "is_group_attack") is True, (
+        "マスタ上で全体攻撃でないなら、このテストは前提から成り立たない"
+    )
+
+    power = card_feature(SAW, "attack_power")
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[SAW]),
+        p1=Side(hp=power, mp=10, hand=[ASCENSION_BOW]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.ascension_bow(True)
+
+    g.attack(SAW)
+    g.take_hit()
+    g.take_hit()
+
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=0)
+    assert g.state.pending_is_group_attack is True, (
+        "マスタが全体攻撃なら、発射された昇天弓も全体攻撃であるべきです"
+    )
+
+
 @pytest.mark.parametrize(
     "roll",
     [godfield_core.ROLL_MIN, godfield_core.ROLL_MAX],

@@ -2,7 +2,8 @@
 Sickness Event Bitmask Constants
 """
 from __future__ import annotations
-__all__: list[str] = ['FLAG_DAMAGE', 'FLAG_HEAL', 'FLAG_SEIZURE', 'FLAG_WORSENED', 'MASK_TYPE', 'TYPE_COLD', 'TYPE_FEVER', 'TYPE_HEAVEN', 'TYPE_HELL', 'TYPE_NONE']
+__all__: list[str] = ['FLAG_CURED', 'FLAG_DAMAGE', 'FLAG_HEAL', 'FLAG_SEIZURE', 'FLAG_WORSENED', 'MASK_TYPE', 'TYPE_COLD', 'TYPE_FEVER', 'TYPE_HEAVEN', 'TYPE_HELL', 'TYPE_NONE']
+FLAG_CURED: int = 256
 FLAG_DAMAGE: int = 16
 FLAG_HEAL: int = 32
 FLAG_SEIZURE: int = 128

@@ -47,7 +47,7 @@ enum class RollKind : uint8_t {
     ASCENSION_BOW_HIT,     // 昇天弓の命中 (0..99, roll < ASCENSION_BOW_HIT_RATE で命中)
     SICKNESS_WORSEN,       // 病気の悪化 (0..99, roll < SICKNESS_WORSEN_RATE で悪化)
     GUARDIAN_ACT,          // 守護神が行動するか (0..99, roll < GUARDIAN_ACT_RATE で行動)
-    GUARDIAN_ACT_CHOICE,   // 5種の行動のどれを選ぶか (0..99, GUARDIAN_ACT_CHOICE_THRESHOLDS で分割)
+    GUARDIAN_ACT_CHOICE,   // 5種の行動のどれを選ぶか (0..99, GUARDIAN_ACTION_PERCENT で分割)
     MOON_MIRACLE,          // 月神が発動する奇跡の選択 (0..MOON_MIRACLE_COUNT-1)
 
     // --- 超常現象（運命のひも） ---
@@ -66,7 +66,7 @@ enum class RollKind : uint8_t {
 
     // --- 山札とドロー ---
     DECK_DRAW,             // 山札からの抽選（スクリプト値はカードIDそのもの）
-    APOCALYPSE_DRAW,       // 終末の時の悪魔抽選 (0..99 相当のパーセント)
+    APOCALYPSE_DRAW,       // 終末の時の悪魔抽選 (0..99, APOCALYPSE_DEVILS の出現率で分割)
     DREAM_DISGUISE,        // 夢状態で偽装されるか (0..99, 50未満で偽装される)
     DREAM_FAKE_CARD,       // 夢状態で表示される偽装カード（スクリプト値はカードID）
 
@@ -101,7 +101,7 @@ constexpr int ROLL_MAX = INT32_MAX;
 /**
  * @brief テストが仕込む乱数の指示表。本番では生成されない。
  *
- * 値系（roll_range / roll_real）と順序系（shuffle_by_*）でセマンティクスが異なる:
+ * 値系（roll_range）と順序系（shuffle_by_*）でセマンティクスが異なる:
  *  - 値系: queue。force() は最後の値を繰り返す sticky、script() はちょうどその回数だけ。
  *  - 順序系: 優先リスト。そのラベルのシャッフルすべてに適用され、消費されない。
  */
@@ -131,7 +131,6 @@ const char *roll_kind_name(RollKind kind);
 
 // 実体は rng.cpp。ホットパスからは追い出してインライン展開を小さく保つ。
 int roll_range_scripted(InternalState &state, RollKind kind, int lo, int hi);
-double roll_real_scripted(InternalState &state, RollKind kind, double lo, double hi);
 int scripted_card_id(RollKind kind, bool &found);
 bool scripted_order(RollKind kind, const std::vector<int> **out);
 void note_unscripted(RollKind kind);
@@ -148,16 +147,6 @@ inline int roll_range(InternalState &state, RollKind kind, int lo, int hi) {
         return roll_range_scripted(state, kind, lo, hi);
     }
     return std::uniform_int_distribution<int>(lo, hi)(state.rng);
-}
-
-/**
- * @brief [lo, hi) の一様実数を引きます。終末の時の悪魔抽選のみが使用します。
- */
-inline double roll_real(InternalState &state, RollKind kind, double lo, double hi) {
-    if (g_roll_script != nullptr) {
-        return roll_real_scripted(state, kind, lo, hi);
-    }
-    return std::uniform_real_distribution<double>(lo, hi)(state.rng);
 }
 
 /**

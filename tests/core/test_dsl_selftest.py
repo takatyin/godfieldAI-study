@@ -322,15 +322,17 @@ def test_phenomenon_can_be_named(board):
     g.expect_events(ev(EventType.TRIGGER_PHENOMENON, card="sundries/string-of-fate"))
 
 
-def test_guardian_act_choice_uses_thresholds_from_cpp():
-    """守護神の行動選択の代表値が C++ の閾値表から正しく導出されることを確認します。"""
-    thresholds = godfield_core.GUARDIAN_ACT_CHOICE_THRESHOLDS
-    assert len(thresholds) == godfield_core.GUARDIAN_ACT_CHOICE_THRESHOLDS[-1] // 20  # 5行動
+def test_guardian_act_choice_uses_percents_from_cpp():
+    """守護神の行動選択の代表値が C++ の確率表から正しく導出されることを確認します。"""
+    percents = godfield_core.get_guardian_action_percents()
+    assert sum(percents) == 100, "確率の合計は100であるべきです"
+    assert all(p > 0 for p in percents), "確率0の行動があると、その行動を狙えなくなります"
+
     # 代表値が各行動の区間に収まっていること（C++側で確率配分を変えてもテストは追従する）
-    for action in range(1, len(thresholds) + 1):
-        rep = 0 if action == 1 else thresholds[action - 2]
-        lower = 0 if action == 1 else thresholds[action - 2]
-        upper = thresholds[action - 1]
+    for action in range(1, len(percents) + 1):
+        rep = sum(percents[: action - 1])
+        lower = sum(percents[: action - 1])
+        upper = sum(percents[:action])
         assert lower <= rep < upper, f"行動{action} の代表値 {rep} が区間 [{lower}, {upper}) の外です"
 
 
@@ -445,3 +447,21 @@ def test_script_is_isolated_between_tests():
     assert godfield_core.rng_unconsumed_kinds() == []
     for kind in (RollKind.BOUNCE, RollKind.PHENOMENON, RollKind.DECK_DRAW):
         assert godfield_core.rng_consumed(kind) == 0
+
+
+def test_board_starts_with_the_same_sentinels_as_a_real_game(board):
+    """テストの盤面が、実ゲームの開始局面と同じ番兵を持つことを検証します。
+
+    これらのフィールドは 0 が有効な値（プレイヤーID 0 / カードID 0）になるため、
+    ゼロ埋めした状態を盤面として使うと「未設定」を検出できません。実際、
+    clear_state() がゼロ埋めのままだったために pending_initiator が 0 になり、
+    「守護神の罰金・わいろを受諾すると実ゲームだけ例外で落ちる」不具合を
+    テストが素通りさせていました。
+    """
+    g = board(p0=Side(hp=40), p1=Side(hp=40))
+    assert g.state.pending_initiator == -1, (
+        "仕掛けた側が未設定であることを表せないと、記録漏れを検出できません"
+    )
+    assert g.state.attacker_id == -1
+    assert g.state.defender_id == -1
+    assert g.state.pending_attack_source_id == godfield_core.CARD_EMPTY

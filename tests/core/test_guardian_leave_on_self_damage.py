@@ -15,7 +15,7 @@
 import pytest
 
 import godfield_core
-from godfield_core import GuardianType, RollKind
+from godfield_core import GuardianType, RollKind, SicknessType
 from tests.core.dsl import Side, card_feature
 
 MARS = int(GuardianType.MARS)
@@ -147,7 +147,110 @@ def test_apocalypse_devil_table_matches_the_cpp_thresholds():
     別の悪魔を黙って検証してしまいます。
     """
     devils = godfield_core.get_apocalypse_devils()
-    thresholds = godfield_core.APOCALYPSE_DEVIL_THRESHOLDS
-    assert len(devils) == len(thresholds)
-    assert thresholds == sorted(thresholds), "閾値は昇順である必要があります"
-    assert thresholds[-1] <= 100
+    percents = godfield_core.get_apocalypse_devil_percents()
+    assert len(devils) == len(percents)
+    assert all(p > 0 for p in percents), "出現率0の悪魔があると、その悪魔を狙えなくなります"
+    assert sum(percents) <= 100, "合計が100を超えると通常ドローが起きなくなります"
+
+
+@pytest.mark.parametrize("leaves", [True, False], ids=["離脱する", "残留する"])
+def test_weapon_self_attack_triggers_the_guardian_leave_roll(board, leaves):
+    """武器を自分自身に撃ってHPが減った場合も、守護神の離脱判定が行われることを検証します。
+
+    奇跡の自傷は apply_damage() を通るので離脱判定が入りますが、武器の自傷は
+    execute_attack_from_staged_cards() 内でHPを直接いじっており、
+    try_guardian_leave() を呼んでいませんでした。同じ「自傷でHPが減った」でも
+    使ったカードの種別で挙動が変わってしまいます。
+
+    このファイルの冒頭に書いてあるとおり、離脱判定は自分自身へのダメージでも
+    行われる必要があります。
+    """
+    weapon = "weapons/punch"  # 命中率100%・単体・状態異常なし
+    power = card_feature(weapon, "attack_power")
+    assert card_feature(weapon, "accuracy", 100) == 100, "自傷できる武器である前提"
+
+    g = board(
+        p0=Side(hp=40, mp=10, guardian=MARS, hand=[weapon]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.guardian_leave(leaves=leaves)
+
+    g.attack(weapon, to_self=True)
+
+    g.expect(p0_hp=40 - power)
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) == 1, (
+        "自傷でHPが減ったので、守護神の離脱判定が行われるべきです"
+    )
+    g.expect(p0_guardian=NONE if leaves else MARS)
+
+
+@pytest.mark.parametrize("leaves", [True, False], ids=["離脱する", "残留する"])
+def test_dangerous_pestle_self_hit_triggers_the_guardian_leave_roll(board, leaves):
+    """あぶないキネが自分に当たった場合も、守護神の離脱判定が行われることを検証します。
+
+    キネの自傷はHPを直接いじっており、apply_damage() を通っていなかったため
+    離脱判定が抜けていました。
+    """
+    g = board(
+        p0=Side(hp=99, mp=10, guardian=MARS, hand=["weapons/dangerous-pestle"]),
+        p1=Side(hp=99),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.force(RollKind.PESTLE_TARGET, 0)  # 自分を対象にする
+    g.rng.guardian_leave(leaves=leaves)
+
+    g.attack("weapons/dangerous-pestle")
+
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) == 1, (
+        "キネの自傷でHPが減ったので、離脱判定が行われるべきです"
+    )
+    g.expect(p0_guardian=NONE if leaves else MARS)
+
+
+@pytest.mark.parametrize("leaves", [True, False], ids=["離脱する", "残留する"])
+def test_dangerous_mortar_99_damage_triggers_the_guardian_leave_roll(board, leaves):
+    """あぶないウスの99ダメージでも守護神の離脱判定が行われることを検証します。
+
+    ウスもHPを直接いじっており、離脱判定が抜けていました。
+    99ダメージは即死しうるので、生き残るHPを与えて判定だけを見ます。
+    """
+    g = board(
+        p0=Side(hp=99, mp=10, guardian=MARS,
+                hand=["weapons/dangerous-pestle", "sundries/dangerous-mortar"]),
+        p1=Side(hp=99),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.force(RollKind.MORTAR_VICTIM, 0)  # ウス所持者はP0のみなのでP0が被弾
+    g.rng.guardian_leave(leaves=leaves)
+
+    g.attack("weapons/dangerous-pestle")
+
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) == 1, (
+        "ウスの99ダメージでHPが減ったので、離脱判定が行われるべきです"
+    )
+    g.expect(p0_guardian=NONE if leaves else MARS)
+
+
+def test_sickness_damage_triggers_the_guardian_leave_roll(board):
+    """病気のターン終了ダメージでも守護神の離脱判定が行われることを検証します。
+
+    この経路は apply_damage() を通らず try_guardian_leave() を直接呼んでいます。
+    apply_damage への集約が漏れているように見えますが、判定自体は行われており
+    挙動は正しいので、そのことをテストで固定しておきます。
+    """
+    g = board(
+        p0=Side(hp=40, mp=10, guardian=MARS, sickness=SicknessType.SICKNESS_COLD,
+                hand=[FILLER]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.sickness_worsen(False)
+    g.rng.guardian_leave(leaves=True)
+
+    g.pray()
+
+    assert g.rng.consumed(RollKind.GUARDIAN_LEAVE) >= 1, (
+        "病気ダメージでHPが減ったので、離脱判定が行われるべきです"
+    )
+    g.expect(p0_guardian=NONE)

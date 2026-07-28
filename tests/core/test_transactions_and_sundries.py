@@ -332,6 +332,9 @@ def offer_for_purchase(board, *, p1: Side):
     """P0 が P1 に「買う」を撃ち、P1 のスロット0 が出品された局面を返します。"""
     g = board(p0=Side(hp=40, money=20, hand=[BUY]), p1=p1)
     g.rng.deck_always(FILLER)
+    # 出品されるスロットはランダムに選ばれる。同名カードを2枚持たせる呼び出しが
+    # あるため、スロット0が出品されることを固定しないと検証対象が入れ替わる。
+    g.rng.reveal_slot(0)
 
     g.select(BUY)
     g.target_opp()

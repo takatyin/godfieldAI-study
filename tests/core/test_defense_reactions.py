@@ -32,6 +32,7 @@ TURBULENCE = "miracles/turbulence"
 FLAME = "miracles/flame"
 REFLECTION_SWORD = "weapons/reflection-sword"
 LEATHER_CLOTHES = "armor/leather-clothes"
+SUPER_MIRROR = "armor/super-mirror"
 
 SATURN = int(godfield_core.GuardianType.SATURN)
 MOON = int(godfield_core.GuardianType.MOON)
@@ -233,6 +234,10 @@ def test_rainbow_curtain_still_allows_a_reaction_armor(board):
         p1=Side(hp=40, mp=20, hand=[CURTAIN, sky_armor]),
     )
     g.rng.deck_always(FILLER)
+    # スカイアーマーは弾きを持つ。ここで見たいのは「2枚目として出せること」と
+    # その防御力が乗ることなので、弾きは起こさない側に固定する
+    # （固定しないと50%で攻守が入れ替わり、被弾の検証が成立しない）。
+    g.rng.bounce(success=False)
 
     g.attack(meteor)
     g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE)
@@ -496,6 +501,84 @@ def test_gigantic_tub_is_a_light_attack_reflectable_through_the_curtain(board):
 
     g.defend(REFLECTION_SWORD)
     g.expect(actor=0, phase=GamePhase.PHASE_DEFENSE, pending_element=Element.ELEM_NONE)
+
+
+def test_super_mirror_reflects_the_gigantic_tub_without_a_curtain(board):
+    """巨大なタライをスーパーミラーで反射できることを検証します。
+
+    反射剣と違い、スーパーミラーは有属性攻撃でも虹のカーテンなしで置けます。
+    """
+    tub = "phenomena/gigantic-tub"
+    power = card_feature(tub, "attack_power")
+
+    g = board(
+        p0=Side(hp=99, mp=10, hand=["sundries/string-of-fate"]),
+        p1=Side(hp=99, mp=10, hand=[SUPER_MIRROR, REFLECTION_SWORD]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(PhenomenonType.GIGANTIC_TUB)
+    g.rng.force(godfield_core.RollKind.PHENOMENON_TUB_TARGET, 1)  # P1 を狙う
+
+    g.attack("sundries/string-of-fate", to_self=True)
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1, attacker=0, defender=1)
+
+    # 光属性なので反射剣はカーテンなしでは置けないが、スーパーミラーは置ける
+    g.expect_illegal([REFLECTION_SWORD])
+    g.expect_legal([SUPER_MIRROR])
+
+    g.defend(SUPER_MIRROR)
+
+    # 攻守が入れ替わり、攻撃力・属性はそのまま撃った側へ返る
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        actor=0,
+        attacker=1,
+        defender=0,
+        pending_power=power,
+        pending_element=element_of(tub),
+    )
+
+    g.take_hit()
+    g.expect(p0_hp=99 - power, p1_hp=99)
+
+
+def test_super_mirror_reflects_the_black_hole_keeping_it_a_group_attack(board):
+    """ブラックホールをスーパーミラーで反射でき、全体攻撃属性が保たれることを検証します。"""
+    hole = "phenomena/black-hole"
+    power = card_feature(hole, "attack_power")
+
+    g = board(
+        p0=Side(hp=99, mp=10, hand=["sundries/string-of-fate"]),
+        p1=Side(hp=99, mp=10, hand=[SUPER_MIRROR, FILLER]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(PhenomenonType.BLACK_HOLE)
+
+    g.attack("sundries/string-of-fate", to_self=True)
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        actor=1,
+        attacker=0,
+        defender=1,
+        pending_is_group=True,
+    )
+
+    g.expect_legal([SUPER_MIRROR])
+    g.defend(SUPER_MIRROR)
+
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        actor=0,
+        attacker=1,
+        defender=0,
+        pending_power=power,
+        pending_element=element_of(hole),
+        pending_is_group=True,
+    )
+
+    # 闇属性なので、虹のカーテンなしで通すと防御力に関係なく即死します
+    g.take_hit()
+    g.expect(p0_hp=0, p1_hp=99, is_done=True)
 
 
 def test_diamond_axe_is_a_stone_attack_reflectable_through_the_curtain(board):

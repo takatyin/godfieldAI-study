@@ -348,3 +348,49 @@ def test_card_ids_stay_within_the_embedding_table(env):
     assert cards.min() >= godfield_core.CARD_EMPTY
     assert cards.max() < fc.NUM_CARD_TYPES
     assert fc.NUM_CARD_TYPES >= godfield_core.get_registry_size()
+
+
+def test_reset_never_hands_back_a_finished_game():
+    """reset 直後の環境が決着済みでないことを検証します。
+
+    開始局面には強制手（合法手が1つしかない状況）が続くことがあり、reset は
+    プレイヤーの入力が必要になるところまで自動で進めます。その過程で決着すると、
+    学習側が done=false として扱う「開始局面」が実は終局、という状態になります。
+    dones バッファは reset で0に初期化されるので、そちらを見ても気付けません。
+
+    現在のカードデータでは開始直後にダメージ源が無いため起きませんが、
+    カードや初期条件を変えたときに静かに壊れないよう固定します。
+    """
+    num_envs = 128
+    env = godfield_core.EnvPool(num_envs)
+
+    for seed in (0, 1, 7, 12345, 99991):
+        env.reset(seed)
+        finished = [i for i in range(num_envs) if env.get_state(i).is_done]
+        assert not finished, (
+            f"seed={seed}: reset 直後に決着している環境があります: {finished}"
+        )
+
+
+def test_reset_gives_every_player_the_documented_starting_resources():
+    """開始時のHP・MP・所持金・手札枚数が初期値どおりであることを検証します。
+
+    これらは以前 env_pool.cpp に直書きされていました（ゲームのルールなのに
+    環境プールが持っていた）。game_logic 側へ移したので、値が変わっていないことを
+    ここで押さえます。
+    """
+    env = godfield_core.EnvPool(8)
+    env.reset(0)
+
+    for i in range(8):
+        s = env.get_state(i)
+        for p in range(2):
+            assert s.get_hp(p) == 40
+            assert s.get_mp(p) == 10
+            assert s.get_money(p) == 20
+            hand = [
+                s.get_true_hand(p, h)
+                for h in range(godfield_core.MAX_HAND_SIZE)
+                if s.get_true_hand(p, h) != godfield_core.CARD_EMPTY
+            ]
+            assert len(hand) == 9, f"env {i} P{p} の初期手札が9枚ではありません: {len(hand)}"

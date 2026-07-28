@@ -163,8 +163,19 @@ Python側には `InternalState` 構造体がそのまま公開されているた
 ## ドキュメントとアセット (Docs & Assets)
 
 ### ドキュメント (`docs/`)
+
+開発を始めるとき:
+- [`docs/core_architecture.md`](./docs/core_architecture.md): C++コアの構造。`InternalState` の各フィールドが「なぜその形なのか」。
+- [`docs/testing_guide.md`](./docs/testing_guide.md): テストの書き方。乱数の固定方法と、空のテストを書かないためのチェックリスト。
+
+ゲーム仕様:
 - [`docs/rules.md`](./docs/rules.md): ゴッドフィールドの詳細なゲームルール。
-- [`docs/game_flow.md`](./docs/game_flow.md): ゲームのフェイズ進行とフローチャート。
+- [`docs/phase_specifications.md`](./docs/phase_specifications.md): フェイズ遷移とターン終了処理の詳細。
+- [`docs/special_cards.md`](./docs/special_cards.md): 特殊な挙動を持つカードの仕様。
+- [`docs/dream_curse.md`](./docs/dream_curse.md): 夢状態の仕様と夢グループの分類。
+- [`docs/event_log_spec.md`](./docs/event_log_spec.md): イベント履歴に載る種別と、その配信条件。
+
+データと学習:
 - [`docs/card_schema.md`](./docs/card_schema.md): カード定義YAML/JSONのデータスキーマ仕様。
 - [`docs/ai-policy.md`](./docs/ai-policy.md): 強化学習エージェントの方針と状態表現設計。
 

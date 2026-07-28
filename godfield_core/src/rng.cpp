@@ -122,24 +122,6 @@ int roll_range_scripted(InternalState &state, RollKind kind, int lo, int hi) {
     return std::uniform_int_distribution<int>(lo, hi)(state.rng);
 }
 
-double roll_real_scripted(InternalState &state, RollKind kind, double lo, double hi) {
-    int value = 0;
-    if (next_scripted_value(kind, value)) {
-        g_roll_script->consumed[static_cast<int>(kind)]++;
-        if (value == ROLL_MIN) return lo;
-        if (value == ROLL_MAX) return hi;
-        double v = static_cast<double>(value);
-        if (v < lo || v > hi) {
-            throw std::runtime_error(
-                std::string("RollKind::") + roll_kind_name(kind) + " に範囲外の値 " +
-                std::to_string(value) + " が指定されました。");
-        }
-        return v;
-    }
-    note_unscripted(kind);
-    return std::uniform_real_distribution<double>(lo, hi)(state.rng);
-}
-
 int scripted_card_id(RollKind kind, bool &found) {
     int value = 0;
     if (next_scripted_value(kind, value)) {

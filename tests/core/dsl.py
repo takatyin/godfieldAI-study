@@ -264,16 +264,15 @@ class RngController:
     def guardian_act(self, *, acts: bool, action: int | None = None) -> RngController:
         """守護神が行動するかを固定し、`action`（1..5）で5種の行動のどれかを指定します。
 
-        閾値表は C++ の constants.h から取得するため、確率配分を変更しても
-        テスト側を書き換える必要はありません。
+        確率配分は C++ から取得するため、配分を変更してもテスト側の書き換えは不要です。
         """
         self.force(RollKind.GUARDIAN_ACT, HAPPENS if acts else NEVER)
         if action is not None:
-            thresholds = godfield_core.GUARDIAN_ACT_CHOICE_THRESHOLDS
-            if not 1 <= action <= len(thresholds):
-                raise ValueError(f"action は 1..{len(thresholds)} で指定してください: {action}")
-            # 行動1 は roll < thresholds[0]、行動N は thresholds[N-2] <= roll < thresholds[N-1]
-            self.force(RollKind.GUARDIAN_ACT_CHOICE, 0 if action == 1 else thresholds[action - 2])
+            percents = godfield_core.get_guardian_action_percents()
+            if not 1 <= action <= len(percents):
+                raise ValueError(f"action は 1..{len(percents)} で指定してください: {action}")
+            # 行動 N の区間は [先行する確率の合計, +その行動の確率) なので、下端を代表値にする
+            self.force(RollKind.GUARDIAN_ACT_CHOICE, sum(percents[: action - 1]))
         return self
 
     def guardian_action_card(self, guardian: int, card: str | int) -> RngController:
@@ -394,7 +393,7 @@ class RngController:
 
         悪魔を引くと効果が適用されたあと再ドローされるため、最後は必ず `None` を
         置いて通常抽選で終わらせてください（悪魔で終わると無限ループになります）。
-        閾値は C++ の APOCALYPSE_DEVIL_THRESHOLDS から導出するので、確率配分を
+        出現率は C++ の APOCALYPSE_DEVILS が各カードと一緒に持つので、確率配分を
         変更してもテスト側の書き換えは不要です。
 
         `optional=True` は「終末に入っていなければ抽選自体が起きない」ことを
@@ -403,7 +402,7 @@ class RngController:
         末尾の指示が消費されないことがある場合に使います。
         """
         devils = godfield_core.get_apocalypse_devils()
-        thresholds = godfield_core.APOCALYPSE_DEVIL_THRESHOLDS
+        percents = godfield_core.get_apocalypse_devil_percents()
         values: list[int] = []
         for outcome in outcomes:
             if outcome is None:
@@ -416,8 +415,8 @@ class RngController:
                     f" 候補: {[card_name(d) for d in devils]}"
                 )
             idx = devils.index(target)
-            # 区間 [thresholds[idx-1], thresholds[idx]) の下端を代表値にする
-            values.append(0 if idx == 0 else thresholds[idx - 1])
+            # その悪魔の区間は [先行する確率の合計, +自分の確率) なので、下端を代表値にする
+            values.append(sum(percents[:idx]))
         if optional:
             # 抽選が起きるかどうか自体が主題なので、未消費でも失敗にしない
             return self.force(RollKind.APOCALYPSE_DRAW, values[0], optional=True)

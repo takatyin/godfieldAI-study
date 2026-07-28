@@ -660,3 +660,96 @@ def test_the_string_of_fate_logs_which_phenomenon_it_triggered(board):
     g.attack(fate, to_self=True)
 
     g.expect_events(ev(EventType.TRIGGER_PHENOMENON, card=fate, value=int(phenomenon)))
+
+
+# ============================================================================
+# 超常現象10種の網羅
+# ============================================================================
+
+
+def test_every_phenomenon_has_a_dedicated_test():
+    """PhenomenonType の全種にテストがあることを、列挙から機械的に確認します。
+
+    現象を1つ足したときに、テストを書き忘れたまま気付かれないのを防ぎます。
+    ここが落ちたら、対応するテストを書いてから名前をこの表に足してください。
+    """
+    tested = {
+        PhenomenonType.SUNSET: "test_sunset_gives_both_players_fever",
+        PhenomenonType.DENSE_FOG: "test_dense_fog_curses_both_players",
+        PhenomenonType.MUSHROOM: "test_mushroom_outbreak_starts_the_frenzy",
+        PhenomenonType.TORNADO: "test_tornado_sets_both_players_to_one_hp",
+        PhenomenonType.GIGANTIC_TUB: "test_gigantic_tub_on_self_deals_undefendable_damage",
+        PhenomenonType.BLACK_HOLE: "test_black_hole_is_a_group_darkness_attack",
+        PhenomenonType.WARM_CURRENT: "test_warm_current_heals_the_user",
+        PhenomenonType.GOLD_MINE: "test_gold_mine_concentrates_all_money",
+        PhenomenonType.MAGNETIC_STORM: "test_magnetic_storm_tracks_who_knows_which_card",
+        PhenomenonType.ECLIPSE: "test_eclipse_assigns_distinct_guardians_to_both",
+    }
+    all_types = set(PhenomenonType.__members__.values())
+    missing = all_types - set(tested)
+    assert not missing, f"テストの無い現象があります: {[p.name for p in missing]}"
+
+
+def test_mushroom_outbreak_starts_the_frenzy(board):
+    """きのこ大発生: ご乱心が始まり、規定ターン数ぶん自動進行することを検証します。
+
+    10種の現象のうち、これだけ trigger_phenomenon 経由のテストがありませんでした。
+    """
+    g = board(
+        p0=Side(hp=99, mp=10, money=10, hand=[FATE]),
+        p1=Side(hp=99, mp=10, money=10),
+        turn=10,
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(PhenomenonType.MUSHROOM)
+    g.rng.force(RollKind.MUSHROOM_ACTION, 0)  # 常に先頭の合法手を選ぶ
+
+    g.attack(FATE, to_self=True)
+
+    # ご乱心は自動で消化され、通常の操作に戻る
+    assert g.state.mushroom_turns == 0, "ご乱心が終了しているべきです"
+    assert g.state.current_turn > 10, "ご乱心のぶんターンが進んでいるべきです"
+    assert g.rng.consumed(RollKind.MUSHROOM_ACTION) > 0, (
+        "自動進行中に行動が選ばれているべきです"
+    )
+
+
+@pytest.mark.parametrize(
+    "before",
+    [
+        SicknessType.SICKNESS_NONE,
+        SicknessType.SICKNESS_COLD,
+        SicknessType.SICKNESS_FEVER,
+        SicknessType.SICKNESS_HELL,
+        SicknessType.SICKNESS_HEAVEN,
+    ],
+    ids=["健康", "風邪", "熱病", "地獄病", "天国病"],
+)
+def test_sunset_overwrites_any_existing_sickness_with_fever(board, before):
+    """夕焼けが、既にかかっている病気に関わらず熱病へ強制上書きすることを検証します。
+
+    以前は apply_sickness()（同等以下の病気を与えると1段階進む規則）を通していたため、
+    既に熱病以上の相手には熱病になりませんでした。
+
+        熱病   -> 地獄病
+        地獄病 -> 天国病
+        天国病 -> 発作でHP0（夕焼けで即死しうる状態だった）
+
+    夕焼けは「全員を熱病にする」効果なので、悪化の規則は適用しません。
+    """
+    g = board(
+        p0=Side(hp=99, mp=10, money=10, sickness=before, hand=[FATE]),
+        p1=Side(hp=99, mp=10, money=10, sickness=before),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.phenomenon(PhenomenonType.SUNSET)
+    g.rng.sickness_worsen(False)
+
+    g.attack(FATE, to_self=True)
+
+    g.expect(
+        p0_sickness=SicknessType.SICKNESS_FEVER,
+        p1_sickness=SicknessType.SICKNESS_FEVER,
+    )
+    assert g.state.get_hp(0) > 0, "夕焼けで死亡してはいけません"
+    assert g.state.get_hp(1) > 0, "夕焼けで死亡してはいけません"

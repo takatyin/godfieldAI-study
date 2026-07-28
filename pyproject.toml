@@ -15,14 +15,35 @@ dependencies = [
     "websockets>=11.0",
 ]
 
-[project.optional-dependencies]
+# 開発用の依存。`uv sync` が既定で入れるので、追加の指定なしに環境が揃う。
+# 以前は pytest と pybind11-stubgen がここに無く venv へ直接入れられていたため、
+# `uv sync` を1回走らせるだけでテストとスタブ生成が動かなくなっていた。
+[dependency-groups]
 dev = [
+    "pytest>=8.0.0",
     "ruff>=0.1.0",
+    "pybind11-stubgen>=2.5",
+    # `python setup.py build_ext --inplace` は venv の Python で直接走るため、
+    # [build-system] の宣言だけでは足りず venv にも必要。
+    "pybind11>=2.10.0",
 ]
 
 [build-system]
 requires = ["setuptools>=61.0", "pybind11>=2.10.0"]
 build-backend = "setuptools.build_meta"
+
+# PyPI の既定ホイールは CPU 版なので、CUDA 版を明示的に取りに行く。
+# CPU 版で学習すると PPO の更新（実測で学習時間の 2/3〜9割）がすべて CPU で回る。
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cuda" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 120

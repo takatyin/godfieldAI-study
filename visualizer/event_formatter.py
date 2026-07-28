@@ -38,7 +38,10 @@ def _fmt_type_8(ev, actor_name, card_name, target_name):
     is_heal = bool(v & 32)
     is_worsened = bool(v & 64)
     is_seizure = bool(v & 128)
+    is_cured = bool(v & 256)
     s_name = SICKNESS_DICT.get(sick_type, "病気")
+    if is_cured:
+        return f"{actor_name} 【{s_name}】が治った"
     if is_seizure:
         return f"{actor_name} 【{s_name}】の発作が発生！"
     if is_worsened:
@@ -130,6 +133,9 @@ def _fmt_type_27(ev, actor_name, card_name, target_name):
         return f"{actor_name} 【{c_name}】状態から回復した"
     return f"{actor_name} 呪い状態変化"
 
+def _fmt_type_28(ev, actor_name, card_name, target_name):
+    return f"{actor_name} 闇属性の攻撃を防ぎきれず即死した！"
+
 FORMATTERS = {
     1: _fmt_type_1,
     3: _fmt_type_3,
@@ -157,6 +163,7 @@ FORMATTERS = {
     25: _fmt_type_25,
     26: _fmt_type_26,
     27: _fmt_type_27,
+    28: _fmt_type_28,
 }
 
 def format_event_log(ev, player_id):

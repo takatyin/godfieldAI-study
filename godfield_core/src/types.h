@@ -1,5 +1,6 @@
 #pragma once
 #include "constants.h"
+#include "xoshiro.h"
 #include <random>
 #include <array>
 #include <iterator>
@@ -198,7 +199,8 @@ enum class EventType : uint8_t {
     RING_EFFECT = 24,     // 指輪の効果・反撃発動
     GUARDIAN_ENTER = 25,  // 守護神降臨
     GUARDIAN_LEAVE = 26,  // 守護神退散
-    EFFECT_CURSE = 27     // 呪い状態変化
+    EFFECT_CURSE = 27,    // 呪い状態変化
+    INSTANT_DEATH = 28    // 闇属性による即死 (ダメージとは別枠でHPが0になる)
 };
 
 // ============================================================================
@@ -218,6 +220,7 @@ namespace SicknessEvent {
     constexpr int FLAG_HEAL       = 1 << 5; // 32 (病気回復発生)
     constexpr int FLAG_WORSENED   = 1 << 6; // 64 (病気の悪化・進行)
     constexpr int FLAG_SEIZURE    = 1 << 7; // 128 (発作・死亡)
+    constexpr int FLAG_CURED      = 1 << 8; // 256 (病気の治癒。種別は治る前の病気)
 }
 
 // EventType::EFFECT_CURSE (27) の GameEvent.value 用ビットマスク定義
@@ -281,6 +284,33 @@ struct alignas(64) Observation {
 static_assert(sizeof(Observation) % sizeof(float) == 0, "Observation must be float-aligned");
 static_assert(sizeof(GameEvent) % sizeof(float) == 0, "GameEvent must be float-aligned");
 
+/**
+ * @brief 仮置き場に置かれた1枚を表します。
+ *
+ * 出しているカードは通常「手札のどのスロットか」で表せますが、守護神が仕掛ける
+ * 「売る」「買う」だけは、そのカード自体を手札に持ちません。以前はこれを
+ * staged_cards（int の生配列）に番兵 -1 を入れて表現していましたが、
+ *   - 番兵を手札の添字にすると範囲外を読む（クラッシュせず誤った値で計算が続く）
+ *   - 「売る」と「買う」の区別が num_staged_cards の値という暗黙のルールだった
+ * ため、過去に3度バグの原因になりました（売り手の取り違え、観測への範囲外読み出し、
+ * 合法手計算の潜在的な範囲外参照）。
+ *
+ * slot が NO_HAND_SLOT のときだけ virtual_card が意味を持ちます。手札由来のカードは
+ * IDをここに持たず、読むたびに手札から解決します（夢の確定で見た目が変わるため、
+ * IDをキャッシュすると確定後に古い値が残ります）。
+ */
+constexpr int NO_HAND_SLOT = -1;
+
+struct StagedEntry {
+    int slot = NO_HAND_SLOT;      // 手札スロット。手札に無いカードなら NO_HAND_SLOT
+    int virtual_card = CARD_EMPTY; // slot == NO_HAND_SLOT のときだけ有効
+
+    static StagedEntry from_hand(int hand_slot) { return StagedEntry{hand_slot, CARD_EMPTY}; }
+    static StagedEntry virtual_of(int card_id) { return StagedEntry{NO_HAND_SLOT, card_id}; }
+
+    bool is_from_hand() const { return slot >= 0 && slot < MAX_HAND_SIZE; }
+};
+
 struct StagedCardIds {
     std::array<int, MAX_HAND_SIZE> ids;
     int count = 0;
@@ -322,7 +352,9 @@ struct Transition {
  * 複雑なマイクロステップに対応しきれていない部分があるため、今後の実装で拡張予定。
  */
 struct alignas(64) InternalState {
-    std::mt19937 rng;     // ゲーム固有の乱数生成器
+    // ゲーム固有の乱数生成器。内部状態16バイト（mt19937 は5000バイトあり、
+    // この構造体の69%を占めていた）。詳細は xoshiro.h を参照。
+    Xoshiro128PP rng;
     int current_actor_id; // 現在行動権を持つプレイヤー (0 or 1)
     int current_turn;     // 現在の実際のターン数 (終末の時判定用)
     int mushroom_turns;   // きのこ大発生によるご乱心残りターン数 (0なら通常)
@@ -346,9 +378,15 @@ struct alignas(64) InternalState {
     // 状態遷移用変数
     GamePhase current_phase;
 
-    // Phase 1で使う仮置きバッファ (自分用/相手用など、まずは単純なバッファ)
-    int staged_cards[2][MAX_HAND_SIZE]; // 現在のフェイズで場に出ている（仮置き中の）手札インデックス配列
+    // 仮置き場。中身の読み出しは必ず staged_card_id() を通すこと（StagedEntry のコメント参照）。
+    StagedEntry staged_cards[2][MAX_HAND_SIZE];
     int num_staged_cards[2];            // 仮置き枚数
+
+    // この解決を仕掛けた側のプレイヤーID（取引・雑貨の反射確認で使う。-1 は該当なし）。
+    // スーパーミラーで反射すると attacker_id / defender_id が入れ替わるため、
+    // 「今の攻撃側 = 仕掛けた人」は成り立たない。以前は仮置き場を逆算して
+    // 探しており、見つからなければ黙って推測していた（売り手を取り違える原因）。
+    int pending_initiator;
 
     // 戦闘処理状態管理 (Phase 2 以降用)
     int attacker_id;                // 攻撃側のプレイヤーID

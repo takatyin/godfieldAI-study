@@ -145,3 +145,59 @@ def test_incoming_damage_and_staged_defense_are_reported(board):
     assert after.current_staged_defense == pytest.approx(
         card_feature(armor, "defense_power") / NORMALIZE
     )
+
+
+# ============================================================================
+# 守護神が仕掛けた取引（仮置き列に手札スロットではない番兵が入る局面）
+# ============================================================================
+
+
+def test_a_guardian_deal_does_not_leak_out_of_bounds_memory_into_the_observation(board):
+    """地球神の「売る」の最中に、観測が範囲外を読んで実在しないカードを載せないことを検証します。
+
+    地球神は「売る」カード自体を手札に持たないため、仮置き列には手札スロットではない
+    番兵 -1 が入ります。make_observation はこれを無検査で添字にしていたため、
+    true_hand[1][-1] が true_hand[0][17]（相手自身の手札スロット17）を読み、
+    「相手が場に出しているカード」として観測に載っていました。
+
+    スロット17 に目印のカードを置き、それが相手の仮置きとして現れないことを確認します。
+    観測は毎ステップ作られるので、この読み出しは取引が解決するまで毎回走っていました。
+    """
+    marker = "armor/god-shield"   # 目印。祈るを合法に保つため防具を使う
+    filler = "armor/wood-shield"
+    offer_slot = 5
+    earth = int(godfield_core.GuardianType.EARTH)
+
+    g = board(
+        p0=Side(hp=99, money=50, hand=[filler] + [None] * 16 + [marker]),
+        p1=Side(hp=40, money=50, guardian=earth, hand=[None] * offer_slot + [filler]),
+    )
+    g.rng.guardian_act(acts=True)
+    g.rng.next_draws(filler, "deals/sell", then=filler)
+
+    g.pray()
+
+    g.expect(phase=GamePhase.PHASE_SELL_SELECT_MIRROR, actor=0)
+    assert g.state.get_staged_card(1, 0) == -1, (
+        "守護神の「売る」は手札に無いので、仮置きの手札スロットは -1 になる前提"
+    )
+    assert g.state.get_staged_card_id(1, 0) == card_id("deals/sell"), (
+        "手札スロットは無くても、仮想カードとしてカードIDは解決できる前提"
+    )
+    assert g.state.get_true_hand(0, 17) == card_id(marker), "目印が置かれている前提"
+
+    obs = godfield_core.get_observation(g.state, 0)
+    opponent_staged = [int(c) for c in obs.get_opponent_staged_cards()]
+
+    assert card_id(marker) not in opponent_staged, (
+        f"自分の手札が相手の仮置きとして観測に漏れています: {opponent_staged}"
+    )
+    # 守護神の「売る」も場に出ているカードとして観測できる。
+    # 番兵方式だったころは、ここが範囲外の値になるため飛ばすしかなかった。
+    assert opponent_staged[0] == card_id("deals/sell")
+    assert opponent_staged[1] == card_id(filler), "出品されているカード"
+    assert all(c == godfield_core.CARD_EMPTY for c in opponent_staged[2:])
+
+    # 同じ経路を使う観測ヘルパーも同じ結果になること
+    helper = list(godfield_core.get_opponent_staged_cards_for_obs(g.state, 0))
+    assert helper == [card_id("deals/sell"), card_id(filler)]

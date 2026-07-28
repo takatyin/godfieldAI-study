@@ -240,7 +240,9 @@ PYBIND11_MODULE(godfield_core, m) {
     m.attr("ROLL_MIN") = ROLL_MIN;
     m.attr("ROLL_MAX") = ROLL_MAX;
     // 守護神の行動選択の累積閾値。テスト側が「行動Nを狙う代表値」を導出するのに使う。
-    m.attr("GUARDIAN_ACT_CHOICE_THRESHOLDS") = get_array_as_list(GUARDIAN_ACT_CHOICE_THRESHOLDS);
+    m.def("get_guardian_action_percents", &get_guardian_action_percents,
+          "守護神の5行動それぞれが選ばれる確率（%）。並びは get_guardian_action_cards() と対応する。"
+          "テストはこの表から「行動 N を狙う代表値」を導出するため、確率をここ以外に書かないこと。");
 
     m.def(
         "rng_clear_script", &reset_test_script,
@@ -281,11 +283,14 @@ PYBIND11_MODULE(godfield_core, m) {
           "RollKind::GUARDIAN_ACT_CHOICE に指示します。");
 
     m.attr("APOCALYPSE_TURN") = APOCALYPSE_TURN;
-    m.attr("APOCALYPSE_DEVIL_THRESHOLDS") = get_array_as_list(APOCALYPSE_DEVIL_THRESHOLDS);
     m.def("get_apocalypse_devils", &get_apocalypse_devils,
-          "終末の時のドローで出る悪魔カードID一覧。APOCALYPSE_DEVIL_THRESHOLDS の"
-          "各区間に対応する。テストは悪魔名からこの並びのインデックスを逆引きして"
+          "終末の時のドローで出る悪魔カードID一覧。"
+          "テストは悪魔名からこの並びのインデックスを逆引きして"
           "RollKind::APOCALYPSE_DRAW に指示します。");
+
+    m.def("get_apocalypse_devil_percents", &get_apocalypse_devil_percents,
+          "各悪魔カードの出現率（%）。並びは get_apocalypse_devils() と対応する。"
+          "合計に満たない残りは通常の山札抽選になる。");
 
     m.def("get_absorption_sources", &get_absorption_sources,
           "HP吸収（与えたダメージ分だけ攻撃側が回復する）を持つカードID一覧。"
@@ -376,6 +381,7 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("pending_absorption", &InternalState::pending_absorption)
         .def_readwrite("pending_deal_same_damage", &InternalState::pending_deal_same_damage)
         .def_readwrite("pending_is_group_attack", &InternalState::pending_is_group_attack)
+        .def_readwrite("pending_initiator", &InternalState::pending_initiator)
         .def_readwrite("pending_attack_source_id", &InternalState::pending_attack_source_id)
         .def_readwrite("turn_end_state", &InternalState::turn_end_state)
         .def_readwrite("remaining_attacks", &InternalState::remaining_attacks)
@@ -499,14 +505,28 @@ PYBIND11_MODULE(godfield_core, m) {
             "get_staged_card", [](InternalState &s, int p, int idx) {
                 if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
                 if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("staged index must be in [0, 17]");
-                return s.staged_cards[p][idx];
-            }, py::arg("player_id"), py::arg("staged_idx"))
+                return s.staged_cards[p][idx].slot;
+            }, py::arg("player_id"), py::arg("staged_idx"),
+            "仮置きの i 番目が指す手札スロット。守護神由来の仮想カードなら -1。")
+        .def(
+            "get_staged_card_id", [](const InternalState &s, int p, int i) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                return staged_card_id(s, p, i);
+            }, py::arg("player_id"), py::arg("staged_idx"),
+            "仮置きの i 番目が指すカードID。手札由来なら手札から解決し、仮想カードならそのID。")
         .def(
             "set_staged_card", [](InternalState &s, int p, int idx, int v) {
                 if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
                 if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("staged index must be in [0, 17]");
-                s.staged_cards[p][idx] = v;
+                s.staged_cards[p][idx] = StagedEntry::from_hand(v);
             }, py::arg("player_id"), py::arg("staged_idx"), py::arg("val"))
+        .def(
+            "set_staged_virtual_card", [](InternalState &s, int p, int idx, int card_id) {
+                if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
+                if (idx < 0 || idx >= MAX_HAND_SIZE) throw std::out_of_range("staged index must be in [0, 17]");
+                s.staged_cards[p][idx] = StagedEntry::virtual_of(card_id);
+            }, py::arg("player_id"), py::arg("staged_idx"), py::arg("card_id"),
+            "手札に無いカード（守護神由来）を仮置きに置きます。")
         .def(
             "get_is_deployed", [](InternalState &s, int p, int idx) {
                 if (p < 0 || p >= 2) throw std::out_of_range("player_id must be 0 or 1");
@@ -572,6 +592,10 @@ PYBIND11_MODULE(godfield_core, m) {
             auto saved_rng = s.rng;
             std::memset(&s, 0, sizeof(InternalState));
             s.rng = saved_rng;
+            // ゼロ埋めのままだと pending_initiator が 0（= プレイヤー0）になり、
+            // 実ゲームの初期値 -1 と食い違う。テストの盤面が本番より甘い状態に
+            // なるので、init_new_game() と同じ番兵に揃える。
+            reset_pending_resolution(s);
         },
         "Zero out the state memory preserving RNG");
 
@@ -581,8 +605,9 @@ PYBIND11_MODULE(godfield_core, m) {
             py::list result;
             if (state.num_staged_cards[opp] > 0) {
                 for (int i = 0; i < state.num_staged_cards[opp]; ++i) {
-                    int h_idx = state.staged_cards[opp][i];
-                    result.append(state.true_hand[opp][h_idx]);
+                    int card_id = staged_card_id(state, opp, i);
+                    if (card_id == CARD_EMPTY) continue;
+                    result.append(card_id);
                 }
             } else if (state.pending_attack_source_id != CARD_EMPTY) {
                 result.append(state.pending_attack_source_id);
@@ -622,6 +647,7 @@ PYBIND11_MODULE(godfield_core, m) {
         .value("GUARDIAN_ENTER", EventType::GUARDIAN_ENTER)
         .value("GUARDIAN_LEAVE", EventType::GUARDIAN_LEAVE)
         .value("EFFECT_CURSE", EventType::EFFECT_CURSE)
+        .value("INSTANT_DEATH", EventType::INSTANT_DEATH)
         .export_values();
 
     py::module_ se = m.def_submodule("SicknessEvent", "Sickness Event Bitmask Constants");
@@ -635,6 +661,7 @@ PYBIND11_MODULE(godfield_core, m) {
     se.attr("FLAG_HEAL") = SicknessEvent::FLAG_HEAL;
     se.attr("FLAG_WORSENED") = SicknessEvent::FLAG_WORSENED;
     se.attr("FLAG_SEIZURE") = SicknessEvent::FLAG_SEIZURE;
+    se.attr("FLAG_CURED") = SicknessEvent::FLAG_CURED;
 
     py::module_ ce = m.def_submodule("CurseEvent", "Curse Event Bitmask Constants");
     ce.attr("MASK_TYPE") = CurseEvent::MASK_TYPE;
