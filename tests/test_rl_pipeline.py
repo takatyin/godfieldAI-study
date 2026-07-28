@@ -36,32 +36,14 @@ def _first_legal_actions(env: GodFieldVectorEnv) -> np.ndarray:
 # ==========================================
 
 
-def test_constants_come_from_the_core_module():
+def test_env_wrapper_action_space_comes_from_the_core_module():
     """
-    検証内容: 行動空間などの定数がC++側と一致していること。
-    - これらを Python 側にコピーすると、C++での変更に追従できず観測の
-      スライス位置が静かにズレます。
+    検証内容: VecEnv が公開する行動空間サイズがC++側と一致していること。
+    - オフセット表そのものの検証は tests/test_observation_layout.py にあります
+      （torch を必要としないため、学習まわりの依存を入れない CI でも走ります）。
+      こちらは env_wrapper 固有の値だけを見ます。
     """
     assert ACTION_SPACE_SIZE == godfield_core.ACTION_SPACE_SIZE
-    assert fc.ACTION_SPACE_SIZE == godfield_core.ACTION_SPACE_SIZE
-    assert fc.MAX_HAND_SIZE == godfield_core.MAX_HAND_SIZE
-    assert fc.HISTORY_LENGTH == godfield_core.HISTORY_LENGTH
-
-
-def test_feature_config_layout_matches_the_core_observation():
-    """
-    検証内容: feature_config のオフセット表がC++の Observation と整合すること。
-    - マスクを除いた特徴量サイズが、C++が報告する値と一致する必要があります。
-    - ここがズレると特徴抽出器が別のフィールドを読み始めます。
-    """
-    expected = godfield_core.OBSERVATION_FEATURE_SIZE - godfield_core.ACTION_SPACE_SIZE
-    assert fc.TOTAL_OBSERVATION_FEATURE_SIZE_NO_MASK == expected
-
-    # カードIDの領域は4ブロック（自分の手札・仮置き・相手の手札・相手の仮置き）が連続する
-    assert fc.STAGED_CARDS_START == fc.HAND_CARDS_START + fc.MAX_HAND_SIZE
-    assert fc.OPP_HAND_CARDS_START == fc.STAGED_CARDS_START + fc.MAX_HAND_SIZE
-    assert fc.OPP_STAGED_CARDS_START == fc.OPP_HAND_CARDS_START + fc.MAX_HAND_SIZE
-    assert fc.HISTORY_START == fc.OPP_STAGED_CARDS_START + fc.MAX_HAND_SIZE
 
 
 # ==========================================
@@ -345,9 +327,10 @@ def test_card_ids_stay_within_the_embedding_table(env):
     obs = env.reset()
     cards = obs[:, fc.HAND_CARDS_START : fc.OPP_STAGED_CARDS_START + fc.MAX_HAND_SIZE]
 
+    # 語彙数がカード枚数を賄えているかは tests/test_observation_layout.py が見る。
+    # ここは「実際に観測へ出てくる値」が範囲内かを見る。
     assert cards.min() >= godfield_core.CARD_EMPTY
     assert cards.max() < fc.NUM_CARD_TYPES
-    assert fc.NUM_CARD_TYPES >= godfield_core.get_registry_size()
 
 
 def test_reset_never_hands_back_a_finished_game():

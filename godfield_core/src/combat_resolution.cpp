@@ -1157,8 +1157,6 @@ void execute_sell_resolution(InternalState &state, int seller, int buyer) {
     CardFeatures &f_sold = g_card_registry[card_id];
     int price = f_sold.price;
 
-    int remaining_pay = price; // 残りの支払うべき代金
-    
     // 3. 買い手の支払いを処理する (お金 ➜ MP ➜ HP の順で徴収)
     execute_money_deduction(state, buyer, price);
 
@@ -1396,6 +1394,41 @@ void apply_darkness_instant_death(InternalState &state, int player_id) {
     push_event(state, player_id, EventType::INSTANT_DEATH, -1, player_id, 0.0f);
 }
 
+void set_pending_from_staged_attack(InternalState &state, int attacker,
+                                    const StagedAttackInfo &info, int target) {
+    state.pending_attack_power = info.attack_power;
+    state.pending_attack_element = info.element;
+    state.pending_absorption = info.absorption;
+    state.pending_deal_same_damage = info.deal_same_damage;
+    state.defender_id = target;
+    state.pending_attack_source_id = staged_card_id(state, attacker, 0);
+    state.pending_attack_curse =
+        (state.pending_attack_source_id != CARD_EMPTY)
+            ? g_card_registry[state.pending_attack_source_id].hit_curse
+            : CURSE_NONE;
+}
+
+void resolve_self_targeted_attack(InternalState &state, int attacker,
+                                  const StagedAttackInfo &info,
+                                  const StagedCardIds &used_cards, int times) {
+    // 闇属性かどうかは1回判定すれば足りる（属性は攻撃ごとに変わらない）
+    const bool is_darkness = (info.element == ELEM_DARKNESS && info.attack_power > 0);
+
+    for (int t = 0; t < times; ++t) {
+        if (is_darkness) {
+            apply_darkness_self_death(state, attacker, info.attack_power);
+        } else {
+            apply_damage(state, attacker, info.attack_power,
+                         state.pending_absorption, state.pending_deal_same_damage);
+        }
+        apply_card_effects_to_target(state, attacker, used_cards);
+        if (state.pending_attack_curse != CURSE_NONE) {
+            apply_curse_to_player(state, attacker, state.pending_attack_curse);
+        }
+    }
+    run_immediate_revive(state);
+}
+
 void apply_darkness_self_death(InternalState &state, int player_id, int damage) {
     apply_damage_without_revive(state, player_id, damage);
     push_event(state, player_id, EventType::TAKE_DAMAGE, -1, player_id,
@@ -1591,7 +1624,7 @@ bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, 
 
         // apply_damage を通す（守護神の離脱判定と即時復活を含む）。
         // 以前はHPを直接いじっており、離脱判定だけが抜けていた。
-        apply_damage(state, victim, 99);
+        apply_damage(state, victim, DANGEROUS_MORTAR_DAMAGE);
         for (int j = 0; j < MAX_HAND_SIZE; ++j) {
             if (state.true_hand[victim][j] == ID_DANGEROUS_MORTAR && !state.is_used[victim][j]) {
                 state.is_used[victim][j] = true;
@@ -1600,7 +1633,10 @@ bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, 
         }
         state.current_phase = GamePhase::PHASE_END;
         if (is_guardian) state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
-        return true;
+        // 防御フェイズを開いていないので中断しない。ここで true を返すと、
+        // 守護神経路ではターン終了処理が PHASE_END のまま止まり、合法手ゼロの
+        // 状態が呼び出し側に返ってしまう。
+        return false;
     } else {
         // パターンA: ウスが存在しない場合 (生存プレイヤーからランダム選定)
         std::vector<int> alive_players;
@@ -1615,19 +1651,23 @@ bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, 
         }
 
         if (actual_target == attacker) {
-            // 自傷：直撃ダメージ（apply_damage が離脱判定と即時復活を行う）
-            apply_damage(state, attacker, 30);
+            // 自傷：直撃ダメージ（apply_damage が離脱判定と即時復活を行う）。
+            // 威力はカードマスタから引く。相手に当たった側は
+            // setup_guardian_attack_defense がマスタの attack_power を使うので、
+            // ここに数値を直書きすると同じ50:50の両側で威力の出どころが食い違う。
+            apply_damage(state, attacker, g_card_registry[ID_DANGEROUS_PESTLE].attack_power);
             state.current_phase = GamePhase::PHASE_END;
             if (is_guardian) state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
-            return true;
+            return false; // 自傷のみ。防御フェイズは開かない
         } else {
             // 相手ターゲット：物理防御フェイズ起動
             bool ok = setup_guardian_attack_defense(state, attacker, defender, ID_DANGEROUS_PESTLE, GamePhase::PHASE_DEFENSE);
             if (!ok) {
+                // 命中しなかった場合は防御フェイズが開かないので、中断せず進行を続ける
                 state.current_phase = GamePhase::PHASE_END;
                 if (is_guardian) state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
             }
-            return true;
+            return ok;
         }
     }
 }
@@ -1657,42 +1697,26 @@ bool execute_attack_from_staged_cards(InternalState &state, int attacker, int ta
         // ミス：防御フェイズを起動せず終了
         state.current_phase = GamePhase::PHASE_END;
         if (is_guardian) state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
-        return true;
+        return false;
     }
 
     if (!is_guardian) {
         setup_multiple_attacks(state, attacker, target, info);
     }
 
-    state.pending_attack_power = info.attack_power;
-    state.pending_attack_element = info.element;
-    state.pending_absorption = info.absorption;
-    state.pending_deal_same_damage = info.deal_same_damage;
-    state.defender_id = target;
-
-    int first_card_id = !used_cards.empty() ? used_cards[0] : CARD_EMPTY;
-    state.pending_attack_source_id = first_card_id;
-    state.pending_attack_curse = (first_card_id != CARD_EMPTY) ? g_card_registry[first_card_id].hit_curse : CURSE_NONE;
+    set_pending_from_staged_attack(state, attacker, info, target);
 
     if (target == attacker) {
-        // 自傷解決
+        // 自傷解決。奇跡の自傷（step_phase_miracle_plus）と同じ処理を共有する。
+        // 以前は別々に書かれており、闇属性の即死が奇跡側にしか無かったため、
+        // 闇属性の「武器」を自分に撃っても攻撃力分のダメージだけで生き残っていた。
         int times = state.remaining_attacks;
         if (times <= 0) times = 1;
-        for (int t = 0; t < times; ++t) {
-            // 以前はここでHPを直接いじっており、apply_damage() が行う守護神の離脱判定が
-            // 抜けていた。同じ「自傷でHPが減った」でも、奇跡（apply_damage 経由）では
-            // 判定が走り、武器では走らないという食い違いになっていた。
-            apply_damage(state, attacker, info.attack_power,
-                         state.pending_absorption, state.pending_deal_same_damage);
-            apply_card_effects_to_target(state, attacker, used_cards);
-            if (state.pending_attack_curse != CURSE_NONE) {
-                apply_curse_to_player(state, attacker, state.pending_attack_curse);
-            }
-        }
+        resolve_self_targeted_attack(state, attacker, info, used_cards, times);
         state.remaining_attacks = 0;
-        run_immediate_revive(state);
         state.current_phase = GamePhase::PHASE_END;
         if (is_guardian) state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
+        return false; // 自傷のみ。防御フェイズは開かない
     } else {
         // 相手ターゲット：防御フェイズへ移行
         state.attacker_id = attacker;

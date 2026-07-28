@@ -31,6 +31,11 @@ constexpr int SUN_AMULET_REVIVE_HP = 10;
 // 昇天弓がターン終了時に発射されるときの攻撃力（手札上の攻撃力とは別物）。
 constexpr int ASCENSION_BOW_TRIGGERED_POWER = 30;
 
+// あぶないキネの使用時、あぶないウスの所持者が受けるダメージ。
+// これはウス側の効果（カード説明「あぶないキネ使用時、99ダメージを受ける」）であり、
+// キネの攻撃力とは別物。ウスには attack_power が無いのでここで持つ。
+constexpr int DANGEROUS_MORTAR_DAMAGE = 99;
+
 // 新しいゲームの初期値 / New game setup
 constexpr int INITIAL_HP = 40;
 constexpr int INITIAL_MP = 10;

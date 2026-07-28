@@ -6,6 +6,12 @@ def _fmt_type_1(ev, actor_name, card_name, target_name):
         return f"{actor_name} 置いた 【捨てる】"
     return f"{actor_name} 置いた 【{card_name}】"
 
+# 現在のエンジンは UNSTAGE_CARD を発行していないが、EventType には定義されており
+# 将来使われる可能性がある。未登録のまま発行されると「イベント (種別:2)」という
+# 意味不明な行になるため、あらかじめ用意しておく。
+def _fmt_type_2(ev, actor_name, card_name, target_name):
+    return f"{actor_name} 戻した 【{card_name}】"
+
 def _fmt_type_3(ev, actor_name, card_name, target_name):
     if ev.card_id > 0:
         if ev.target_id == ev.actor:
@@ -138,6 +144,7 @@ def _fmt_type_28(ev, actor_name, card_name, target_name):
 
 FORMATTERS = {
     1: _fmt_type_1,
+    2: _fmt_type_2,
     3: _fmt_type_3,
     4: _fmt_type_4,
     5: _fmt_type_5,

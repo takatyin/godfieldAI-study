@@ -20,14 +20,22 @@
 
 import pytest
 
-from godfield_core import EventType, GuardianType, PhenomenonType, RollKind, SicknessType
-from tests.core.dsl import Side, card_feature
+from godfield_core import (
+    Element,
+    EventType,
+    GamePhase,
+    GuardianType,
+    PhenomenonType,
+    RollKind,
+    SicknessType,
+)
+from tests.core.dsl import Side, all_cards, card_feature, card_name, element_of
 
 MARS = int(GuardianType.MARS)
 NONE = int(GuardianType.NONE)
 
 FILLER = "armor/wood-shield"
-DARKNESS = "miracles/darkness"      # ＜闇＞: 唯一の闇属性攻撃
+DARKNESS = "miracles/darkness"      # ＜闇＞: 闇属性の奇跡（闇属性は武器にもある）
 CURTAIN = "armor/rainbow-curtain"   # 闇属性の即死を防ぐ
 GALE_SWORD = "weapons/gale-sword"   # 疾風剣: ダメージを与えた対象を風邪状態にする
 AMULET = "sundries/sun-amulet"
@@ -109,6 +117,49 @@ def test_rainbow_curtain_prevents_the_darkness_instant_death(board):
 
     assert not any(e.type == EventType.INSTANT_DEATH for e in g.event_log())
     g.expect(p1_hp=99 - power, is_done=False)
+
+
+def _darkness_attack_cards() -> list[int]:
+    """闇属性で攻撃力を持ち、自分を対象にできるカード（武器・奇跡）を集めます。
+
+    全体攻撃は自分自身を対象に選べないので除きます。
+    """
+    return [
+        c["id"]
+        for c in all_cards()
+        if element_of(c["id"]) == Element.ELEM_DARKNESS
+        and (c.get("attack_power") or 0) > 0
+        and c.get("type") in ("weapon", "miracle")
+        and not c.get("is_group_attack")
+    ]
+
+
+@pytest.mark.parametrize("card", _darkness_attack_cards(), ids=lambda c: card_name(c))
+def test_every_darkness_attack_kills_its_own_user(board, card):
+    """闇属性の攻撃は、種別を問わず自分に撃つと即死することを検証します。
+
+    自傷の解決は武器経路（execute_attack_from_staged_cards）と奇跡経路
+    （step_phase_miracle_plus）で別々に書かれており、闇属性の即死が奇跡側にしか
+    ありませんでした。そのため闇属性の「武器」を自分に撃つと、攻撃力分の
+    ダメージだけで生き残っていました（例: コブラで 99 -> 96）。
+
+    カードを名指しせずマスタから全件集めるので、闇属性のカードが増えても
+    自動で検証対象に入ります。
+    """
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[card]),
+        p1=Side(hp=99, mp=10),
+    )
+    g.rng.deck_always(FILLER)
+    # 命中率100%のカードでは判定自体が起きないので、未消費検査の対象から外す
+    g.rng.hits(always=True, optional=True)
+
+    g.attack(card, to_self=True)
+
+    g.expect(p0_hp=0)
+    assert any(e.type == EventType.INSTANT_DEATH for e in g.event_log()), (
+        "闇属性の即死として記録されるべきです"
+    )
 
 
 @pytest.mark.parametrize("leaves", [True, False], ids=["離脱する", "残留する"])
@@ -277,3 +328,42 @@ def test_tornado_does_not_roll_for_guardian_leave(board):
         "竜巻はダメージではないので、退散判定は行われないはずです"
     )
     g.expect(p0_hp=1, p1_hp=1, p0_guardian=MARS, p1_guardian=MARS)
+
+
+def test_mirage_makes_a_darkness_attack_elementless(board):
+    """闇属性の攻撃に＜蜃気楼＞を重ねると無属性になることを検証します。
+
+    無属性が1枚でも混ざれば無属性になる、という属性の合成規則の帰結です
+    （＜蜃気楼＞自身は無属性）。
+
+    これは即死処理の挙動を決める前提でもあります。仮に闇属性のまま連撃に
+    なると、1発ごとに即死と太陽のお守りによる復活を繰り返すことになりますが、
+    無属性になるためその状況は発生しません。前提が崩れたら気付けるよう
+    固定しておきます。
+    """
+    mirage = "miracles/mirage"
+    dark_weapon = "weapons/cobra"
+    assert element_of(dark_weapon) == Element.ELEM_DARKNESS
+    assert element_of(mirage) == Element.ELEM_NONE
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[dark_weapon, mirage]),
+        p1=Side(hp=99, mp=99, hand=[]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.hits(always=True, optional=True)
+
+    g.select(dark_weapon)
+    g.select(mirage)
+    g.target_opp()
+
+    g.expect(
+        phase=GamePhase.PHASE_DEFENSE,
+        pending_element=Element.ELEM_NONE,
+        pending_is_group=True,
+    )
+
+    # 無属性なので闇属性の即死は起きず、通常のダメージとして解決される
+    g.take_hit()
+    assert not any(e.type == EventType.INSTANT_DEATH for e in g.event_log())
+    assert g.state.get_hp(1) > 0

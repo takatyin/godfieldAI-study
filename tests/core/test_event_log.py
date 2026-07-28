@@ -11,7 +11,7 @@ import pytest
 import godfield_core
 from godfield_core import CurseEvent, EventType, GamePhase, GuardianType
 from tests.core.dsl import Side, card_id, card_name, ev
-from visualizer.event_formatter import format_event_log
+from visualizer.event_formatter import FORMATTERS, format_event_log
 
 FILLER = "armor/wood-shield"
 DISCARDABLE = "armor/leather-clothes"
@@ -393,3 +393,60 @@ def test_every_staging_phase_logs_the_card_it_stages(board, phase_name, first, e
         ev(EventType.STAGE_CARD, card=first),
         ev(EventType.STAGE_CARD, card=extra),
     )
+
+
+# ============================================================================
+# 整形テーブルの網羅性
+# ============================================================================
+
+
+class _FakeEvent:
+    """format_event_log に渡す最小限のイベント。
+
+    実際の局面を作らずに整形だけを試すためのもので、
+    「その種別に整形規則が存在するか」だけを見ます。
+    """
+
+    def __init__(self, event_type: int):
+        self.event_type = event_type
+        self.actor = 0
+        self.card_id = -1
+        self.target_id = 0
+        self.value = 0.0
+
+
+@pytest.mark.parametrize(
+    "event_type",
+    [e for e in EventType.__members__.values() if int(e) != int(EventType.NONE)],
+    ids=[n for n in EventType.__members__ if n != "NONE"],
+)
+def test_every_event_type_has_a_formatter(event_type):
+    """EventType の全種別に整形規則があることを検証します。
+
+    FORMATTERS への登録を忘れると、例外は出ずに「イベント (種別:N)」という
+    意味不明な行がビジュアライザに出るだけなので気付けません。実際、
+    INSTANT_DEATH(28) を追加したときに登録を忘れており、この網羅テストが
+    無かったため手作業で見つけることになりました。UNSTAGE_CARD(2) も
+    最初から欠けていました。
+    """
+    assert int(event_type) in FORMATTERS, (
+        f"{event_type.name} に整形規則がありません。"
+        f" visualizer/event_formatter.py の FORMATTERS に追加してください"
+    )
+
+    text = format_event_log(_FakeEvent(int(event_type)), 0)["text"]
+    assert "種別:" not in text, (
+        f"{event_type.name} が既定の文言のまま整形されています: {text!r}"
+    )
+    assert text.strip(), f"{event_type.name} の文言が空です"
+
+
+def test_formatters_do_not_contain_unknown_event_types():
+    """整形テーブルに、存在しない種別が残っていないことを検証します。
+
+    EventType から値を消したのに整形規則だけ残ると、その規則は永久に
+    呼ばれない死んだコードになります。
+    """
+    known = {int(e) for e in EventType.__members__.values()}
+    unknown = sorted(set(FORMATTERS) - known)
+    assert not unknown, f"EventType に存在しない種別の整形規則が残っています: {unknown}"

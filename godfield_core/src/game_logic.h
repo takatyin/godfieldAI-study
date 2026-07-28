@@ -74,6 +74,14 @@ void init_new_game(InternalState& state, int seed);
 void reset_pending_resolution(InternalState& state);
 
 /**
+ * @brief 状態を人間が読める1枚のテキストにダンプします（不具合報告・デバッグ用）。
+ *
+ * カードは名前ではなくIDで出します。レジストリの読み込み状態に依存せず、
+ * 例外の中からでも安全に呼べるようにするためです。
+ */
+std::string describe_state(const InternalState& state);
+
+/**
  * @brief 指定プレイヤーの視点での部分観測（Observation）を構築して書き込む
  */
 void make_observation(const InternalState& state, int player_id, Observation& obs);

@@ -447,25 +447,50 @@ def test_dream_card_is_finalized_when_the_true_card_is_playable(board):
     )
 
 
-def test_dream_card_returns_to_hand_when_the_true_card_is_illegal(board):
-    """真のカードがそのフェイズで非合法なら、仮置きが取り消されて確定した状態で手札に戻ることを検証します。"""
-    real, fake = "armor/wood-shield", "weapons/bronze-club"
-    g = board(p0=Side(hp=40, curses=[DREAM], hand=[]), p1=Side(hp=40))
+def test_dream_disguise_never_changes_what_the_card_can_do():
+    """夢の偽装先が、常に「使い道が同じ」カードであることを検証します。
 
-    g.state.add_card_to_hand_slot(0, 0, card_id(real), False)
-    g.state.set_apparent_hand(0, 0, card_id(fake))
-    g.state.set_is_confirmed(0, 0, False)
+    これは step_game のロールバック処理を削除した根拠そのものです。以前は
+    「確定したら真の姿では非合法だった」場合に仮置きを巻き戻す処理がありましたが、
+    偽装先が同じ夢グループ（種別と使用タイミングが一致するカード群）からしか
+    選ばれない以上、見た目で合法なら真の姿でも必ず合法であり、到達しない分岐でした。
 
-    g.select_slots(0)
-    g.expect(phase=godfield_core.GamePhase.PHASE_ATTACK_PLUS)
+    その前提が崩れればロールバックの削除も誤りになるので、前提のほうを固定します。
+    """
+    registry_size = godfield_core.get_registry_size()
+    mismatches = []
 
-    g.target_opp()
+    for cid in range(registry_size):
+        for fake_id in dream_candidates(cid):
+            real_type = card_feature(cid, "type")
+            fake_type = card_feature(fake_id, "type")
+            # 使用タイミングは YAML 上の並び順が揃っていないので集合で比べる
+            real_timing = frozenset(card_feature(cid, "usage_timing") or [])
+            fake_timing = frozenset(card_feature(fake_id, "usage_timing") or [])
+            if real_type != fake_type or real_timing != fake_timing:
+                mismatches.append(
+                    f"{card_name(cid)}(type={real_type}, timing={sorted(real_timing)})"
+                    f" -> {card_name(fake_id)}(type={fake_type}, timing={sorted(fake_timing)})"
+                )
 
-    # 防具では攻撃できないので、仮置きが解除されメインフェイズに戻る
-    g.expect(phase=godfield_core.GamePhase.PHASE_MAIN)
-    assert g.state.get_num_staged_cards(0) == 0
-    assert g.state.get_is_confirmed(0, 0) is True, "正体が露見したので確定する"
-    assert g.state.get_apparent_hand(0, 0) == card_id(real)
+    assert not mismatches, (
+        "使い道の異なるカードに偽装されうる組み合わせがあります。"
+        "step_game のロールバック削除の前提が崩れます:\n  " + "\n  ".join(mismatches[:10])
+    )
+
+
+def test_every_dream_group_has_someone_to_disguise_as():
+    """偽装対象を持つカードが実際に存在することを検証します。
+
+    上のテストは「候補が1つも無ければ」無条件に通ってしまうため、
+    検証対象が空でないことを別に確認します。
+    """
+    with_candidates = [
+        cid for cid in range(godfield_core.get_registry_size()) if dream_candidates(cid)
+    ]
+    assert len(with_candidates) > 50, (
+        f"偽装候補を持つカードが {len(with_candidates)} 枚しかありません"
+    )
 
 
 def test_card_offered_for_purchase_is_finalized(board):

@@ -229,9 +229,14 @@ class RngController:
     # --- 意味的ヘルパー -----------------------------------------------------
     # 閾値の向きの知識はここだけに置く。個々のテストには書かせない。
 
-    def hits(self, *, always: bool = True) -> RngController:
-        """命中率判定（accuracy < 100 の武器・守護神攻撃）を必中／必ず外すに固定します。"""
-        return self.force(RollKind.ACCURACY, HAPPENS if always else NEVER)
+    def hits(self, *, always: bool = True, optional: bool = False) -> RngController:
+        """命中率判定（accuracy < 100 の武器・守護神攻撃）を必中／必ず外すに固定します。
+
+        命中率100%のカードでは判定そのものが行われません。複数のカードをまとめて
+        検証する網羅テストのように、判定が起きる場合と起きない場合が混ざるときは
+        `optional=True` を指定して未消費検査の対象から外してください。
+        """
+        return self.force(RollKind.ACCURACY, HAPPENS if always else NEVER, optional=optional)
 
     def bounce(self, *, success: bool) -> RngController:
         """＜弾く＞の成功判定を固定します。"""

@@ -1,0 +1,63 @@
+name: CI
+
+# 作業ブランチへの WIP push では回さない。レビュー対象になる時点（PR）と、
+# 保護したい地点（main）だけを見る。
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # 作業ブランチで必要なときだけ手動で回せるようにしておく。
+  # ただし workflow_dispatch はデフォルトブランチに同じファイルが存在しないと
+  # 使えないため、この設定が main に入るまでは効かない。それまで
+  # 作業ブランチで動かす手段は PR（ドラフトでも可）を立てることだけ。
+  workflow_dispatch:
+
+# 同じ PR に連続で push したとき、古い実行を打ち切って実行時間の無駄を防ぐ。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # uv run は既定で暗黙の同期を行い、下の uv sync で除外した torch を
+    # 入れ直してしまう（CUDA版のため約3GBのダウンロードが走る）。
+    # 以降のステップでは同期させない。
+    env:
+      UV_NO_SYNC: "1"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # setup-uv は v8 以降、移動するメジャータグ（v9 など）を publish していないため
+      # 正確なバージョンで指定する。@v9 では「unable to find version」で落ちる。
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
+      # torch は pyproject の [tool.uv.sources] で CUDA 版（約3GB）を見に行くため、
+      # そのまま uv sync すると毎回巨大なダウンロードが走る。
+      # torch を使うのは tests/test_rl_pipeline.py だけなので、CI では入れずに
+      # そのテストを除外し、学習まわりを触ったときのローカル実行に任せる。
+      - name: 依存をインストール（CUDA版 torch は除外）
+        run: >
+          uv sync --frozen
+          --no-install-package torch
+          --no-install-package stable-baselines3
+          --no-install-package sb3-contrib
+
+      # 開発は Windows / MSVC でしか行っていないため、gcc でビルドすること自体に
+      # 価値がある。MSVC が黙って通す初期化漏れや符号比較を -Wall -Wextra で拾う。
+      # なお毎回クリーンビルドされるので、「古い .pyd が残っていてテストが通る」
+      # という偽の成功が構造的に起きない。
+      - name: C++拡張をビルド
+        env:
+          CFLAGS: "-Wall -Wextra"
+        run: uv run python setup.py build_ext --inplace
+
+      - name: ruff
+        run: uv run ruff check .
+
+      - name: pytest
+        run: uv run pytest -q --ignore=tests/test_rl_pipeline.py

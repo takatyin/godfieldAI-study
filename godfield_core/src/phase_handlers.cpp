@@ -579,13 +579,10 @@ static void step_phase_group_attack(InternalState &state, ActionType action, int
                 setup_multiple_attacks(state, me, target, info);
             }
 
-            state.pending_attack_power = info.attack_power;
-            state.pending_attack_element = info.element;
-            state.pending_absorption = info.absorption;
-            // 奇跡に相打ち（邪神の大剣）はないが、前の攻撃の値を持ち越さないよう常に上書きする
-            state.pending_deal_same_damage = info.deal_same_damage;
-            state.defender_id = target;
-            state.pending_attack_source_id = staged_card_id(state, me, 0);
+            // 以前はここで代入を並べており、pending_attack_curse だけが漏れていた。
+            // そのため霧の扇や＜閃光＞など、全体攻撃カードの状態異常が一切
+            // 適用されなかった。設定は3経路で共通のヘルパーに寄せてある。
+            set_pending_from_staged_attack(state, me, info, target);
             state.current_actor_id = target;
             state.current_phase = defense_phase;
         }
@@ -800,27 +797,13 @@ void step_phase_miracle_plus(InternalState &state, ActionType action, int me, in
         if (!roll_staged_attack_hits(state, me)) {
             state.current_phase = GamePhase::PHASE_END;
         } else {
-            state.pending_attack_power = info.attack_power;
-            state.pending_attack_element = info.element;
-            state.pending_absorption = info.absorption;
-            state.pending_deal_same_damage = info.deal_same_damage;
-            state.defender_id = target;
-            state.pending_attack_source_id = staged_card_id(state, me, 0);
-            state.pending_attack_curse = (state.pending_attack_source_id != CARD_EMPTY) ? g_card_registry[state.pending_attack_source_id].hit_curse : CURSE_NONE;
+            set_pending_from_staged_attack(state, me, info, target);
 
             if (target == me) {
-                if (info.element == ELEM_DARKNESS && info.attack_power > 0) {
-                    // 自分に＜闇＞を撃った場合も、相手に撃った場合と同じく即死します。
-                    apply_darkness_self_death(state, me, info.attack_power);
-                } else {
-                    apply_damage(state, me, info.attack_power, state.pending_absorption,
-                                 state.pending_deal_same_damage);
-                }
+                // 自傷解決は武器経路（execute_attack_from_staged_cards）と共有する。
+                // 奇跡は連撃を持たないので1回だけ。
                 auto used_cards = get_staged_card_ids(state, me);
-                apply_card_effects_to_target(state, me, used_cards);
-                if (state.pending_attack_curse != CURSE_NONE) {
-                    apply_curse_to_player(state, me, state.pending_attack_curse);
-                }
+                resolve_self_targeted_attack(state, me, info, used_cards, 1);
                 state.current_phase = GamePhase::PHASE_END;
             } else {
                 state.current_actor_id = target;

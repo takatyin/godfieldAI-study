@@ -475,6 +475,39 @@ def test_earth_dangerous_pestle_with_mortar_deals_99_and_consumes_one(board):
     assert g.rng.consumed(RollKind.MORTAR_VICTIM) == 1
 
 
+@pytest.mark.parametrize(
+    ("roll", "victim"),
+    [(0, 1), (1, 0), (2, 0)],
+    ids=["抽選0->地球神側のウス", "抽選1->手番側のウス", "抽選2->手番側のウス"],
+)
+def test_mortar_victim_is_drawn_per_mortar_not_per_player(board, roll, victim):
+    """ウスの被弾者が「ウス1枚ごとの一様抽選」であることを検証します。
+
+    プレイヤー単位の 50:50 ではなく所持枚数で重み付けされます。ここでは
+    手番側が2枚・地球神側が1枚なので、3枚の中から1枚が選ばれ、その持ち主が
+    99ダメージを受けます（2:1）。
+
+    また、ウスがある場合は防御フェイズが起動せず直接ダメージになることも
+    併せて固定します。
+    """
+    mortar = "sundries/dangerous-mortar"
+    g = Game(
+        p0=Side(hp=99, hand=[mortar, mortar, FILLER]),
+        p1=Side(hp=99, guardian=EARTH, hand=[mortar]),
+    )
+    g.rng.guardian_act(acts=True)
+    g.rng.next_draws(FILLER, "weapons/dangerous-pestle", then=FILLER)
+    g.rng.force(RollKind.MORTAR_VICTIM, roll)
+    g.pray()
+
+    survivor = 1 - victim
+    assert g.state.get_hp(victim) == 0, f"P{victim} が99ダメージを受けるべきです"
+    assert g.state.get_hp(survivor) == 99, f"P{survivor} は無傷のはずです"
+    assert g.state.current_phase != GamePhase.PHASE_DEFENSE, (
+        "ウスがある場合は防御フェイズを起動しません"
+    )
+
+
 # ============================================================================
 # 月神 (Moon): 発動する奇跡ごとの分岐
 # ============================================================================

@@ -19,7 +19,15 @@ from godfield_core import (
     PhenomenonType,
     RollKind,
 )
-from tests.core.dsl import Side, card_id, card_name, dream_candidates, ev
+from tests.core.dsl import (
+    Side,
+    card_feature,
+    card_id,
+    card_name,
+    dream_candidates,
+    element_of,
+    ev,
+)
 
 FILLER = "armor/wood-shield"
 
@@ -235,22 +243,35 @@ def test_dangerous_pestle_target_selection(board, target_idx):
     """あぶないキネ: ウスが無い場合、生存者から対象が抽選されることを検証します。
 
     従来は対象の抽選（PESTLE_TARGET）が一度も指示されていませんでした。
+
+    自分に当たった側と相手に当たった側で、威力が同じ（＝どちらもカードマスタの
+    attack_power から来る）ことも併せて固定します。以前は自傷側だけ 30 が
+    直書きされており、マスタを変えると片側だけ追従しませんでした。
     """
+    pestle = "weapons/dangerous-pestle"
+    power = card_feature(pestle, "attack_power")
+
     g = board(
-        p0=Side(hp=99, hand=["weapons/dangerous-pestle"]),
+        p0=Side(hp=99, hand=[pestle]),
         p1=Side(hp=99, hand=[]),
     )
     g.rng.deck_always(FILLER)
     g.rng.force(RollKind.PESTLE_TARGET, target_idx)
-    g.attack("weapons/dangerous-pestle")
+    g.attack(pestle)
 
     assert g.rng.consumed(RollKind.PESTLE_TARGET) == 1
     if target_idx == 0:
-        # 自傷: 防御フェイズを起動せず直接30ダメージ
-        g.expect(p0_hp=69, p1_hp=99)
+        # 自傷: 防御フェイズを起動せず直撃
+        g.expect(p0_hp=99 - power, p1_hp=99)
     else:
-        # 相手を狙う: 物理防御フェイズが起動する
-        g.expect(phase=GamePhase.PHASE_DEFENSE, attacker=0, defender=1)
+        # 相手を狙う: 物理防御フェイズが起動し、同じ威力・属性で飛ぶ
+        g.expect(
+            phase=GamePhase.PHASE_DEFENSE,
+            attacker=0,
+            defender=1,
+            pending_power=power,
+            pending_element=element_of(pestle),
+        )
 
 
 @pytest.mark.parametrize("victim_roll", [0, 1], ids=["攻撃側が被弾", "防御側が被弾"])

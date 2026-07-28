@@ -33,6 +33,16 @@ PYBIND11_MODULE(godfield_core, m) {
     m.attr("MAX_HAND_SIZE") = MAX_HAND_SIZE;
     m.attr("HISTORY_LENGTH") = HISTORY_LENGTH;
 
+    // 観測ベクトルの各ブロックの長さ。Python 側（feature_config.py）は
+    // オフセット表をこれらから組み立てる。値をコピーすると、種別が1つ増えた
+    // だけで以降のスライス位置が全部ズレ、例外も出ずに学習だけが壊れる。
+    m.attr("NUM_SICKNESS_TYPES") = NUM_SICKNESS_TYPES;
+    m.attr("NUM_CURSE_TYPES") = NUM_CURSE_TYPES;
+    m.attr("NUM_GUARDIAN_TYPES") = NUM_GUARDIAN_TYPES;
+    m.attr("NUM_PHASES") = NUM_PHASES;
+    // GameEvent 1件が観測上で占める float 数。
+    m.attr("EVENT_SIZE") = static_cast<int>(sizeof(GameEvent) / sizeof(float));
+
     // Bind initialization function
     m.def("init_game_logic", &init_game_logic, "Initialize the global card registry from JSON");
     m.def("get_registry_size", &get_registry_size, "Get number of cards in registry");
@@ -574,6 +584,8 @@ PYBIND11_MODULE(godfield_core, m) {
             }, py::arg("player_id"), py::arg("val"));
 
     m.def("step_game", &step_game, "Step a single InternalState");
+    m.def("describe_state", &describe_state, py::arg("state"),
+          "Dump the state as human-readable text (for crash reports and debugging)");
     m.def(
         "get_legal_actions",
         [](const InternalState &s) {
@@ -590,14 +602,18 @@ PYBIND11_MODULE(godfield_core, m) {
     m.def(
         "clear_state", [](InternalState &s) {
             auto saved_rng = s.rng;
-            std::memset(&s, 0, sizeof(InternalState));
+            // memset ではなく値初期化を使う。ゼロ埋めすると StagedEntry::slot が
+            // 0（= 有効な手札スロット）になってしまい、NO_HAND_SLOT にならない。
+            // 値初期化ならメンバの既定値がそのまま入る（gcc も非トリビアルな型への
+            // memset を -Wclass-memaccess で警告する）。
+            s = InternalState();
             s.rng = saved_rng;
-            // ゼロ埋めのままだと pending_initiator が 0（= プレイヤー0）になり、
-            // 実ゲームの初期値 -1 と食い違う。テストの盤面が本番より甘い状態に
-            // なるので、init_new_game() と同じ番兵に揃える。
+            // 番兵は既定値ではなく init_new_game() と同じ値に揃える。ゼロのままだと
+            // pending_initiator が 0（= プレイヤー0）になり、テストの盤面が本番より
+            // 甘くなる。
             reset_pending_resolution(s);
         },
-        "Zero out the state memory preserving RNG");
+        "Reset the state to a blank board, preserving RNG");
 
     m.def(
         "get_opponent_staged_cards_for_obs", [](const InternalState &state, int me) -> py::list {

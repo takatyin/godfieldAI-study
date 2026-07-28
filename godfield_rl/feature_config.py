@@ -3,22 +3,33 @@
 Defines the mapping between observation vector indices and feature types
 for the GodField RL environment. Must stay in sync with types.h Observation struct.
 
-C++ 側が公開している定数（手札枚数・履歴長・行動空間）はそこから取得する。
-値をコピーするとC++側の変更に追従できず、観測のオフセットが黙ってズレるため。
+ブロックの長さはすべてC++側が公開している定数から取得する。値をコピーすると
+C++側の変更に追従できず、観測のオフセットが黙ってズレる（例外は出ないので、
+学習の精度が落ちるだけで気付けない）。
+
+このオフセット表とC++の Observation 構造体が整合していることは
+tests/test_observation_layout.py が検証している。torch を必要としないので、
+学習まわりの依存を入れない CI でも実行される。
 """
 
 import godfield_core
 
-NUM_SICKNESS_TYPES = 5
-NUM_CURSE_TYPES = 4
-NUM_GUARDIAN_TYPES = 11
-NUM_PHASES = 18
-EVENT_SIZE = 5
+NUM_SICKNESS_TYPES = godfield_core.NUM_SICKNESS_TYPES
+NUM_CURSE_TYPES = godfield_core.NUM_CURSE_TYPES
+NUM_GUARDIAN_TYPES = godfield_core.NUM_GUARDIAN_TYPES
+NUM_PHASES = godfield_core.NUM_PHASES
+EVENT_SIZE = godfield_core.EVENT_SIZE
 
 MAX_HAND_SIZE = godfield_core.MAX_HAND_SIZE
 HISTORY_LENGTH = godfield_core.HISTORY_LENGTH
 ACTION_SPACE_SIZE = godfield_core.ACTION_SPACE_SIZE
 
+# カード埋め込みテーブルの語彙数。
+#
+# ここだけは C++ から取得できない。feature_config は init_game_logic より先に
+# import されるため（train.py が godfield_rl を import した時点ではカードマスタが
+# まだ読み込まれておらず、get_registry_size() は 0 を返す）。
+# 実際の枚数を賄えているかは tests/test_observation_layout.py が検証する。
 NUM_CARD_TYPES = 294  # Max ID is 293, so 294 cards
 
 # Offset calculations

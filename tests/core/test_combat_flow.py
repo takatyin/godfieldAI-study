@@ -22,17 +22,24 @@ FILLER = "armor/wood-shield"
 
 
 
-def test_illegal_action_in_guardian_phase_is_ignored(board):
-    """守護神フェイズで非合法なアクションを渡しても状態が一切変化しないことを検証します。
+def test_illegal_action_is_ignored_without_changing_the_board(board):
+    """非合法なアクションを渡しても状態が一切変化しないことを検証します。
 
     非合法手を渡した際に静かに状態が壊れると、強化学習側が不正な行動を選んだときに
     盤面が破綻します。
+
+    以前はここで PHASE_GUARDIAN を使っていましたが、この値には合法手の定義も
+    フェイズハンドラも無く、実ゲームでは一度も設定されません（合法手が0件になる
+    ため、現在は詰みとして例外になります）。メインフェイズで検証します。
     """
-    g = board(p0=Side(hp=40), p1=Side(hp=40), phase=GamePhase.PHASE_GUARDIAN)
+    g = board(p0=Side(hp=40, mp=10, hand=["weapons/punch"]), p1=Side(hp=40, mp=10))
 
-    g.step(ActionType.ACTION_TARGET_OPP)  # 守護神フェイズでは非合法
+    # メインフェイズでは対象選択はまだできない
+    assert not g.legal_actions()[int(ActionType.ACTION_TARGET_OPP)]
+    g.step(ActionType.ACTION_TARGET_OPP)
 
-    g.expect(phase=GamePhase.PHASE_GUARDIAN, actor=0, p0_hp=40, p1_hp=40)
+    g.expect(phase=GamePhase.PHASE_MAIN, actor=0, p0_hp=40, p1_hp=40)
+    assert g.state.get_num_staged_cards(0) == 0
 
 
 def test_env_pool_reset_clears_events():
@@ -1524,3 +1531,73 @@ def test_spiritual_card_list_matches_the_cpp_predicate(board):
     assert set(named_spiritual) == set(SPIRITUAL_CARDS), (
         f"精霊カードの一覧がずれています: {sorted(set(named_spiritual) ^ set(SPIRITUAL_CARDS))}"
     )
+
+
+# ==========================================
+# 全体攻撃カードの状態異常付与
+# ==========================================
+
+
+def _group_attack_cards_with_curse() -> list[dict]:
+    """全体攻撃かつ状態異常を与えるカード（守護神の行動を除く）をマスタから集めます。
+
+    守護神の行動は setup_guardian_attack_defense() が set_pending_attack() で
+    全フィールドを設定する別経路なので、ここでは除きます。
+    """
+    return [
+        c
+        for c in all_cards()
+        if c.get("is_group_attack")
+        and c.get("hit_curse")
+        and not (c.get("id_str") or "").startswith("gurdians/")
+    ]
+
+
+_HIT_CURSE_TO_STATE = {
+    "fog": godfield_core.CurseType.CURSE_FOG,
+    "flash": godfield_core.CurseType.CURSE_FLASH,
+    "dark_cloud": godfield_core.CurseType.CURSE_DARK_CLOUD,
+    "dream": godfield_core.CurseType.CURSE_DREAM,
+}
+
+_HIT_CURSE_TO_SICKNESS = {
+    "cold": godfield_core.SicknessType.SICKNESS_COLD,
+    "fever": godfield_core.SicknessType.SICKNESS_FEVER,
+    "hell": godfield_core.SicknessType.SICKNESS_HELL,
+    "heaven": godfield_core.SicknessType.SICKNESS_HEAVEN,
+}
+
+
+@pytest.mark.parametrize(
+    "card_data",
+    _group_attack_cards_with_curse(),
+    ids=lambda c: c["id_str"],
+)
+def test_group_attack_applies_its_hit_curse(board, card_data):
+    """全体攻撃カードでも、命中した相手に状態異常が付くことを検証します。
+
+    全体攻撃には専用の解決経路（step_phase_group_attack）があり、通常攻撃・
+    奇跡攻撃の経路が設定している pending_attack_curse だけが漏れていました。
+    そのため霧の扇（霧）も＜閃光＞（閃光）も、当たっても状態異常が一切
+    付きませんでした。既存テストは1件も落ちなかったため、誰も見ていませんでした。
+
+    カードを名指しせずマスタから集めるので、全体攻撃かつ状態異常を持つカードが
+    増えても自動で検証対象に入ります。
+    """
+    card = card_data["id_str"]
+    curse = card_data["hit_curse"]
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[card]),
+        p1=Side(hp=99, mp=99, hand=[]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.hits(always=True, optional=True)
+
+    g.attack(card)
+    g.take_hit()
+
+    if curse in _HIT_CURSE_TO_STATE:
+        g.expect(p1_curses={_HIT_CURSE_TO_STATE[curse]})
+    else:
+        g.expect(p1_sickness=_HIT_CURSE_TO_SICKNESS[curse])

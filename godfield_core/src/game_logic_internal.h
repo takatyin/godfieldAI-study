@@ -105,11 +105,18 @@ void setup_multiple_attacks(InternalState &state, int me, int opp, const StagedA
 
 /**
  * @brief 「あぶないキネ」の使用処理を実行します（ウス所持チェック、99ダメージ解決、ランダムターゲット選定）。
+ * @return プレイヤーの入力を要するフェイズ（防御フェイズ）を開いた場合のみ true。
  */
 bool execute_dangerous_pestle(InternalState &state, int attacker, int defender, bool is_guardian = false);
 
 /**
  * @brief 仮置きされた武器カード群の評価・攻撃実行パイプラインを一元処理します。
+ * @return プレイヤーの入力を要するフェイズ（防御フェイズ）を開いた場合のみ true。
+ *
+ * 守護神の行動から呼ばれた場合、この戻り値はターン終了処理を中断するかどうかの
+ * 判断に使われます。効果を適用しただけで PHASE_END に留まる経路で true を返すと、
+ * 合法手が1つも無い状態のまま呼び出し側へ制御が戻ってしまいます
+ * （実際に、地球神があぶないキネを引いた場合に進行不能になっていました）。
  */
 bool execute_attack_from_staged_cards(InternalState &state, int attacker, int target, bool is_guardian = false);
 
@@ -342,6 +349,33 @@ void apply_darkness_instant_death(InternalState &state, int player_id);
  * 無く、自分に＜闇＞を撃っても攻撃力分のダメージしか入りませんでした。
  */
 void apply_darkness_self_death(InternalState &state, int player_id, int damage);
+
+/**
+ * @brief 仮置きカード群の評価結果から、保留中の攻撃パラメータを設定します。
+ *
+ * 通常攻撃・奇跡攻撃・全体攻撃の3経路がそれぞれ同じ代入を並べており、全体攻撃の
+ * 経路だけ pending_attack_curse を設定していませんでした。そのため霧の扇や
+ * ＜閃光＞といった全体攻撃カードの状態異常が一切適用されませんでした。
+ *
+ * pending_is_group_attack はカードを仮置きした時点で確定するのでここでは触りません。
+ */
+void set_pending_from_staged_attack(InternalState &state, int attacker,
+                                    const StagedAttackInfo &info, int target);
+
+/**
+ * @brief 自分自身を対象にした攻撃（武器・奇跡の共通処理）を解決します。
+ *
+ * ダメージ適用（闇属性なら即死）・カード効果・状態異常付与を `times` 回行い、
+ * 最後に太陽のお守りによる復活を判定します。
+ *
+ * 武器経路と奇跡経路で別々に書かれていたため、闇属性の即死が奇跡側にしか無く、
+ * 闇属性の「武器」を自分に撃っても攻撃力分のダメージしか入らない不具合がありました。
+ *
+ * @param times 連撃回数（蜃気楼など）。奇跡は連撃を持たないので常に1。
+ */
+void resolve_self_targeted_attack(InternalState &state, int attacker,
+                                  const StagedAttackInfo &info,
+                                  const StagedCardIds &used_cards, int times);
 
 /**
  * @brief 天国病の発作による死亡を適用します。

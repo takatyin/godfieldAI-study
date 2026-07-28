@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <cstring>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -17,6 +18,73 @@
  * @param state 現在のゲーム状態 (参照渡しの破壊的更新)
  * @param action 実行されたアクションID
  */
+std::string describe_state(const InternalState &state) {
+    std::ostringstream o;
+    o << "phase=" << static_cast<int>(state.current_phase)
+      << " turn_end_state=" << static_cast<int>(state.turn_end_state)
+      << " actor=" << state.current_actor_id
+      << " turn=" << state.current_turn
+      << " mushroom=" << state.mushroom_turns
+      << " is_done=" << state.is_done << "\n";
+    o << "attacker=" << state.attacker_id
+      << " defender=" << state.defender_id
+      << " initiator=" << state.pending_initiator << "\n";
+    o << "pending: source=" << state.pending_attack_source_id
+      << " power=" << state.pending_attack_power
+      << " element=" << static_cast<int>(state.pending_attack_element)
+      << " group=" << state.pending_is_group_attack
+      << " curse=" << static_cast<int>(state.pending_attack_curse)
+      << " counters=" << state.num_pending_counters << "\n";
+
+    for (int p = 0; p < 2; ++p) {
+        o << "P" << p
+          << ": hp=" << state.hp[p]
+          << " mp=" << state.mp[p]
+          << " money=" << state.money[p]
+          << " sickness=" << static_cast<int>(state.sickness[p])
+          << " guardian=" << state.guardian[p]
+          << " bows=" << state.pending_ascension_bows[p]
+          << " curses=";
+        for (int c = 0; c < 4; ++c) o << (state.curses[p][c] ? '1' : '0');
+        o << "\n  hand:";
+        for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+            if (state.true_hand[p][i] == CARD_EMPTY) continue;
+            o << " [" << i << "]" << state.true_hand[p][i];
+            if (state.apparent_hand[p][i] != state.true_hand[p][i]) {
+                o << "(見え" << state.apparent_hand[p][i] << ")";
+            }
+            if (state.is_used[p][i]) o << "(使)";
+            if (state.is_deployed[p][i]) o << "(展)";
+        }
+        o << "\n  staged(" << state.num_staged_cards[p] << "):";
+        for (int i = 0; i < state.num_staged_cards[p]; ++i) {
+            o << " {slot=" << state.staged_cards[p][i].slot
+              << ",virtual=" << state.staged_cards[p][i].virtual_card << "}";
+        }
+        o << "\n";
+    }
+    return o.str();
+}
+
+/**
+ * @brief 合法手が1つも無い状態（詰み）を検出したら、状態ダンプ付きで例外を投げます。
+ *
+ * 黙って返すと、呼び出し側は「何を送っても状態が変わらない」環境を延々と回すことに
+ * なります。学習側はそれを異常と認識できず、無言でサンプルを無駄にし続けます。
+ * ルール上ここに到達することは無い想定なので、起きたら実装の不整合として落とします。
+ */
+static void abort_if_no_legal_action(const InternalState &state) {
+    if (state.is_done) return;
+    bool legal[ACTION_SPACE_SIZE];
+    get_legal_actions(state, legal);
+    for (int i = 0; i < ACTION_SPACE_SIZE; ++i) {
+        if (legal[i]) return;
+    }
+    throw std::runtime_error(
+        "合法手が1つもありません（詰み）。ルール上到達しないはずの状態です。\n"
+        "--- クラッシュレポート ---\n" + describe_state(state));
+}
+
 void step_game(InternalState& state, ActionType action) {
     if (state.is_done) return;
 
@@ -64,50 +132,22 @@ void step_game(InternalState& state, ActionType action) {
             break; 
         }
 
-        // 【夢状態の確定（Reveal）および合法性再検証（セーフガード）処理】
-        // プレイヤーがターゲットの決定（ACTION_TARGET_SELF/OPP）や、行動の確定（ACTION_CONFIRM）などの
-        // 「行動を確定させるアクション」を入力した時点で、仮置きしているカードの真の姿を公開します。
-        if ((current_action == ACTION_TARGET_SELF || 
-             current_action == ACTION_TARGET_OPP || 
-             current_action == ACTION_CONFIRM) && 
+        // 【夢状態の確定（Reveal）】
+        // ターゲットの決定（ACTION_TARGET_SELF/OPP）や行動の確定（ACTION_CONFIRM）など、
+        // 「行動を確定させるアクション」を入力した時点で、仮置きしているカードの真の姿を
+        // 公開します。is_confirmed[me][slot] = true となり、apparent_hand が true_hand に
+        // 同期されます。
+        //
+        // 以前はここで公開後にもう一度合法性を判定し、非合法になっていたら仮置きを手札へ
+        // 巻き戻す処理がありました。しかし夢の偽装は同じ夢グループの中から選ばれ、
+        // 奇跡などのMP消費系は夢の影響を受けないため、見た目で合法なら真の姿でも必ず
+        // 合法です。到達しない分岐を「セーフガード」として持っていただけでした。
+        // 想定外の状態は、ステップ末尾の詰み検出（合法手ゼロ）で落とします。
+        if ((current_action == ACTION_TARGET_SELF ||
+             current_action == ACTION_TARGET_OPP ||
+             current_action == ACTION_CONFIRM) &&
             state.num_staged_cards[me] > 0) {
-            
-            // 1. 仮置きされているすべての手札の真偽状態を確定させる（Reveal）
-            //    これにより is_confirmed[me][slot] = true となり、apparent_hand が true_hand の値に同期されます。
             confirm_all_staged_cards(state, me);
-            
-            // 2. 公開された「真の手札情報」に基づいて、現在のアクションの合法性を再判定します。
-            //    ※通常ルールでは、夢の偽装グループは使用タイミング（timing等）が一致する神器同士で厳密に
-            //      分類されているため、見た目で合法なら真の姿でも必ず合法になります（非合法化は起きません）。
-            //      この再判定は、将来的なYamlカード定義の不整合、カスタムルールの追加、またはテスト時の
-            //      不整合状態の混入を防ぐための防衛的プログラミング（セーフガード）として機能します。
-            bool true_legal_actions[ACTION_SPACE_SIZE];
-            get_legal_actions(state, true_legal_actions);
-            
-            // 3. 万が一、公開された真の手札情報に基づいて現在のアクションが「非合法」と判定された場合：
-            //    (※正常に分類された夢グループの下では絶対に到達しない想定 / NEVER_REACH)
-            if (!true_legal_actions[current_action]) {
-                // 【ロールバック処理の実行】
-                // 仮置きしていたカードをすべてプレイヤーの手札に戻します（使用フラグ is_used を false にクリア）。
-                // ただし、真の姿が公開（確定）された事実自体は維持されます。
-                for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-                    int slot = staged_hand_slot(state, me, i);
-                    if (slot != NO_HAND_SLOT) state.is_used[me][slot] = false;
-                }
-                state.num_staged_cards[me] = 0;
-                
-                // カード選択を開始する前の状態（メインフェイズ）に進行状況を安全に巻き戻します。
-                if (state.current_phase == GamePhase::PHASE_MAIN_TARGET_SELECT ||
-                    state.current_phase == GamePhase::PHASE_ATTACK_PLUS ||
-                    state.current_phase == GamePhase::PHASE_GROUP_WEAPON ||
-                    state.current_phase == GamePhase::PHASE_GROUP_MIRACLE_PLUS ||
-                    state.current_phase == GamePhase::PHASE_MIRACLE_PLUS) {
-                    state.current_phase = GamePhase::PHASE_MAIN;
-                }
-                
-                // このステップでの進行を中断し、プレイヤーの新たな選択入力を待つためループを抜けます。
-                break;
-            }
         }
 
         // 現在のフェイズに応じた個別ハンドラの呼び出し
@@ -179,6 +219,10 @@ void step_game(InternalState& state, ActionType action) {
             break;
         }
     }
+
+    // 制御をプレイヤーに返す時点で、必ず選べる手が存在していなければならない。
+    // ここを黙って通すと、何を送っても進まない環境を回し続けることになる。
+    abort_if_no_legal_action(state);
 }
 
 /**
