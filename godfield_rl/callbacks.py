@@ -1,3 +1,5 @@
+import glob
+import random
 import os
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
@@ -67,14 +69,16 @@ class WinRateCallback(BaseCallback):
 
 class SelfPlayCallback(BaseCallback):
     """
-    一定のステップ数ごとに現在のモデルを保存し、対戦相手プールに追加するコールバック。
+    一定のステップ数ごとに現在のモデルを共有ディレクトリに保存し、
+    同時に共有ディレクトリから他のモデルをランダムに読み込んで対戦プールを更新するコールバック（League Training対応）。
     """
-    def __init__(self, pool: PoolOpponent, save_freq: int, save_path: str, max_pool_size: int = 5, verbose: int = 0):
+    def __init__(self, pool: PoolOpponent, save_freq: int, save_path: str, max_pool_size: int = 5, worker_id: int = 0, verbose: int = 0):
         super().__init__(verbose)
         self.pool = pool
         self.save_freq = save_freq
         self.save_path = save_path
         self.max_pool_size = max_pool_size
+        self.worker_id = worker_id
         self.generation = 0
         
         os.makedirs(self.save_path, exist_ok=True)
@@ -82,27 +86,46 @@ class SelfPlayCallback(BaseCallback):
     def _on_step(self) -> bool:
         if self.n_calls % self.save_freq == 0:
             self.generation += 1
-            model_path = os.path.join(self.save_path, f"selfplay_gen_{self.generation}.zip")
             
-            # 現在のモデルを保存
-            self.model.save(model_path)
+            # Atomic save: SB3は拡張子がないと .zip を付けるため、.tmp を付けて一時保存し、その後リネームする
+            temp_path_base = os.path.join(self.save_path, f"worker_{self.worker_id}_gen_{self.generation}.tmp")
+            final_path = os.path.join(self.save_path, f"worker_{self.worker_id}_gen_{self.generation}.zip")
             
-            # 保存したモデルを読み込んでFrozenOpponentを作成 (推論もGPUで行う)
-            frozen_model = MaskablePPO.load(model_path, device=self.model.device)
-            frozen_opponent = FrozenOpponent(frozen_model)
+            self.model.save(temp_path_base)
             
-            # プールに追加
-            self.pool.add_opponent(frozen_opponent)
+            # SB3は引数に .zip を付けて保存する仕様なのでリネーム元は .tmp.zip になる
+            actual_temp_path = temp_path_base + ".zip"
+            if os.path.exists(actual_temp_path):
+                os.replace(actual_temp_path, final_path)
+            else:
+                # 念のためそのままのファイル名もチェック
+                if os.path.exists(temp_path_base):
+                    os.replace(temp_path_base, final_path)
             
-            # プールサイズ制限の適用 (FrozenOpponent のみカウントし、古いものから削除)
-            frozen_count = sum(1 for opp in self.pool.opponents if isinstance(opp, FrozenOpponent))
-            if frozen_count > self.max_pool_size:
-                for idx, opp in enumerate(self.pool.opponents):
-                    if isinstance(opp, FrozenOpponent):
-                        self.pool.opponents.pop(idx)
-                        break
+            # 同期処理: 共有ディレクトリから .zip ファイルを全て取得
+            all_models = glob.glob(os.path.join(self.save_path, "*.zip"))
+            
+            # ランダムにサンプリング
+            sample_size = min(len(all_models), self.max_pool_size)
+            selected_models = random.sample(all_models, sample_size)
+            
+            # Heuristic等の FrozenOpponent ではない相手を退避
+            non_frozen = [opp for opp in self.pool.opponents if not isinstance(opp, FrozenOpponent)]
+            new_opponents = list(non_frozen)
+            
+            # 抽出したモデルをロードしてプールに追加
+            for m_path in selected_models:
+                try:
+                    frozen_model = MaskablePPO.load(m_path, device=self.model.device)
+                    new_opponents.append(FrozenOpponent(frozen_model))
+                except Exception as e:
+                    if self.verbose > 0:
+                        print(f"Failed to load opponent {m_path}: {e}")
+                        
+            # プールを入れ替え
+            self.pool.opponents = new_opponents
                         
             if self.verbose > 0:
-                print(f"[{self.num_timesteps} steps] Self-play generation {self.generation} added to pool. Current pool size: {len(self.pool.opponents)}")
+                print(f"[{self.num_timesteps} steps] Worker {self.worker_id} synced League Pool. Pool size: {len(self.pool.opponents)} (loaded {sample_size} models)")
                 
         return True

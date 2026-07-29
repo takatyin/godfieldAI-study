@@ -32,6 +32,7 @@ def main():
 
     parser.add_argument("--self-play", action="store_true", help="Enable Self-Play league training")
     parser.add_argument("--self-play-save-freq", type=int, default=1_000_000, help="Steps between self-play model snapshots")
+    parser.add_argument("--worker-id", type=int, default=0, help="Worker ID for distributed league training")
 
     parser.add_argument(
         "--opponent",
@@ -112,7 +113,8 @@ def main():
         selfplay_cb = SelfPlayCallback(
             pool=pool_opponent,
             save_freq=args.self_play_save_freq,
-            save_path=f"models/{run_name}/selfplay_pool" if args.wandb_name else "models/selfplay_pool",
+            save_path="models/league_pool",  # 全ワーカーで共有するディレクトリ
+            worker_id=args.worker_id,
             verbose=1
         )
         callbacks.append(selfplay_cb)
