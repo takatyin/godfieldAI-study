@@ -22,8 +22,8 @@ for i in {0..3}; do
         --worker-id $i \
         --total-timesteps 50000000 \
         --self-play-save-freq 1000000 \
-        --num-envs 250 \
-        --batch-size 4096 \
+        --num-envs 500 \
+        --batch-size 8192 \
         --tensorboard-log "logs/transformer_tb" \
         > "logs/transformer_worker_$i.log" 2>&1 &
 done
