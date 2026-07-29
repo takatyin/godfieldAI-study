@@ -112,7 +112,7 @@ def main():
         # Self-Playのプール更新コールバック
         selfplay_cb = SelfPlayCallback(
             pool=pool_opponent,
-            save_freq=args.self_play_save_freq,
+            save_freq=max(1, args.self_play_save_freq // args.num_envs),
             save_path="models/league_pool",  # 全ワーカーで共有するディレクトリ
             worker_id=args.worker_id,
             verbose=1
