@@ -8,7 +8,7 @@ from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
 
 from godfield_rl.env_wrapper import GodFieldVectorEnv
 from godfield_rl.feature_extractor import GodFieldFeatureExtractor, GodFieldTransformerExtractor
-from godfield_rl.opponents import make_opponent, PoolOpponent
+from godfield_rl.opponents import make_opponent, PoolOpponent, FrozenOpponent
 from godfield_rl.callbacks import WinRateCallback, SelfPlayCallback
 
 
@@ -34,6 +34,8 @@ def main():
     parser.add_argument("--self-play-save-freq", type=int, default=1_000_000, help="Steps between self-play model snapshots")
     parser.add_argument("--worker-id", type=int, default=0, help="Worker ID for distributed league training")
     parser.add_argument("--use-transformer", action="store_true", help="Use Transformer feature extractor instead of MLP")
+    parser.add_argument("--start-opponent-model", type=str, default=None, help="Path to initial opponent model zip file")
+    parser.add_argument("--pool-dir", type=str, default="models/league_pool", help="Directory to save/load league models")
 
     parser.add_argument(
         "--opponent",
@@ -65,8 +67,14 @@ def main():
 
     print(f"Initializing {args.num_envs} GodField parallel environments in C++...")
     if args.self_play:
-        print("Opponent policy: Self-Play Pool (Starting with Heuristic)")
-        initial_opponent = make_opponent("heuristic", seed=args.seed)
+        print("Opponent policy: Self-Play Pool")
+        if args.start_opponent_model:
+            print(f"Loading initial opponent from {args.start_opponent_model}...")
+            start_model = MaskablePPO.load(args.start_opponent_model, device="cpu")
+            initial_opponent = FrozenOpponent(start_model)
+        else:
+            initial_opponent = make_opponent("heuristic", seed=args.seed)
+            
         pool_opponent = PoolOpponent(opponents=[initial_opponent], seed=args.seed)
         vec_env = GodFieldVectorEnv(args.num_envs, opponent=pool_opponent)
         
@@ -125,7 +133,7 @@ def main():
         selfplay_cb = SelfPlayCallback(
             pool=pool_opponent,
             save_freq=max(1, args.self_play_save_freq // args.num_envs),
-            save_path="models/league_pool",  # 全ワーカーで共有するディレクトリ
+            save_path=args.pool_dir,
             worker_id=args.worker_id,
             verbose=1
         )

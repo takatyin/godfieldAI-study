@@ -78,14 +78,15 @@ async def run_ai_steps():
         if ai_act is None:
             break
         godfield_core.step_game(state, godfield_core.ActionType(ai_act))
+        env_pool.set_state(0, state)
         await asyncio.sleep(0)
 
-        # Auto-advance
         while not state.is_done:
             auto_action = godfield_core.get_single_legal_action(state)
             if auto_action == -1:
                 break
             godfield_core.step_game(state, godfield_core.ActionType(auto_action))
+            env_pool.set_state(0, state)
             await asyncio.sleep(0)
 
 
@@ -144,6 +145,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 action_id = msg["action_id"]
                 # Process player action
                 godfield_core.step_game(state, godfield_core.ActionType(action_id))
+                env_pool.set_state(0, state)
 
                 # Auto-advance
                 while not state.is_done:
@@ -151,6 +153,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     if auto_action == -1:
                         break
                     godfield_core.step_game(state, godfield_core.ActionType(auto_action))
+                    env_pool.set_state(0, state)
                     await asyncio.sleep(0)
 
                 # Run AI if it's AI's turn
