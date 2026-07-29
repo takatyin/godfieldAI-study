@@ -115,7 +115,9 @@ def test_fog_hides_the_opponent_hand_from_the_cursed_player(board):
     # 霧をかけると見えなくなる
     g.state.set_curses(0, godfield_core.CurseType.CURSE_FOG, True)
     fogged = godfield_core.get_observation(g.state, 0)
-    assert fogged.get_opponent_hand_cards()[0] == 0, "霧の下では相手の手札は隠される"
+    assert fogged.get_opponent_hand_cards()[0] == godfield_core.CARD_EMPTY, (
+        "霧の下では相手の手札は隠される（空きは CARD_EMPTY で埋める）"
+    )
 
 
 def test_dream_masks_only_newly_drawn_cards(board):
@@ -598,3 +600,36 @@ def test_mushroom_outbreak_adds_to_the_remaining_turns(board):
         f"上書きなら {fresh_advanced}）。実際: {stacked_advanced}"
     )
     assert stacked.state.mushroom_turns == 0
+
+
+@pytest.mark.parametrize(
+    "card",
+    ["miracles/release", "sundries/guardian-pot"],
+    ids=["＜解放＞", "守護封印のつぼ"],
+)
+def test_a_guardian_is_summoned_and_the_opponent_is_untouched(board, card):
+    """守護神が宿るカードが、使用者に守護神を宿らせることを検証します。
+
+    ＜解放＞と守護封印のつぼは、どちらも説明が「守護神が宿る」で効果は同じです。
+    以前 ＜解放＞ は両者の守護神を消す実装になっており、使っても守護神が出て
+    きませんでした（名前の「解放」も、封印されている守護神を解き放つ意味です）。
+
+    相手の守護神に影響しないことも併せて確認します。
+    """
+    assert card_feature(card, "description") == card_feature("sundries/guardian-pot", "description"), (
+        "この検証は両者の説明が同じであることが前提です"
+    )
+    summoned = int(godfield_core.GuardianType.SATURN)
+    opponent = int(godfield_core.GuardianType.VENUS)
+
+    g = board(
+        p0=Side(hp=99, mp=30, hand=[card]),
+        p1=Side(hp=99, mp=10, guardian=opponent),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.guardian_pot(summoned)
+
+    g.attack(card, to_self=True)
+    g.confirm()
+
+    g.expect(p0_guardian=summoned, p1_guardian=opponent)

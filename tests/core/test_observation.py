@@ -201,3 +201,145 @@ def test_a_guardian_deal_does_not_leak_out_of_bounds_memory_into_the_observation
     # 同じ経路を使う観測ヘルパーも同じ結果になること
     helper = list(godfield_core.get_opponent_staged_cards_for_obs(g.state, 0))
     assert helper == [card_id("deals/sell"), card_id(filler)]
+
+
+def _board_with_a_visible_opponent(board, *, fog: bool):
+    """相手が「見える情報」を一通り持った盤面を作ります。fog=True なら自分が霧状態。"""
+    g = board(
+        p0=Side(hp=40, mp=10, money=20, curses=[CurseType.CURSE_FOG] if fog else []),
+        p1=Side(
+            hp=35,
+            mp=15,
+            money=25,
+            sickness=godfield_core.SicknessType.SICKNESS_FEVER,
+            guardian=int(godfield_core.GuardianType.MARS),
+            curses=[CurseType.CURSE_DARK_CLOUD],
+            hand=["miracles/flame", "weapons/punch"],
+        ),
+    )
+    # 相手の手札を「見えている」状態にする（霧が無ければ観測に出るはず）
+    g.state.set_is_deployed(1, 0, True)
+    g.state.set_is_known_to_opp(1, 1, True)
+    return godfield_core.get_observation(g.state, 0)
+
+
+def test_fog_hides_the_opponent_status_including_sickness_and_guardian(board):
+    """霧が相手の「ステータス」を数値以外も隠すことを検証します。
+
+    隠れるのは HP/MP/お金 に加えて、病気・呪い・守護神です。従来のテストは
+    HP/MP/お金 しか見ておらず、残りが黙って見えるようになっても気付けませんでした。
+
+    場に出ている展開済みの奇跡は霧の下でも見えます
+    （test_fog_does_not_hide_deployed_miracles を参照）。
+
+    霧なしの同じ盤面と比べることで、隠す前は本当に見えていたことも示します。
+    """
+    clear = _board_with_a_visible_opponent(board, fog=False)
+    fogged = _board_with_a_visible_opponent(board, fog=True)
+
+    # 霧が無ければ一通り見えている（テストが空振りしていないことの担保）
+    assert clear.hp_opp == pytest.approx(35 / NORMALIZE)
+    assert sum(clear.get_sickness_opp()) == pytest.approx(1.0)
+    assert sum(clear.get_guardian_opp()) == pytest.approx(1.0)
+    assert sum(clear.get_curses_opp()) > 0.0
+
+    # 霧がかかると、いずれも見えなくなる
+    assert fogged.hp_opp == pytest.approx(0.0)
+    assert fogged.mp_opp == pytest.approx(0.0)
+    assert fogged.money_opp == pytest.approx(0.0)
+    assert sum(fogged.get_sickness_opp()) == pytest.approx(0.0), "相手の病気が見えています"
+    assert sum(fogged.get_guardian_opp()) == pytest.approx(0.0), "相手の守護神が見えています"
+    assert sum(fogged.get_curses_opp()) == pytest.approx(0.0), "相手の呪いが見えています"
+
+    # 自分自身の情報は霧でも見える
+    assert fogged.hp_me == pytest.approx(40 / NORMALIZE)
+    assert sum(fogged.get_curses_me()) > 0.0, "自分の呪い（霧）は見えるべきです"
+
+
+def test_fog_does_not_hide_deployed_miracles(board):
+    """展開済みの奇跡は、霧がかかっていても見えることを検証します。
+
+    霧が隠すのは相手のステータスであって、場に出ているものではありません。
+    以前は相手の公開情報を霧で丸ごと隠しており、展開済みの奇跡まで
+    見えなくなっていました。
+    """
+    deployed = "miracles/flame"
+
+    g = board(
+        p0=Side(hp=40, mp=10, money=20, curses=[CurseType.CURSE_FOG]),
+        p1=Side(hp=35, mp=15, money=25, hand=[deployed]),
+    )
+    g.state.set_is_deployed(1, 0, True)
+
+    obs = godfield_core.get_observation(g.state, 0)
+    visible = [c for c in obs.get_opponent_hand_cards() if c != godfield_core.CARD_EMPTY]
+
+    assert card_id(deployed) in visible, (
+        f"霧の下でも展開済みの奇跡は見えるはずです: {visible}"
+    )
+    # ステータスの方は隠れたままであることも確認する
+    assert obs.hp_opp == pytest.approx(0.0)
+
+
+def test_fog_hides_cards_that_were_merely_revealed(board):
+    """一度公開されただけの手札は、霧の下では見えないことを検証します。
+
+    公開された後に捨てられている可能性があり、霧の下では今も持っているかを
+    確かめる手段がないためです。展開済みの奇跡（場に出ているもの）とは扱いが
+    異なります。
+    """
+    revealed = "weapons/punch"
+
+    g = board(
+        p0=Side(hp=40, mp=10, money=20, curses=[CurseType.CURSE_FOG]),
+        p1=Side(hp=35, mp=15, money=25, hand=[revealed]),
+    )
+    g.state.set_is_known_to_opp(1, 0, True)
+
+    fogged = godfield_core.get_observation(g.state, 0)
+    assert [c for c in fogged.get_opponent_hand_cards() if c != godfield_core.CARD_EMPTY] == [], (
+        "霧の下では、公開されただけの手札は見えないはずです"
+    )
+
+    # 霧が無ければ見えることを対にして確認する（テストが空振りしていないこと）
+    g.state.set_curses(0, CurseType.CURSE_FOG, False)
+    clear = godfield_core.get_observation(g.state, 0)
+    assert card_id(revealed) in [c for c in clear.get_opponent_hand_cards() if c != godfield_core.CARD_EMPTY]
+
+
+def test_every_card_block_uses_the_same_empty_sentinel(board):
+    """観測のカード4ブロックが、空きスロットを同じ番兵で表すことを検証します。
+
+    特徴抽出器は4ブロックをまとめて `+1` してから埋め込みを引きます。そのため
+    空きを 0.0 で埋めると、カードID 0（両替）と同じ埋め込みになってしまいます。
+    実際 opponent_hand_cards だけが 0.0 で埋められており、「相手のスロットが空」と
+    「相手が両替を持っている」がエージェントから区別できませんでした。
+
+    盤面はどちらの手札もほぼ空にして、4ブロックすべてに空きが出るようにします。
+    """
+    assert card_id("deals/exchange") == 0, (
+        "この検証は『カードID 0 が実在する』ことが前提です"
+    )
+
+    g = board(
+        p0=Side(hp=40, hand=["weapons/punch"]),
+        p1=Side(hp=40, hand=["weapons/punch"]),
+    )
+    obs = godfield_core.get_observation(g.state, 0)
+
+    blocks = {
+        "hand_cards": obs.get_hand_cards(),
+        "staged_cards": obs.get_staged_cards(),
+        "opponent_hand_cards": obs.get_opponent_hand_cards(),
+        "opponent_staged_cards": obs.get_opponent_staged_cards(),
+    }
+
+    for name, values in blocks.items():
+        assert values, f"{name} が空です"
+        assert any(v == godfield_core.CARD_EMPTY for v in values), (
+            f"{name} に空きスロットが無く、番兵を検証できていません: {values}"
+        )
+        # 0.0（＝カードID 0 の両替）が空きの意味で使われていないこと
+        assert not any(v == 0.0 for v in values), (
+            f"{name} が 0.0 を空きとして使っています。カードID 0（両替）と衝突します: {values}"
+        )

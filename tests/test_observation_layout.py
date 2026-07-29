@@ -68,3 +68,21 @@ def test_embedding_table_covers_every_card_in_the_registry():
     assert fc.NUM_CARD_TYPES >= registry_size, (
         f"カードが {registry_size} 枚あるのに埋め込みは {fc.NUM_CARD_TYPES} 語彙しかありません"
     )
+
+
+def test_internal_state_stays_small():
+    """InternalState が意図せず膨らんでいないことを検証します。
+
+    この構造体は環境の数だけ並びます（学習時は1024環境）。以前 mt19937 が
+    5,000バイトを占めていて全体の69%だったものを xoshiro128++ に置き換えて
+    3.2倍小さくした経緯があり、キャッシュ効率に直結します。
+
+    上限は「現状から少し余裕を持たせた値」です。超えたら、増やす価値があるか
+    考えたうえで上限を更新してください（機械的に緩めないこと）。
+    """
+    limit = 3072
+    size = godfield_core.INTERNAL_STATE_SIZE
+    assert size <= limit, (
+        f"InternalState が {size} バイトに増えています（上限 {limit}）。"
+        f" 1024環境で {size * 1024 / 1024 / 1024:.2f} MB になります"
+    )

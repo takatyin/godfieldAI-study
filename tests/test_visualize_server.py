@@ -333,3 +333,140 @@ def test_the_mirror_button_reflects_whether_a_mirror_is_staged(board, phase):
 
     mirror = [CARDS_BY_ID[card_id("armor/super-mirror")]]
     assert compute_smart_action_label(ACTION_DEAL_NO, mirror, g.state) == "はね返す"
+
+
+# ==========================================
+# 相手の手札の描画（スロット位置と表示可否）
+# ==========================================
+
+
+def _opp_hand(state, player_id):
+    """serialize_observation が返す「相手の手札」をスロット番号で引ける辞書にします。"""
+    data = serialize_observation(godfield_core.get_observation(state, player_id), player_id, state)
+    return {c["slot_idx"]: c for c in data["opponent_hand"] if c}
+
+
+def test_opponent_cards_are_rendered_at_their_real_slot(board):
+    """相手の公開カードが、実際のスロット位置に描画されることを検証します。
+
+    観測の opponent_hand_cards は「公開されているカードだけを左詰め」した配列で、
+    その添字はスロット番号ではありません。以前はこれをスロット番号として使って
+    いたため、スロット5の公開カードがスロット0に描かれ、表示可否の判定も
+    別のスロットを見ていました。
+    """
+    hidden_card = "armor/wood-shield"
+    revealed = "weapons/bronze-club"
+
+    g = board(
+        p0=Side(hp=99),
+        p1=Side(hp=99, hand=[hidden_card] + [None] * 4 + [revealed]),
+    )
+    g.state.set_is_known_to_opp(1, 5, True)
+
+    slots = _opp_hand(g.state, 0)
+
+    assert slots[5]["id"] == card_id(revealed), (
+        f"公開カードはスロット5に描かれるべきです: {slots}"
+    )
+    assert slots[5]["hidden"] is False
+    assert slots[0]["hidden"] is True, "非公開のカードは裏向きで描かれるべきです"
+
+
+def test_a_revealed_exchange_card_is_not_treated_as_hidden(board):
+    """公開された「両替」が裏向き扱いにならないことを検証します。
+
+    両替はカードID 0 です。以前は 0 を「見えない」の目印として使っていたため、
+    公開されているのに裏向きで描かれていました。
+    """
+    exchange = "deals/exchange"
+    assert card_id(exchange) == 0, "この検証は両替のIDが0であることが前提です"
+
+    g = board(p0=Side(hp=99), p1=Side(hp=99, hand=[exchange]))
+    g.state.set_is_known_to_opp(1, 0, True)
+
+    slots = _opp_hand(g.state, 0)
+    assert slots[0]["id"] == 0
+    assert slots[0]["hidden"] is False, "公開された両替が裏向き扱いになっています"
+
+
+@pytest.mark.parametrize("owner", [0, 1], ids=["自分が展開", "相手が展開"])
+def test_serializing_a_deployed_miracle_does_not_crash(board, owner):
+    """展開済みの奇跡がある局面を可視化できることを検証します。
+
+    presenter は展開順を得るために state.get_num_deployed_miracles() /
+    get_deployed_miracle_order() を呼んでいましたが、これらは C++ 側に存在せず、
+    奇跡を展開した瞬間に AttributeError で可視化サーバーが落ちていました。
+
+    エンジンは展開順を保持していないため、現在はスロット番号を並び順として
+    使っています。
+    """
+    miracle = "miracles/flame"
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[miracle]),
+        p1=Side(hp=99, mp=99, hand=[miracle]),
+    )
+    g.state.set_is_deployed(owner, 0, True)
+    g.state.set_is_known_to_opp(owner, 0, True)
+
+    data = serialize_observation(godfield_core.get_observation(g.state, 0), 0, g.state)
+
+    key = "hand" if owner == 0 else "opponent_hand"
+    deployed = [c for c in data[key] if c and c["deployed"]]
+    assert deployed, f"展開済みの奇跡が {key} に現れるべきです"
+    assert deployed[0]["deployed_order"] >= 0, (
+        "展開済みのカードには並び順が付くべきです（フロントがこの値で並べ替える）"
+    )
+
+
+def test_an_undeployed_card_has_no_deploy_order(board):
+    """展開していないカードの並び順が -1 になることを検証します。
+
+    上のテストが「常に0以上が返る」だけを見ていないことの担保です。
+    """
+    g = board(p0=Side(hp=99, mp=99, hand=["miracles/flame"]), p1=Side(hp=99))
+
+    data = serialize_observation(godfield_core.get_observation(g.state, 0), 0, g.state)
+    card = next(c for c in data["hand"] if c)
+
+    assert card["deployed"] is False
+    assert card["deployed_order"] == -1
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_serialization_survives_a_whole_random_game(seed):
+    """ランダム対戦の全局面を可視化できることを検証します。
+
+    可視化サーバーは毎ステップ、両プレイヤーぶんのシリアライズとイベント整形を
+    行います。稀な局面で例外が出るとプレイ中に切断されるため、局面を名指しせず
+    通しで踏みます（実際に「奇跡を展開すると必ず落ちる」不具合がありました）。
+
+    展開済み奇跡のある局面に到達したことも確認します。到達していなければ、
+    上記の不具合を踏めていないことになるためです。
+    """
+    import numpy as np
+
+    from visualizer.event_formatter import format_event_log
+
+    pool = godfield_core.EnvPool(1)
+    pool.reset(seed)
+    rng = np.random.default_rng(seed)
+
+    saw_deployed = False
+    for _ in range(400):
+        state = pool.get_state(0)
+        if any(state.get_is_deployed(p, i) for p in (0, 1) for i in range(18)):
+            saw_deployed = True
+
+        for pid in (0, 1):
+            obs = godfield_core.get_observation(state, pid)
+            serialize_observation(obs, pid, state)
+            for event in obs.get_history():
+                format_event_log(event, pid)
+
+        legal = np.flatnonzero(np.array(godfield_core.get_legal_actions(state), dtype=bool))
+        assert legal.size > 0, "合法手が0件です（進行不能）"
+        pool.step_subset([0], [int(rng.choice(legal))])
+
+    assert saw_deployed, (
+        "展開済み奇跡のある局面に到達していないため、この検証は空振りしています"
+    )

@@ -532,13 +532,24 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
     }
 
     // Opponent hand cards (相手の公開手札のスロット位置リークを防ぐため、左詰めで格納する)
+    //
+    // 霧が隠すのは相手の「ステータス」（HP/MP/お金・病気・呪い・守護神）であって、
+    // 場に出ている展開済みの奇跡は霧の下でも見える。以前はここを霧で丸ごと隠しており、
+    // 展開済み奇跡まで見えなくなっていた。
+    //
+    // 一方、一度公開されただけの手札（is_known_to_opp）は霧で隠す。公開された後に
+    // 捨てられている可能性があり、霧の下では「今もそれを持っているか」を確かめる
+    // 手段が無いため。
+    //
+    // 空きは CARD_EMPTY で埋める。他の3ブロック（自分の手札・仮置き・相手の仮置き）と
+    // 揃える必要がある。特徴抽出器はカードIDに +1 して埋め込みを引くため、0.0f で
+    // 埋めると「空きスロット」がカードID 0（両替）と同じ埋め込みになってしまう。
     int known_count = 0;
-    std::fill(std::begin(obs.opponent_hand_cards), std::end(obs.opponent_hand_cards), 0.0f);
-    if (!is_me_fog) {
-        for (int i = 0; i < MAX_HAND_SIZE; ++i) {
-            if (state.is_known_to_opp[opp][i] || state.is_deployed[opp][i]) {
-                obs.opponent_hand_cards[known_count++] = static_cast<float>(state.true_hand[opp][i]);
-            }
+    std::fill(std::begin(obs.opponent_hand_cards), std::end(obs.opponent_hand_cards),
+              static_cast<float>(CARD_EMPTY));
+    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+        if (state.is_deployed[opp][i] || (state.is_known_to_opp[opp][i] && !is_me_fog)) {
+            obs.opponent_hand_cards[known_count++] = static_cast<float>(state.true_hand[opp][i]);
         }
     }
 

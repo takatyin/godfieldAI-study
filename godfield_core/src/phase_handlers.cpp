@@ -26,26 +26,28 @@ StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
     Element current_element = ELEM_NONE;
     bool has_processed = false;
 
-    // マジカルステッキ以外のMP消費を計算
-    int other_mp_cost = 0;
-    for (size_t i = 0; i < card_ids.size(); ++i) {
-        int card_id = card_ids[i];
-        if (card_id == CARD_EMPTY || card_id == ID_MAGICAL_STICK) continue;
-        const CardFeatures &f = g_card_registry[card_id];
-
-        if (f.is_miracle() && (i + 1 < card_ids.size())) {
-            int next_card_id = card_ids[i + 1];
-            if (is_spiritual_zero_mp_card(next_card_id)) {
-                continue;
-            }
-        }
-        other_mp_cost += f.mp_cost;
-    }
+    // マジカルステッキの威力は「残りMP×2」なので、ステッキ以外の消費MPが要る。
+    // 以前はこの計算を calculate_staged_mp_cost() と別々に書いており、精霊系の規則が
+    // 2箇所に複製されていた（片方だけ変えると攻撃力とMP消費が食い違う）。
+    int other_mp_cost = calculate_mp_cost_excluding_magical_stick(state, player_id, nullptr);
 
     for (size_t i = 0; i < card_ids.size(); ++i) {
         int card_id = card_ids[i];
         if (card_id == CARD_EMPTY) continue;
         const CardFeatures &f = g_card_registry[card_id];
+
+        // 精霊系カードを「奇跡に重ねた」場合は、そのカード自身の攻撃力・属性を持ち込まない。
+        // 効果は直前の奇跡の消費MPを0にすることだけで、プラス攻撃ではないため。
+        //
+        // 1枚目に置かれた場合は別で、精霊の杖は攻撃力12の無属性武器として普通に働く
+        // （usage_timing が main_atk_phase と miracle_plus_phase の両方を持つ）。
+        // 以前はこの区別が無く、＜炎＞（攻10）に精霊の杖を重ねると攻撃力が22になっていた。
+        const bool used_as_spiritual = (i > 0) && is_spiritual_zero_mp_card(card_id);
+
+        if (used_as_spiritual) {
+            // 攻撃力にも属性にも関与しない
+            continue;
+        }
 
         if (card_id == ID_AURA) {
             total_atk *= 2;
@@ -57,9 +59,7 @@ StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
         }
 
         // 属性判定
-        if (is_spiritual_zero_mp_card(card_id)) {
-            // 精霊系カードは属性計算に関与しない
-        } else if (is_element_overriding_wand(card_id)) {
+        if (is_element_overriding_wand(card_id)) {
             // ワンドによる属性上書き（無条件で攻撃をその属性にする）
             current_element = f.element;
             has_processed = true;
@@ -178,123 +178,87 @@ void update_staged_pending_info(InternalState &state, int player_id) {
 
 
 static void trigger_next_ring_counter(InternalState &state) {
+    // 指輪の反撃は「使われた順」に解決する（先入れ先出し）。
+    // 以前は末尾から取り出しており、後から使った指輪の反撃が先に解決していた。
+    const PendingCounter c = state.pending_counters[0];
     state.num_pending_counters--;
-    int idx = state.num_pending_counters;
-    int attacker = state.pending_counter_attacker[idx];
-    int defender = state.pending_counter_defender[idx];
+    for (int i = 0; i < state.num_pending_counters; ++i) {
+        state.pending_counters[i] = state.pending_counters[i + 1];
+    }
 
-    state.attacker_id = attacker;
-    state.defender_id = defender;
-    state.current_actor_id = defender;
+    state.attacker_id = c.attacker;
+    state.defender_id = c.defender;
+    state.current_actor_id = c.defender;
 
-    int card_id = state.pending_counter_source_id[idx];
-    if (is_non_damage_ring_counter(card_id)) {
+    if (is_non_damage_ring_counter(c.source_id)) {
         // 指輪の反撃は、反撃した側（defender）が仕掛けた側になる
-        state.pending_initiator = defender;
+        state.pending_initiator = c.defender;
         state.current_phase = GamePhase::PHASE_SUNDRY_SELECT_MIRROR;
     } else {
         state.current_phase = GamePhase::PHASE_DEFENSE;
     }
 
-    state.pending_attack_power = state.pending_counter_power[idx];
-    state.pending_attack_element = state.pending_counter_element[idx];
+    state.pending_attack_power = c.power;
+    state.pending_attack_element = c.element;
     state.pending_absorption = false;
     state.pending_deal_same_damage = false;
     state.pending_is_group_attack = false;
-    state.pending_attack_curse = state.pending_counter_curse[idx];
-    state.pending_take_cp = state.pending_counter_take_cp[idx];
-    state.pending_attack_source_id = card_id;
-    state.num_staged_cards[defender] = 0;
+    state.pending_attack_curse = c.curse;
+    state.pending_take_cp = c.take_cp;
+    state.pending_attack_source_id = c.source_id;
+    state.num_staged_cards[c.defender] = 0;
 
-    push_event(state, defender, EventType::RING_EFFECT, card_id, attacker, 0.0f);
+    push_event(state, c.defender, EventType::RING_EFFECT, c.source_id, c.attacker, 0.0f);
 }
 
 static void process_ring_defense_effects(InternalState &state, int me, int opp, int damage) {
     if (damage <= 0) return;
+
+    // 指輪の反撃は使われた順に積む（解決も同じ順＝先入れ先出し）。
+    auto enqueue = [&](const PendingCounter &c) {
+        if (state.num_pending_counters >= MAX_PENDING_COUNTERS) return;
+        state.pending_counters[state.num_pending_counters++] = c;
+    };
+
     for (int i = 0; i < state.num_staged_cards[me]; ++i) {
         int card_id = staged_card_id(state, me, i);
+        PendingCounter c;
+        c.attacker = me;
+        c.defender = opp;
+        c.source_id = card_id;
+
         if (card_id == ID_MARS_RING) {
-            int roll = roll_range(state, RollKind::MARS_RING, 0, 99);
-            if (roll < MARS_RING_RATE && state.num_pending_counters < 10) {
-                int idx = state.num_pending_counters++;
-                state.pending_counter_attacker[idx] = me;
-                state.pending_counter_defender[idx] = opp;
-                state.pending_counter_power[idx] = damage;
-                state.pending_counter_element[idx] = ELEM_FIRE;
-                state.pending_counter_curse[idx] = CURSE_NONE;
-                state.pending_counter_take_cp[idx] = false;
-                state.pending_counter_source_id[idx] = card_id;
-            }
+            // 火星の指輪だけは確率で発動する
+            if (roll_range(state, RollKind::MARS_RING, 0, 99) >= MARS_RING_RATE) continue;
+            c.power = damage;
+            c.element = ELEM_FIRE;
         } else if (card_id == ID_MERCURY_RING) {
-            if (state.num_pending_counters < 10) {
-                int idx = state.num_pending_counters++;
-                state.pending_counter_attacker[idx] = me;
-                state.pending_counter_defender[idx] = opp;
-                state.pending_counter_power[idx] = 0;
-                state.pending_counter_element[idx] = ELEM_WATER;
-                state.pending_counter_curse[idx] = CURSE_FOG;
-                state.pending_counter_take_cp[idx] = false;
-                state.pending_counter_source_id[idx] = card_id;
-            }
+            c.element = ELEM_WATER;
+            c.curse = CURSE_FOG;
         } else if (card_id == ID_JUPITER_RING) {
-            if (state.num_pending_counters < 10) {
-                int idx = state.num_pending_counters++;
-                state.pending_counter_attacker[idx] = me;
-                state.pending_counter_defender[idx] = opp;
-                state.pending_counter_power[idx] = 0;
-                state.pending_counter_element[idx] = ELEM_WOOD;
-                state.pending_counter_curse[idx] = CURSE_DREAM;
-                state.pending_counter_take_cp[idx] = false;
-                state.pending_counter_source_id[idx] = card_id;
-            }
+            c.element = ELEM_WOOD;
+            c.curse = CURSE_DREAM;
         } else if (card_id == ID_SATURN_RING) {
-            if (state.num_pending_counters < 10) {
-                int idx = state.num_pending_counters++;
-                state.pending_counter_attacker[idx] = me;
-                state.pending_counter_defender[idx] = opp;
-                state.pending_counter_power[idx] = damage * 2;
-                state.pending_counter_element[idx] = ELEM_STONE;
-                state.pending_counter_curse[idx] = CURSE_NONE;
-                state.pending_counter_take_cp[idx] = false;
-                state.pending_counter_source_id[idx] = card_id;
-            }
+            c.power = damage * 2;
+            c.element = ELEM_STONE;
         } else if (card_id == ID_URANUS_RING) {
-            if (state.num_pending_counters < 10) {
-                int idx = state.num_pending_counters++;
-                state.pending_counter_attacker[idx] = me;
-                state.pending_counter_defender[idx] = opp;
-                state.pending_counter_power[idx] = 0;
-                state.pending_counter_element[idx] = ELEM_LIGHT;
-                state.pending_counter_curse[idx] = CURSE_FLASH;
-                state.pending_counter_take_cp[idx] = false;
-                state.pending_counter_source_id[idx] = card_id;
-            }
+            c.element = ELEM_LIGHT;
+            c.curse = CURSE_FLASH;
         } else if (card_id == ID_PLUTO_RING) {
-            if (state.num_pending_counters < 10) {
-                int idx = state.num_pending_counters++;
-                state.pending_counter_attacker[idx] = me;
-                state.pending_counter_defender[idx] = opp;
-                state.pending_counter_power[idx] = 0;
-                state.pending_counter_element[idx] = ELEM_DARKNESS;
-                state.pending_counter_curse[idx] = CURSE_DARK_CLOUD;
-                state.pending_counter_take_cp[idx] = false;
-                state.pending_counter_source_id[idx] = card_id;
-            }
+            c.element = ELEM_DARKNESS;
+            c.curse = CURSE_DARK_CLOUD;
+        } else if (card_id == ID_VENUS_RING) {
+            c.power = damage;
+            c.take_cp = true;
         } else if (card_id == ID_NEPTUNE_RING) {
+            // 海王の指輪だけは反撃ではなく即時のMP回復
             state.mp[me] = std::clamp(state.mp[me] + damage * 2, 0, 99);
             push_event(state, me, EventType::RING_EFFECT, card_id, opp, 0.0f);
-        } else if (card_id == ID_VENUS_RING) {
-            if (state.num_pending_counters < 10) {
-                int idx = state.num_pending_counters++;
-                state.pending_counter_attacker[idx] = me;
-                state.pending_counter_defender[idx] = opp;
-                state.pending_counter_power[idx] = damage;
-                state.pending_counter_element[idx] = ELEM_NONE;
-                state.pending_counter_curse[idx] = CURSE_NONE;
-                state.pending_counter_take_cp[idx] = true;
-                state.pending_counter_source_id[idx] = card_id;
-            }
+            continue;
+        } else {
+            continue;
         }
+        enqueue(c);
     }
 }
 
@@ -598,9 +562,11 @@ void step_phase_group_miracle(InternalState &state, ActionType action, int me, i
 }
 
 static void execute_standard_defense(InternalState &state, int me, int opp, GamePhase phase, int total_def, bool rainbow, bool is_darkness_attack, int damage, bool is_bounce_failure) {
-    if (phase == GamePhase::PHASE_DEFENSE) {
-        process_ring_defense_effects(state, me, opp, damage);
-    }
+    // 指輪は属性が合っていて防具として出せるなら、武器攻撃・奇跡攻撃を問わず反撃する。
+    // 以前はここが PHASE_DEFENSE に限定されており、奇跡防御では「出せるのに何も
+    // 起きない」状態だった（火星の指輪は防御力も持たないため、出すとカードを1枚
+    // 失うだけになっていた）。
+    process_ring_defense_effects(state, me, opp, damage);
 
     apply_damage_without_revive(state, me, damage);
     if (damage > 0) {
@@ -815,7 +781,16 @@ void step_phase_miracle_plus(InternalState &state, ActionType action, int me, in
 
 /**
  * @brief 奇跡防御フェイズ（PHASE_MIRACLE_DEFENSE）における処理を行います。
- *        （奇跡防御では防具の防御力による減算は行わず、反射や打消し効果を持つ専用カードで対抗します）
+ *
+ * 防具の防御力は物理防御と同じように減算されます（docs/rules.md 4.1）。
+ * 「1枚目に他の防具を置いた場合や2枚目以降に出した場合はリアクション効果は発動せず、
+ * 防具自身の標準防御力が合算される」ためです。実測でも＜炎＞（攻10）に対して
+ * 氷の鎧（守6）を出すとダメージが4になります。
+ *
+ * 物理防御と異なるのは次の2点だけです。
+ *   - リアクションカードの合法性判定（is_active_reaction_card）
+ *   - 指輪の反撃と防具の追加効果（熱狂仮面・夢見る帽子）は物理防御でのみ発動する
+ *     ＝これらのカードは usage_timing に miracle_defence_phase を持たない
  */
 void step_phase_miracle_defense(InternalState &state, ActionType action, int me, int opp) {
     resolve_defense_step(state, action, me, opp, GamePhase::PHASE_MIRACLE_DEFENSE);

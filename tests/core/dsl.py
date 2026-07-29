@@ -238,9 +238,14 @@ class RngController:
         """
         return self.force(RollKind.ACCURACY, HAPPENS if always else NEVER, optional=optional)
 
-    def bounce(self, *, success: bool) -> RngController:
-        """＜弾く＞の成功判定を固定します。"""
-        return self.force(RollKind.BOUNCE, HAPPENS if success else NEVER)
+    def bounce(self, *, success: bool, optional: bool = False) -> RngController:
+        """＜弾く＞の成功判定を固定します。
+
+        弾き以外のリアクション（阻止・はね返す）では判定そのものが行われません。
+        複数のリアクションをまとめて検証する場合は `optional=True` を指定して
+        未消費検査の対象から外してください。
+        """
+        return self.force(RollKind.BOUNCE, HAPPENS if success else NEVER, optional=optional)
 
     def mars_ring(self, *, counters: bool) -> RngController:
         """火星の指輪の反撃発動を固定します。"""

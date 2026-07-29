@@ -311,6 +311,25 @@ struct StagedEntry {
     bool is_from_hand() const { return slot >= 0 && slot < MAX_HAND_SIZE; }
 };
 
+/**
+ * @brief 指輪の反撃1件ぶんの予約。
+ *
+ * 連撃の途中で積まれ、すべての攻撃が終わってから使われた順に解決されます。
+ * 攻撃側・防御側も持つのは、連撃の途中で攻守が入れ替わる（反射される）ことが
+ * あるためです。解決時点の attacker_id を見ても、誰の指輪だったかは分かりません。
+ */
+struct PendingCounter {
+    int attacker = -1;      // 反撃する側（＝指輪の持ち主）
+    int defender = -1;      // 反撃を受ける側
+    int power = 0;
+    Element element = ELEM_NONE;
+    HitCurse curse = CURSE_NONE;
+    bool take_cp = false;   // 金星の指輪（お金を奪う）
+    int source_id = CARD_EMPTY;
+};
+
+constexpr int MAX_PENDING_COUNTERS = 10;
+
 struct StagedCardIds {
     std::array<int, MAX_HAND_SIZE> ids;
     int count = 0;
@@ -408,7 +427,13 @@ struct alignas(64) InternalState {
     int pending_ascension_bows[2];   // 各プレイヤーの保留中昇天弓射撃回数
     bool heaven_seizure_occurred[2]; // 各プレイヤーが天国病悪化（発作）を起こしたか
 
-    // 複数回攻撃（のこぶんぶん・蜃気楼）用
+    // 複数回攻撃（のこぶんぶん・蜃気楼）用。
+    //
+    // base_* は remaining_attacks > 0 のあいだだけ意味を持つ。setup_multiple_attacks()
+    // が remaining_attacks と同時に全部を書き、handle_remaining_attacks_transition()
+    // が次の1回ぶんを復元するために読む。ターン終了時にリセットしていないので、
+    // 手番開始時には前の攻撃の値が残っている。remaining_attacks を確認せずに
+    // base_* を読むと、その古い値を掴むことになる。
     int remaining_attacks;
     int base_attacker_id;
     int base_defender_id;
@@ -417,15 +442,15 @@ struct alignas(64) InternalState {
     bool base_absorption;
     bool base_deal_same_damage;
 
-    // === 指輪の反撃予約用スタック ===
+    // === 指輪の反撃予約キュー ===
+    //
+    // 指輪の反撃は連撃がすべて終わってから、**使われた順**にまとめて解決される。
+    // 先入れ先出しなので、末尾から取り出してはいけない。
+    //
+    // 以前は7本の並列配列で持っており、1箇所でも代入を書き忘れると前の反撃の値を
+    // 引き継ぐ形だった。構造体1本にして、まとめて代入するしかないようにしてある。
     int num_pending_counters;
-    int pending_counter_attacker[10];
-    int pending_counter_defender[10];
-    int pending_counter_power[10];
-    Element pending_counter_element[10];
-    HitCurse pending_counter_curse[10];
-    bool pending_counter_take_cp[10];
-    int pending_counter_source_id[10];
+    PendingCounter pending_counters[MAX_PENDING_COUNTERS];
 
     // 反撃による災い・没収適用用
     HitCurse pending_attack_curse;

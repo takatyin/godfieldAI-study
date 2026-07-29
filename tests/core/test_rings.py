@@ -12,7 +12,7 @@ import pytest
 
 import godfield_core
 from godfield_core import CurseType, Element, EventType, GamePhase, RollKind
-from tests.core.dsl import Side, card_feature, card_id, ev
+from tests.core.dsl import Side, card_feature, card_id, card_name, ev
 from visualizer.event_formatter import format_event_log
 
 FILLER = "armor/wood-shield"
@@ -273,3 +273,199 @@ def test_ring_list_is_covered_by_these_tests():
         "armor/uranus-ring", "armor/pluto-ring", "armor/neptune-ring", "armor/venus-ring",
     }
     assert all_rings == tested, f"未検証の指輪があります: {sorted(all_rings - tested)}"
+
+
+# ============================================================================
+# 奇跡攻撃に対する指輪
+# ============================================================================
+
+# 指輪は「属性が合っていて防具として出せるなら、武器攻撃・奇跡攻撃を問わず出せる」。
+# 天王の指輪は光属性なので、火にも水にも出せる。
+# なお光属性の攻撃には対抗属性の防具が存在しない（docs/rules.md 4.1）ため、
+# 光属性の奇跡は検証対象から外している。
+LIGHT_RING = "armor/uranus-ring"
+
+
+@pytest.mark.parametrize(
+    "miracle",
+    ["miracles/ice", "miracles/flame"],
+    ids=["水属性の奇跡", "火属性の奇跡"],
+)
+def test_ring_counters_a_miracle_attack(board, miracle):
+    """指輪が奇跡攻撃に対しても反撃することを検証します。
+
+    反撃の処理は長らく物理防御フェイズに限定されており、奇跡防御では
+    「出せるのに何も起きない」状態でした。指輪は防御力も持たないので、
+    出すとカードを1枚失うだけになっていました。
+    """
+    g = board(
+        p0=Side(hp=40, mp=30, money=20, hand=[miracle]),
+        p1=Side(hp=40, mp=30, money=20, hand=[LIGHT_RING]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(miracle)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE, actor=1)
+    g.expect_legal([LIGHT_RING])
+
+    g.defend(LIGHT_RING)
+
+    # 天王の指輪の反撃はダメージを伴わない状態異常付与なので、
+    # 攻撃側にスーパーミラーで返すかを選ばせるフェイズへ移る
+    g.expect(phase=GamePhase.PHASE_SUNDRY_SELECT_MIRROR, attacker=1, defender=0)
+    g.take_hit()
+    g.expect(p0_curses={CurseType.CURSE_FLASH})
+
+
+def test_ring_still_counters_a_weapon_attack(board):
+    """武器攻撃に対する反撃が壊れていないことを検証します（対照）。"""
+    g = board(
+        p0=Side(hp=40, mp=30, money=20, hand=[PUNCH]),
+        p1=Side(hp=40, mp=30, money=20, hand=[LIGHT_RING]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(PUNCH)
+    g.defend(LIGHT_RING)
+
+    g.expect(phase=GamePhase.PHASE_SUNDRY_SELECT_MIRROR, attacker=1, defender=0)
+    g.take_hit()
+    g.expect(p0_curses={CurseType.CURSE_FLASH})
+
+
+def test_ring_counters_resolve_in_the_order_they_were_used(board):
+    """指輪の反撃が「使われた順」に解決されることを検証します。
+
+    予約は配列に積まれますが、以前は末尾から取り出しており、後から使った指輪の
+    反撃が先に解決していました（後入れ先出し）。
+    """
+    mercury = "armor/mercury-ring"  # 水属性・反撃で霧
+    uranus = "armor/uranus-ring"    # 光属性・反撃で閃光
+    torch = "weapons/torch"         # 火属性なので水・光の指輪をどちらも出せる
+
+    g = board(
+        p0=Side(hp=99, mp=30, money=20, hand=[torch]),
+        p1=Side(hp=99, mp=30, money=20, hand=[mercury, uranus]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(torch)
+    g.select(mercury, player=1)   # 先に水星の指輪
+    g.select(uranus, player=1)    # 次に天王の指輪
+    g.confirm()
+
+    fired = [e.card for e in g.event_log() if e.type == EventType.RING_EFFECT]
+    assert fired, "指輪の反撃が発動していません"
+    assert fired[0] == card_name(card_id(mercury)), (
+        f"先に使った水星の指輪から解決されるべきです: {fired}"
+    )
+
+
+def test_a_ring_counter_can_be_reflected_only_by_the_super_mirror(board):
+    """指輪の反撃はスーパーミラーでのみ反射でき、反射剣や＜壁＞では防げないことを検証します。
+
+    指輪の反撃は武器攻撃でも奇跡でもないため、無属性物理リアクション
+    （反射剣・＜壁＞）の対象になりません。虹のカーテンで無属性化しても解禁されません。
+    """
+    saturn = "armor/saturn-ring"
+    mirror = "armor/super-mirror"
+    curtain = "armor/rainbow-curtain"
+    reflection_sword = "weapons/reflection-sword"
+    wall = "miracles/wall"
+
+    g = board(
+        p0=Side(hp=99, mp=30, money=20,
+                hand=[PUNCH, mirror, reflection_sword, curtain, wall]),
+        p1=Side(hp=99, mp=30, money=20, hand=[saturn]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(PUNCH)
+    g.defend(saturn)
+
+    # 指輪の反撃が P0 へ飛ぶ
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=0, attacker=1, defender=0)
+    assert g.state.pending_attack_power > 0, "土星の指輪は被ダメージ×2の反撃を行う前提"
+
+    # 反射剣・＜壁＞は出せない
+    g.expect_illegal([reflection_sword, wall])
+    g.expect_legal([mirror])
+
+    # 虹のカーテンで無属性化しても解禁されない
+    g.select(curtain)
+    g.expect_illegal([reflection_sword, wall])
+    g.expect_legal([mirror])
+
+
+def test_super_mirror_sends_a_ring_counter_back(board):
+    """指輪の反撃をスーパーミラーで反射すると、反撃した側が受けることを検証します。"""
+    saturn = "armor/saturn-ring"
+    mirror = "armor/super-mirror"
+
+    g = board(
+        p0=Side(hp=99, mp=30, money=20, hand=[PUNCH, mirror]),
+        p1=Side(hp=99, mp=30, money=20, hand=[saturn]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(PUNCH)
+    g.defend(saturn)
+    counter_power = g.state.pending_attack_power
+
+    g.defend(mirror)
+
+    # 攻守が入れ替わり、指輪を使った側が反撃を受ける立場になる
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1, attacker=0, defender=1)
+    assert g.state.pending_attack_power == counter_power, "威力は据え置かれる"
+
+    hp_before = g.state.get_hp(1)
+    g.take_hit()
+    assert g.state.get_hp(1) == hp_before - counter_power, (
+        "反射された指輪の反撃を、指輪を使った側が受けるべきです"
+    )
+
+
+@pytest.mark.parametrize(
+    ("attack", "phase"),
+    [
+        ("weapons/torch", GamePhase.PHASE_DEFENSE),
+        ("miracles/flame", GamePhase.PHASE_MIRACLE_DEFENSE),
+    ],
+    ids=["火属性の武器攻撃", "火属性の奇跡攻撃"],
+)
+def test_a_ring_is_playable_exactly_like_a_plain_armor(board, attack, phase):
+    """指輪が、同じ属性の一般防具とまったく同じ条件で出せることを検証します。
+
+    docs/rules.md 4.3 のとおり、指輪は防具なので攻撃の種類（武器/奇跡）を問わず
+    属性が合えば出せます。カードマスタ上の usage_timing が atk_defence_phase
+    のみであることは、奇跡防御での使用を禁じるものではありません。
+
+    対抗属性の一般防具を対照に置き、合法・非合法が一致することを見ます。
+    """
+    water_ring = "armor/mercury-ring"   # 水属性（火に対抗）
+    water_armor = "armor/ice-armor"     # 水属性の一般防具
+    wrong_ring = "armor/mars-ring"      # 火属性（火には対抗できない）
+    wrong_armor = "armor/flame-helm"     # 火属性の一般防具
+
+    hand = [water_ring, water_armor, wrong_ring, wrong_armor]
+    g = board(
+        p0=Side(hp=99, mp=30, money=20, hand=[attack]),
+        p1=Side(hp=99, mp=30, money=20, hand=hand),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.expect(phase=phase, actor=1)
+
+    legal = g.legal_cards(player=1)
+    ring_ok = card_name(card_id(water_ring)) in legal
+    armor_ok = card_name(card_id(water_armor)) in legal
+    assert ring_ok == armor_ok is True, (
+        f"対抗属性の指輪と一般防具は同じく出せるべきです: {legal}"
+    )
+
+    bad_ring_ok = card_name(card_id(wrong_ring)) in legal
+    bad_armor_ok = card_name(card_id(wrong_armor)) in legal
+    assert bad_ring_ok == bad_armor_ok is False, (
+        f"属性が合わない指輪と一般防具は同じく出せないべきです: {legal}"
+    )

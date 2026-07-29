@@ -273,15 +273,16 @@ static bool is_legal_defense_card(const InternalState &state, int me, int card_i
     }
 
     // 3. リアクションカードの重ねがけ排他チェック
+    //
+    // リアクションカードは1枚目にしか置けないが、虹のカーテンの直後（2枚目）だけは
+    // 例外的に許される。これは物理防御・奇跡防御のどちらでも同じ。
+    // 以前は物理防御でしか例外を認めておらず、虹のカーテンの後に＜乱気流＞を
+    // 置けなかった（＜壁＞は置けるのに、という非対称になっていた）。
     bool is_react = is_active_reaction_card(state, card_id, defense_phase, dst.effective_atk_element);
     if (is_react) {
-        bool allowed_as_first = false;
-        if (defense_phase == GamePhase::PHASE_DEFENSE) {
-            allowed_as_first = (state.num_staged_cards[me] == 0) ||
-                               (state.num_staged_cards[me] == 1 && staged_card_id(state, me, 0) == ID_RAINBOW_CURTAIN);
-        } else {
-            allowed_as_first = (state.num_staged_cards[me] == 0);
-        }
+        bool allowed_as_first =
+            (state.num_staged_cards[me] == 0) ||
+            (state.num_staged_cards[me] == 1 && staged_card_id(state, me, 0) == ID_RAINBOW_CURTAIN);
         if (allowed_as_first) {
             return true;
         }

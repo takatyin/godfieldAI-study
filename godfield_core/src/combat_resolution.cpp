@@ -342,20 +342,23 @@ bool is_last_staged_card_miracle(const InternalState &state, int player_id) {
 /**
  * @brief 仮置き場のカードの合計消費MPを計算します（精霊による奇跡コスト0化ルールを適用）。
  */
-int calculate_staged_mp_cost(const InternalState &state, int player_id) {
+int calculate_mp_cost_excluding_magical_stick(const InternalState &state, int player_id,
+                                              bool *has_magical_stick) {
     int total_cost = 0;
     auto card_ids = get_staged_card_ids(state, player_id);
-    bool has_magical_stick = false;
+    if (has_magical_stick) *has_magical_stick = false;
 
     for (size_t i = 0; i < card_ids.size(); ++i) {
         int card_id = card_ids[i];
         if (card_id == CARD_EMPTY) continue;
         if (card_id == ID_MAGICAL_STICK) {
-            has_magical_stick = true;
+            if (has_magical_stick) *has_magical_stick = true;
             continue;
         }
         const CardFeatures &f = g_card_registry[card_id];
 
+        // 精霊系カードは「その直前（左隣）に置かれた奇跡1枚」の消費MPを0にする。
+        // 奇跡が i、精霊系が i+1 の並びになる。
         if (f.is_miracle() && (i + 1 < card_ids.size())) {
             int next_card_id = card_ids[i + 1];
             if (is_spiritual_zero_mp_card(next_card_id)) {
@@ -365,9 +368,16 @@ int calculate_staged_mp_cost(const InternalState &state, int player_id) {
         total_cost += f.mp_cost;
     }
 
+    return total_cost;
+}
+
+int calculate_staged_mp_cost(const InternalState &state, int player_id) {
+    bool has_magical_stick = false;
+    int total_cost = calculate_mp_cost_excluding_magical_stick(state, player_id, &has_magical_stick);
+
     if (has_magical_stick) {
-        int remaining_mp = std::max(0, state.mp[player_id] - total_cost);
-        total_cost += remaining_mp;
+        // マジカルステッキは残りMPを全部使う
+        total_cost += std::max(0, state.mp[player_id] - total_cost);
     }
 
     return total_cost;
@@ -743,6 +753,9 @@ void cleanup_phase_end(InternalState &state) {
     state.pending_attack_curse = CURSE_NONE;
     state.pending_take_cp = false;
     state.pending_attack_source_id = CARD_EMPTY;
+    // 仮置き中の防御力もターンをまたいで持ち越さない。ビジュアライザとテストの
+    // 局面表示が参照するため、残っているとターン開始時に前ターンの値が出る。
+    state.pending_defense_power = 0;
 }
 
 /**
@@ -921,12 +934,25 @@ static void resolve_string_of_fate(InternalState &state, int user_id) {
         }
     }
     else if (phenomenon == PHENOMENON_BLACK_HOLE) { // ブラックホール: 自分が撃った全体攻撃
-        state.attacker_id = user_id;
-        state.defender_id = opp;
-        state.current_actor_id = opp;
-        state.current_phase = GamePhase::PHASE_DEFENSE;
-        set_pending_attack(state, ID_BLACK_HOLE, 30, ELEM_DARKNESS, true); // 全体攻撃
-        state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
+        const CardFeatures &feat = g_card_registry[ID_BLACK_HOLE];
+        // 全体攻撃なので命中率が設定されている。以前はここで判定しておらず必中だった。
+        // 暗雲がかかっている相手への攻撃は判定せず必中になるのは他の全体攻撃と同じ。
+        bool hits = true;
+        if (feat.accuracy < 100 && !state.curses[opp][CURSE_TYPE_DARK_CLOUD]) {
+            hits = roll_range(state, RollKind::ACCURACY, 0, 99) < feat.accuracy;
+        }
+        if (hits) {
+            state.attacker_id = user_id;
+            state.defender_id = opp;
+            state.current_actor_id = opp;
+            state.current_phase = GamePhase::PHASE_DEFENSE;
+            // 攻撃力はカードマスタから引く（以前は 30 が直書きだった）
+            set_pending_attack(state, ID_BLACK_HOLE, feat.attack_power, feat.element,
+                               feat.is_group_attack);
+            state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;
+        } else {
+            push_event(state, user_id, EventType::ATTACK_MISS, ID_BLACK_HOLE, opp, 0.0f);
+        }
     }
     else if (phenomenon == PHENOMENON_WARM_CURRENT) { // 暖流: 自身HP+50
         add_hp(state, user_id, 50);
@@ -1082,10 +1108,11 @@ void apply_card_effect_to_target(InternalState &state, int target_id, int card_i
         remove_curse(state, target_id, CURSE_TYPE_FLASH);
     } else if (card_id == ID_SONG || card_id == ID_HEART_SHELL) {
         clear_all_status_effects(state, target_id);
-    } else if (card_id == ID_RELEASE) {
-        change_guardian(state, 0, GUARDIAN_NONE);
-        change_guardian(state, 1, GUARDIAN_NONE);
-    } else if (card_id == ID_GUARDIAN_POT) {
+    } else if (card_id == ID_RELEASE || card_id == ID_GUARDIAN_POT) {
+        // ＜解放＞と守護封印のつぼは、どちらも説明が「守護神が宿る」で効果は同じ。
+        // 封印されている守護神を解き放って宿らせる、という意味なので消すのではない。
+        // 以前 ＜解放＞ は両者の守護神を消す実装になっており、使っても守護神が
+        // 出てこなかった。
         change_guardian(state, target_id,
                         static_cast<GuardianType>(roll_range(state, RollKind::GUARDIAN_POT, 1, 10)));
     } else if (card_id == ID_NOCTURNAL_BROOM) {

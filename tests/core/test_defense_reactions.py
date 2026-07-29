@@ -21,8 +21,22 @@
 import pytest
 
 import godfield_core
-from godfield_core import ActionType, CurseType, Element, GamePhase, PhenomenonType
-from tests.core.dsl import Side, card_feature, card_id, cards_of_element, element_of
+from godfield_core import (
+    ActionType,
+    CurseType,
+    Element,
+    EventType,
+    GamePhase,
+    PhenomenonType,
+)
+from tests.core.dsl import (
+    Side,
+    all_cards,
+    card_feature,
+    card_id,
+    cards_of_element,
+    element_of,
+)
 
 FILLER = "armor/wood-shield"
 
@@ -137,11 +151,15 @@ def test_rainbow_curtain_can_only_be_the_first_card(board):
     )
 
 
-def test_rainbow_curtain_locks_out_reactions_but_unlocks_plain_armor(board):
-    """奇跡攻撃に虹のカーテンを置くと、リアクションは封じられる代わりに一般防具が使えるようになることを検証します。
+def test_rainbow_curtain_unlocks_plain_armor_and_keeps_the_reaction(board):
+    """奇跡攻撃に虹のカーテンを置くと、一般防具が解禁され、リアクションも残ることを検証します。
 
-    無属性化によって「属性が合わないので出せなかった防具」が解禁される一方、
-    ＜乱気流＞のようなリアクションはカーテンの後には重ねられません。
+    無属性化によって「属性が合わないので出せなかった防具」が解禁されます。
+    ＜乱気流＞のようなリアクションは1枚目にしか置けませんが、虹のカーテンの
+    直後（2枚目）だけは例外的に許されます。
+
+    以前この例外は物理防御でしか認められておらず、虹のカーテンの後に
+    ＜壁＞は置けるのに＜乱気流＞は置けない、という非対称になっていました。
     """
     armor = "armor/wood-shield"
     g = board(
@@ -159,14 +177,32 @@ def test_rainbow_curtain_locks_out_reactions_but_unlocks_plain_armor(board):
 
     g.select(CURTAIN)
 
-    # 無属性化で一般防具が解禁される一方、リアクションは重ねられなくなる
-    g.expect_legal([armor])
-    g.expect_illegal([TURBULENCE])
+    # 無属性化で一般防具が解禁され、カーテン直後なのでリアクションも置ける
+    g.expect_legal([armor, TURBULENCE])
 
     g.defend(armor)
 
     damage = card_feature(FLAME, "attack_power") - card_feature(armor, "defense_power")
     g.expect(p1_hp=40 - damage, phase=GamePhase.PHASE_MAIN)
+
+
+def test_a_reaction_cannot_follow_a_plain_armor(board):
+    """一般防具を置いた後にはリアクションを重ねられないことを検証します。
+
+    例外は虹のカーテンの直後だけで、他の防具を挟むと置けなくなります。
+    """
+    armor = "armor/aqua-shoes"   # 水属性なので火属性の奇跡に出せる
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[FLAME]),
+        p1=Side(hp=40, mp=10, hand=[armor, TURBULENCE]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(FLAME)
+    g.expect_legal([TURBULENCE])
+
+    g.select(armor)
+    g.expect_illegal([TURBULENCE])
 
 
 @pytest.mark.parametrize(
@@ -898,3 +934,251 @@ def test_the_cards_named_in_this_file_still_have_the_roles_assumed():
     assert card_feature("weapons/sky-harpoon", "reaction_type") == "bounce"
     assert card_feature("weapons/angel-bow", "reaction_type") == "block"
     assert card_id(CURTAIN) >= 0
+
+
+# ============================================================================
+# 連撃 × 反射
+# ============================================================================
+
+
+def test_reflection_only_bounces_the_first_hit_of_a_multi_attack(board):
+    """連撃の1発目を反射しても、2発目は元の向きに戻ることを検証します。
+
+    のこぶんぶんは2回攻撃します。1発目を反射剣で返すと攻守が入れ替わり、
+    撃った側がその1発を防御します。それが解決すると向きが戻り、2発目は
+    改めて元の防御側が受けます。
+
+    反射した1発も「1回ぶんの攻撃」として数えるので、連撃の残り回数は減ります。
+    """
+    saw = "weapons/saw-boom-boom"
+    armor = "armor/leather-clothes"
+    power = card_feature(saw, "attack_power")
+
+    g = board(
+        p0=Side(hp=99, mp=30, hand=[saw]),
+        p1=Side(hp=99, mp=30, hand=[REFLECTION_SWORD, armor]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(saw)
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1, attacker=0, defender=1)
+    assert g.state.remaining_attacks == 2, "のこぶんぶんは2回攻撃する前提"
+
+    # 1発目を反射: 攻守が入れ替わる（残り回数はまだ減らない）
+    g.defend(REFLECTION_SWORD)
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=0, attacker=1, defender=0)
+    assert g.state.remaining_attacks == 2
+
+    # 反射された1発を撃った側が受ける -> 向きが戻り、残り1回になる
+    g.take_hit()
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=1, attacker=0, defender=1, p0_hp=99 - power)
+    assert g.state.remaining_attacks == 1
+
+    # 2発目は元の防御側が受ける
+    g.defend(armor)
+    damage = max(0, power - card_feature(armor, "defense_power"))
+    g.expect(phase=GamePhase.PHASE_MAIN, p0_hp=99 - power, p1_hp=99 - damage)
+    assert g.state.remaining_attacks == 0
+
+
+def test_a_dead_player_can_only_confirm_in_a_defense_phase(board):
+    """死亡したプレイヤーは、防御フェイズで確定しか選べないことを検証します。
+
+    指輪の反撃は予約した側・受ける側の生死によらず解決されるため、既に死んでいる
+    プレイヤーへ反撃が飛ぶことがあります。その場合、防具もスーパーミラーも出せず、
+    確定を押すだけになります。
+
+    邪神の大剣（相打ち）でちょうど死ぬHPにしておき、防御側の土星の指輪の反撃が
+    死んだ攻撃側へ飛ぶ局面を作ります。
+    """
+    evil = "weapons/evil-broadsword"   # 相打ち: 与えたダメージを自分も受ける
+    saturn = "armor/saturn-ring"       # 土属性・反撃で被ダメージ×2
+    wood_armor = "armor/laurel-wreath"  # 木属性なので土属性の反撃に出せる
+    power = card_feature(evil, "attack_power")
+
+    g = board(
+        p0=Side(hp=power, mp=30, hand=[evil, wood_armor, SUPER_MIRROR]),
+        p1=Side(hp=99, mp=30, hand=[saturn]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(evil)
+    g.defend(saturn)
+
+    # 相打ちで P0 が死亡し、そのまま指輪の反撃の防御フェイズに入る
+    g.expect(phase=GamePhase.PHASE_DEFENSE, actor=0, p0_hp=0, is_done=False)
+    assert g.state.pending_attack_element == element_of(saturn), (
+        "土星の指輪の反撃が飛んでいる前提"
+    )
+
+    # 属性も使用状況も問題ないカードを持っているが、死んでいるので出せない
+    assert g.state.get_is_used(0, 1) is False and g.state.get_is_used(0, 2) is False
+    g.expect_illegal([wood_armor, SUPER_MIRROR])
+
+    actions = g.legal_actions()
+    assert actions[ActionType.ACTION_CONFIRM] is True, "確定だけは選べるべきです"
+    assert sum(actions) == 1, "確定以外の選択肢があってはいけません"
+
+
+# ============================================================================
+# ＜壁＞・＜乱気流＞: 防御専用の奇跡リアクション
+# ============================================================================
+
+SPIRIT_DOLL = "sundries/spiritual-doll"   # 精霊系（雑貨）
+
+
+@pytest.mark.parametrize(
+    ("reaction", "attack", "phase", "legal"),
+    [
+        (WALL, "weapons/punch", GamePhase.PHASE_DEFENSE, True),
+        (WALL, "weapons/torch", GamePhase.PHASE_DEFENSE, False),
+        (WALL, FLAME, GamePhase.PHASE_MIRACLE_DEFENSE, False),
+        (TURBULENCE, FLAME, GamePhase.PHASE_MIRACLE_DEFENSE, True),
+        (TURBULENCE, "miracles/meteor", GamePhase.PHASE_MIRACLE_DEFENSE, True),
+        (TURBULENCE, "weapons/punch", GamePhase.PHASE_DEFENSE, False),
+    ],
+    ids=[
+        "壁は無属性の武器攻撃に出せる",
+        "壁は有属性の武器攻撃には出せない",
+        "壁は奇跡攻撃には出せない",
+        "乱気流は火属性の奇跡に出せる",
+        "乱気流は光属性の奇跡にも出せる",
+        "乱気流は武器攻撃には出せない",
+    ],
+)
+def test_what_wall_and_turbulence_can_be_played_against(board, reaction, attack, phase, legal):
+    """＜壁＞は無属性の武器攻撃だけ、＜乱気流＞は任意の奇跡だけに出せることを検証します。"""
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[reaction]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.hits(always=True, optional=True)
+
+    g.attack(attack)
+    g.expect(phase=phase)
+
+    if legal:
+        g.expect_legal([reaction])
+    else:
+        g.expect_illegal([reaction])
+
+
+def _reactions_for(phase_timing: str) -> list[str]:
+    """指定の防御フェイズで使えるリアクションカードをマスタから集めます。"""
+    return [
+        c["id_str"]
+        for c in all_cards()
+        if c.get("reaction_type")
+        and c["id_str"] != CURTAIN
+        and phase_timing in (c.get("usage_timing") or [])
+    ]
+
+
+@pytest.mark.parametrize(
+    "reaction", _reactions_for("atk_defence_phase"), ids=lambda r: r
+)
+def test_every_physical_reaction_can_follow_the_rainbow_curtain(board, reaction):
+    """物理防御のリアクションが、すべて虹のカーテンの後に置けることを検証します。
+
+    リアクションは本来1枚目にしか置けませんが、虹のカーテンの直後だけは
+    例外的に許されます。カードを名指しせずマスタから集めるので、
+    リアクションカードが増えても自動で検証対象に入ります。
+    """
+    attack = "weapons/torch"  # 火属性なので、カーテンなしでは属性が合わない
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN, reaction]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.hits(always=True, optional=True)
+
+    g.attack(attack)
+    g.expect(phase=GamePhase.PHASE_DEFENSE)
+
+    g.select(CURTAIN)
+    g.expect_legal([reaction])
+
+
+@pytest.mark.parametrize(
+    "reaction", _reactions_for("miracle_defence_phase"), ids=lambda r: r
+)
+def test_every_miracle_reaction_can_follow_the_rainbow_curtain(board, reaction):
+    """奇跡防御のリアクションが、すべて虹のカーテンの後に置けることを検証します。
+
+    以前この例外は物理防御にしか適用されておらず、虹のカーテンの後に
+    ＜乱気流＞などを置けませんでした。
+    """
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[FLAME]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN, reaction]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.hits(always=True, optional=True)
+
+    g.attack(FLAME)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE)
+
+    g.select(CURTAIN)
+    g.expect_legal([reaction])
+
+
+@pytest.mark.parametrize(
+    ("reaction", "attack", "fired"),
+    [
+        (TURBULENCE, FLAME, EventType.BOUNCE_ATTACK),
+        ("armor/angel-armor", FLAME, EventType.BLOCK_ATTACK),
+        ("armor/moonlight-armor", FLAME, EventType.REFLECT_DAMAGE),
+        (SUPER_MIRROR, FLAME, EventType.REFLECT_DAMAGE),
+        (WALL, "weapons/torch", EventType.BLOCK_ATTACK),
+        (REFLECTION_SWORD, "weapons/torch", EventType.REFLECT_DAMAGE),
+    ],
+    ids=["乱気流で弾く", "エンゼルで阻止", "月光ではね返す", "ミラーではね返す",
+         "壁で阻止", "反射剣ではね返す"],
+)
+def test_a_reaction_after_the_curtain_actually_fires(board, reaction, attack, fired):
+    """虹のカーテンの後に置いたリアクションが、実際に発動することを検証します。
+
+    合法手として置けるだけでは不十分で、2枚目に置いた場合にリアクション効果が
+    発動せず防御力だけが乗る、という状態になっていないかを見ます。
+    """
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN, reaction]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.hits(always=True, optional=True)
+    g.rng.bounce(success=True, optional=True)
+
+    g.attack(attack)
+    g.select(CURTAIN)
+    g.defend(reaction)
+
+    assert any(e.type == fired for e in g.event_log()), (
+        f"{reaction} のリアクション（{fired.name}）が発動していません"
+    )
+
+
+@pytest.mark.parametrize(
+    ("reaction", "attack"),
+    [(WALL, "weapons/punch"), (TURBULENCE, FLAME)],
+    ids=["＜壁＞の後", "＜乱気流＞の後"],
+)
+def test_a_spiritual_card_can_follow_wall_and_turbulence(board, reaction, attack):
+    """＜壁＞＜乱気流＞の直後に精霊系を重ねて消費MPを0にできることを検証します。"""
+    mp_cost = card_feature(reaction, "mp_cost")
+    assert mp_cost > 0, "消費MPが0ならこの検証は意味がありません"
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=mp_cost - 1, hand=[reaction, SPIRIT_DOLL]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.hits(always=True, optional=True)
+
+    g.attack(attack)
+    g.select(reaction)
+    g.expect_legal([SPIRIT_DOLL])
+
+    g.defend(SPIRIT_DOLL)
+    g.expect(p1_mp=mp_cost - 1)  # 精霊系で相殺されるのでMPは減らない

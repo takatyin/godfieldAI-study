@@ -81,34 +81,46 @@ def test_discard_flow_logs_stage_then_discard(board):
 
 
 def test_guardian_enter_and_leave_events(board):
-    """守護神の降臨（守護封印のつぼ）と退散（＜解放＞）がイベントに記録されることを検証します。"""
-    summoned = int(GuardianType.SATURN)
-    g = board(p0=Side(hp=40, mp=50, hand=["sundries/guardian-pot"]), p1=Side(hp=40))
+    """守護神の降臨と交代（退散→降臨）がイベントに記録されることを検証します。
+
+    ＜解放＞と守護封印のつぼはどちらも「守護神が宿る」効果です。既に守護神が
+    憑いている状態で使うと、元の守護神が帰ってから新しい守護神が宿るため、
+    GUARDIAN_LEAVE と GUARDIAN_ENTER が続けて記録されます。
+    """
+    first = int(GuardianType.SATURN)
+    second = int(GuardianType.MARS)
+
+    g = board(
+        p0=Side(hp=40, mp=50, hand=["sundries/guardian-pot", "miracles/release"]),
+        p1=Side(hp=40),
+    )
     g.rng.deck_always(FILLER)
-    g.rng.guardian_pot(summoned)
+    g.rng.guardian_pot(first)
 
     g.attack("sundries/guardian-pot", to_self=True)
     g.confirm()
 
-    g.expect(p0_guardian=summoned)
+    g.expect(p0_guardian=first)
     enter_events = events_of(g, EventType.GUARDIAN_ENTER)
     assert enter_events
-    assert enter_events[-1].value == summoned
+    assert enter_events[-1].value == first
     assert "宿った！" in format_event_log(enter_events[-1], 0)["text"]
+    assert not events_of(g, EventType.GUARDIAN_LEAVE), (
+        "守護神が憑いていない状態からの降臨では退散は起きない"
+    )
 
-    # ＜解放＞で両者の守護神を解除する
+    # ＜解放＞で別の守護神に交代する（元の守護神は帰る）
     g.state.current_phase = GamePhase.PHASE_MAIN
     g.state.current_actor_id = 0
-    g.state.set_true_hand(0, 0, card_id("miracles/release"))
-    for i in range(1, 18):
-        g.state.set_true_hand(0, i, godfield_core.CARD_EMPTY)
+    g.rng.guardian_pot(second)
 
     g.attack("miracles/release", to_self=True)
     g.confirm()
 
-    g.expect(p0_guardian=0)
+    g.expect(p0_guardian=second)
     leave_events = events_of(g, EventType.GUARDIAN_LEAVE)
-    assert leave_events
+    assert leave_events, "交代時には元の守護神の退散が記録されるべきです"
+    assert leave_events[-1].value == first
     assert "帰っていった" in format_event_log(leave_events[-1], 0)["text"]
 
 

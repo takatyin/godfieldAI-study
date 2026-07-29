@@ -446,7 +446,12 @@ def trigger_phenomenon(board, phenomenon, *, p0=None, p1=None, **rng_kwargs):
     g.rng.deck_always(FILLER)
     g.rng.phenomenon(phenomenon)
     for kind, value in rng_kwargs.items():
-        g.rng.force(getattr(RollKind, kind.upper()), value)
+        # 値だけでなく (値, optional) のタプルも受け付ける。
+        # 「判定が行われないこと」を検証したい場合は未消費検査から外す必要がある。
+        optional = False
+        if isinstance(value, tuple):
+            value, optional = value
+        g.rng.force(getattr(RollKind, kind.upper()), value, optional=optional)
     g.attack(FATE, to_self=True)
     return g
 
@@ -500,9 +505,15 @@ def test_gigantic_tub_on_opponent_opens_a_defense_phase(board):
 
 
 def test_black_hole_is_a_group_darkness_attack(board):
-    """ブラックホール: 相手に闇属性の全体攻撃が飛ぶことを検証します。"""
+    """ブラックホール: 相手に闇属性の全体攻撃が飛ぶことを検証します。
+
+    全体攻撃なので命中率が設定されています（命中を固定しないと、外れた場合に
+    防御フェイズが起動せずテストが不安定になります）。
+    """
     source = "phenomena/black-hole"
-    g = trigger_phenomenon(board, PhenomenonType.BLACK_HOLE)
+    assert card_feature(source, "accuracy") < 100, "命中率100%ならこの固定は不要です"
+
+    g = trigger_phenomenon(board, PhenomenonType.BLACK_HOLE, accuracy=godfield_core.ROLL_MIN)
 
     g.expect(
         phase=GamePhase.PHASE_DEFENSE,
@@ -513,6 +524,34 @@ def test_black_hole_is_a_group_darkness_attack(board):
         pending_is_group=True,
     )
     assert g.state.pending_attack_source_id == card_id(source)
+
+
+def test_black_hole_can_miss(board):
+    """ブラックホールが命中率どおり外れることを検証します。
+
+    以前は命中判定そのものが行われておらず、カードマスタの命中率75%を無視して
+    必中でした。全体攻撃なので命中率が設定されています。
+    """
+    g = trigger_phenomenon(board, PhenomenonType.BLACK_HOLE, accuracy=godfield_core.ROLL_MAX)
+
+    # 外れたので防御フェイズは起動せず、そのままターンが進む
+    assert g.state.current_phase != GamePhase.PHASE_DEFENSE
+    g.expect(p0_hp=99, p1_hp=99)
+
+
+def test_black_hole_always_hits_a_dark_clouded_target(board):
+    """暗雲の相手にはブラックホールの命中判定が行われないことを検証します。
+
+    他の全体攻撃と同じ扱いです。
+    """
+    g = trigger_phenomenon(
+        board, PhenomenonType.BLACK_HOLE,
+        p1=Side(hp=99, mp=10, money=10, curses=[godfield_core.CurseType.CURSE_DARK_CLOUD]),
+        accuracy=(godfield_core.ROLL_MAX, True),
+    )
+
+    g.expect(phase=GamePhase.PHASE_DEFENSE, attacker=0, defender=1)
+    assert g.rng.consumed(RollKind.ACCURACY) == 0, "暗雲下では命中判定を行わないべきです"
 
 
 def test_warm_current_heals_the_user(board):

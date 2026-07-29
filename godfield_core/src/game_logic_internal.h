@@ -158,6 +158,19 @@ DreamGroup calculate_dream_group(int card_id);
 int calculate_staged_mp_cost(const InternalState &state, int player_id);
 
 /**
+ * @brief マジカルステッキを除いた消費MPを計算します（精霊系による0化を適用）。
+ *
+ * マジカルステッキの威力は「残りMP×2」なので、威力計算にはステッキ以外の消費MPが
+ * 必要になります。この規則を calculate_staged_mp_cost() と別々に書いていたため、
+ * 精霊系の扱いが2箇所に複製されていました（片方だけ変えると攻撃力とMP消費が
+ * 食い違います）。
+ *
+ * @param has_magical_stick 非 nullptr なら、仮置きにステッキが含まれるかを書き込みます。
+ */
+int calculate_mp_cost_excluding_magical_stick(const InternalState &state, int player_id,
+                                              bool *has_magical_stick);
+
+/**
  * @brief 指定した手札スロットのカードを仮置き場に追加した場合に、消費MPを支払えるかを判定します。
  * @param state ゲーム状態。
  * @param player_id 対象プレイヤーID。

@@ -30,6 +30,7 @@ from tests.core.dsl import (
 EARTH = int(godfield_core.GuardianType.EARTH)
 MOON = int(godfield_core.GuardianType.MOON)
 JUPITER = int(godfield_core.GuardianType.JUPITER)
+SATURN = int(godfield_core.GuardianType.SATURN)
 
 # 補充ドローで盤面が動かないようにするための無害なカード。
 # 木の盾は防具なので手札に加わるだけで、フェイズ遷移も状態異常も起こさない。
@@ -67,8 +68,17 @@ def earth_turn(
     return g
 
 
-def moon_turn(miracle: str, *, p0: Side | None = None, p1: Side | None = None) -> Game:
-    """P1 に月神を憑依させ、P0 が祈ってターンを終え、月神が `miracle` を発動した局面を作ります。"""
+def moon_turn(
+    miracle: str,
+    *,
+    p0: Side | None = None,
+    p1: Side | None = None,
+    guardian_pot: int | None = None,
+) -> Game:
+    """P1 に月神を憑依させ、P0 が祈ってターンを終え、月神が `miracle` を発動した局面を作ります。
+
+    `guardian_pot` を渡すと、守護神の抽選（＜解放＞で使う）を固定します。
+    """
     g = Game(
         p0=p0 if p0 is not None else Side(hp=99, mp=10, money=10, hand=[FILLER]),
         p1=p1 if p1 is not None else Side(hp=40, mp=10, money=10, guardian=MOON, hand=[FILLER]),
@@ -76,6 +86,8 @@ def moon_turn(miracle: str, *, p0: Side | None = None, p1: Side | None = None) -
     g.rng.guardian_act(acts=True)
     g.rng.moon_miracle(miracle)
     g.rng.deck_always(FILLER)
+    if guardian_pot is not None:
+        g.rng.guardian_pot(guardian_pot)
     g.pray()
     return g
 
@@ -549,14 +561,20 @@ def test_moon_treasure_gives_money_to_the_owner(board):
     g.expect(p1_money=20, phase=GamePhase.PHASE_MAIN)
 
 
-def test_moon_release_clears_both_guardians(board):
-    """月神: ＜解放＞は両者の守護神を解除します（自分の月神も消える）。"""
+def test_moon_release_summons_a_guardian_for_its_owner(board):
+    """月神: ＜解放＞は持ち主に守護神を宿らせます（相手には影響しません）。
+
+    ＜解放＞の説明は「守護神が宿る」で、守護封印のつぼと同じ効果です。
+    以前は両者の守護神を消す実装になっており、使っても守護神が出てきませんでした。
+    """
+    summoned = SATURN
     g = moon_turn(
         "miracles/release",
         p0=Side(hp=99, guardian=JUPITER, hand=[FILLER]),
         p1=Side(hp=40, guardian=MOON, hand=[FILLER]),
+        guardian_pot=summoned,
     )
-    g.expect(p0_guardian=0, p1_guardian=0)
+    g.expect(p0_guardian=JUPITER, p1_guardian=summoned)
 
 
 def test_moon_song_cures_the_owners_sickness(board):

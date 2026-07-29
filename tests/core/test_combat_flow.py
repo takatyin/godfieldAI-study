@@ -4,6 +4,7 @@ import pytest
 import godfield_core
 from godfield_core import ActionType, Element, GamePhase, RollKind
 from tests.core.dsl import (
+    Game,
     Side,
     all_cards,
     armor_of_element,
@@ -1601,3 +1602,126 @@ def test_group_attack_applies_its_hit_curse(board, card_data):
         g.expect(p1_curses={_HIT_CURSE_TO_STATE[curse]})
     else:
         g.expect(p1_sickness=_HIT_CURSE_TO_SICKNESS[curse])
+
+
+# ==========================================
+# 精霊系カードの重ね置き
+# ==========================================
+
+
+def test_spiritual_staff_adds_no_attack_when_stacked_on_a_miracle():
+    """精霊の杖を奇跡に重ねても攻撃力が増えないことを検証します。
+
+    精霊系は「直前の奇跡の消費MPを0にする」だけでプラス攻撃ではありません。
+    しかし精霊の杖は武器としては攻撃力12を持つため、以前は奇跡に重ねると
+    その12が加算されていました（＜炎＞攻10 + 精霊の杖 -> 22）。
+    """
+    miracle = "miracles/flame"
+    staff = "weapons/spiritual-staff"
+    atk = card_feature(miracle, "attack_power")
+    assert card_feature(staff, "attack_power") > 0, (
+        "精霊の杖が攻撃力を持たないなら、このテストは何も検証していません"
+    )
+
+    g = Game(
+        p0=Side(hp=99, mp=99, hand=[miracle, staff]),
+        p1=Side(hp=99, mp=99, hand=[]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select(miracle)
+    g.select(staff)
+    g.target_opp()
+
+    g.expect(pending_power=atk, pending_element=element_of(miracle))
+    # 消費MPが0になるので、奇跡のMPは引かれない
+    g.expect(p0_mp=99)
+
+
+def test_spiritual_staff_is_a_normal_weapon_when_played_first():
+    """精霊の杖を1枚目に置いた場合は、普通の武器として攻撃力を持つことを検証します。
+
+    上の除外が「精霊の杖は常に攻撃力0」になってしまっていないことの担保です。
+    """
+    staff = "weapons/spiritual-staff"
+    atk = card_feature(staff, "attack_power")
+
+    g = Game(
+        p0=Side(hp=99, mp=99, hand=[staff]),
+        p1=Side(hp=99, mp=99, hand=[]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(staff)
+
+    g.expect(pending_power=atk, pending_element=element_of(staff))
+
+
+# ==========================================
+# カード説明文とカードデータの整合
+# ==========================================
+
+_CURSE_WORDS = {
+    "風邪": "cold", "熱病": "fever", "地獄病": "hell", "天国病": "heaven",
+    "霧": "fog", "閃光": "flash", "暗雲": ("dark_cloud", "dark cloud"), "夢": "dream",
+}
+_REACTION_WORDS = {"弾く": "bounce", "はね返す": "reflect", "止める": "block"}
+
+
+def _formulaic_description_checks():
+    """説明文が定型のカードについて、(カード, 検証内容) の組を作ります。"""
+    import re
+
+    checks = []
+    for c in all_cards():
+        desc = c.get("description")
+        if not desc:
+            continue
+
+        m = re.fullmatch(r"守(\d+)", desc)
+        if m:
+            checks.append((c, "defense_power", int(m.group(1)), c.get("defense_power") or 0))
+
+        m = re.fullmatch(r"\+攻(\d+)", desc)
+        if m:
+            checks.append((c, "attack_power", int(m.group(1)), c.get("attack_power") or 0))
+
+        m = re.fullmatch(r"(\d+)%全体攻撃", desc)
+        if m:
+            checks.append((c, "accuracy", int(m.group(1)), c.get("accuracy") or 100))
+            checks.append((c, "is_group_attack", True, bool(c.get("is_group_attack"))))
+
+        m = re.fullmatch(r"ダメージを与えた対象を(.+?)状態にする", desc)
+        if m:
+            want = _CURSE_WORDS[m.group(1)]
+            got = c.get("hit_curse")
+            ok = got in want if isinstance(want, tuple) else got == want
+            checks.append((c, "hit_curse", want, got if ok else f"{got}（不一致）"))
+            if ok:
+                checks[-1] = (c, "hit_curse", want, want)
+
+        m = re.fullmatch(r"(?:無属性武器|奇跡)を(弾く|はね返す|止める)", desc)
+        if m:
+            checks.append((c, "reaction_type", _REACTION_WORDS[m.group(1)], c.get("reaction_type")))
+    return checks
+
+
+@pytest.mark.parametrize(
+    ("card", "field", "expected", "actual"),
+    _formulaic_description_checks(),
+    ids=lambda v: v["id_str"] if isinstance(v, dict) else str(v),
+)
+def test_card_description_matches_the_card_data(card, field, expected, actual):
+    """定型の説明文と、カードデータの該当フィールドが一致することを検証します。
+
+    ＜解放＞は説明が「守護神が宿る」なのに実装が守護神を消しており、使っても
+    守護神が出てこないという不具合がありました。説明文は仕様の記録として
+    使われているので、データとの食い違いは実装の食い違いに直結します。
+
+    ここで見るのは「説明文とデータ」の整合だけです（説明文と実装の整合は
+    カードごとの個別テストが担います）。数値や種別の打ち間違いを機械的に
+    弾くのが目的です。
+    """
+    assert actual == expected, (
+        f"{card['id_str']} の説明『{card['description']}』と {field}={actual} が食い違っています"
+    )

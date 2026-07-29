@@ -26,6 +26,9 @@ PYBIND11_MODULE(godfield_core, m) {
     m.doc() = "GodField core engine and RL environment pool";
 
     m.attr("OBSERVATION_SIZE") = sizeof(Observation) / sizeof(float);
+    // InternalState は環境の数だけ並ぶ（学習時は1024環境）ので、大きさがそのまま
+    // キャッシュ効率に効く。意図せず膨らんでいないかテストから確認できるように公開する。
+    m.attr("INTERNAL_STATE_SIZE") = static_cast<int>(sizeof(InternalState));
     m.attr("OBSERVATION_FEATURE_SIZE") = (offsetof(Observation, action_mask) + sizeof(decltype(Observation::action_mask))) / sizeof(float);
     // 観測配列のどこから合法手マスクが始まるかを決めるため、Python 側はこの値を参照すること。
     // 定数をコピーすると行動空間の拡張時に黙ってズレる。

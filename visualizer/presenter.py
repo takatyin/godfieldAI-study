@@ -2,6 +2,10 @@ import godfield_core
 from visualizer.constants import CARDS_BY_ID, CURSE_NAMES, GUARDIAN_NAMES, SICKNESS_NAMES
 from visualizer.event_formatter import format_event_log
 
+# 相手の非公開スロットを「裏向きのカード」として描くためのプレースホルダ。
+# 実際のカードIDではなく、枠を表示するためだけに使う（表示可否は hidden で判定する）。
+HIDDEN_CARD_PLACEHOLDER = 0
+
 
 def normalize_element(element):
     if not element:
@@ -189,6 +193,26 @@ def compute_smart_action_label(action_id, staged_cards, game_state):
     return ""
 
 
+def deployed_order_of(slot_idx, is_deployed):
+    """展開済み奇跡の並び順を返します（未展開なら -1）。
+
+    フロントエンドはこの値の降順で展開済みカードを並べます（古いものが右端）。
+
+    エンジンは「どの順に展開したか」を保持していません（deploy_miracle は
+    is_deployed のブール値を立てるだけ）。以前ここでは
+    state.get_num_deployed_miracles() / get_deployed_miracle_order() を
+    呼んでいましたが、これらは C++ 側に存在せず、奇跡を展開した瞬間に
+    AttributeError で可視化サーバーが落ちていました。
+
+    並び順にはスロット番号を使います。**真の展開順は意図的に追跡していません。**
+    実装するなら InternalState に順序を持たせることになりますが、この構造体は
+    環境の数だけ並ぶ（学習時は1024環境）ので、見た目だけの都合で大きくするのは
+    割に合わないという判断です。順序が狂って見えることがあっても不具合では
+    ありません。
+    """
+    return slot_idx if is_deployed else -1
+
+
 def serialize_observation(obs, player_id, state):
     phase = state.current_phase.name
     staged_cids = [cid for cid in obs.get_staged_cards() if cid != -1]
@@ -356,14 +380,7 @@ def serialize_observation(obs, player_id, state):
             card_info["selected"] = state.get_is_used(player_id, idx)
             card_info["deployed"] = state.get_is_deployed(player_id, idx)
 
-            deployed_order = -1
-            if card_info["deployed"]:
-                num_deployed = state.get_num_deployed_miracles(player_id)
-                for k in range(num_deployed):
-                    if state.get_deployed_miracle_order(player_id, k) == idx:
-                        deployed_order = k
-                        break
-            card_info["deployed_order"] = deployed_order
+            card_info["deployed_order"] = deployed_order_of(idx, card_info["deployed"])
         hand.append(card_info)
 
     staged = []
@@ -373,25 +390,37 @@ def serialize_observation(obs, player_id, state):
         actual_slot_idx = state.get_staged_card(player_id, idx)
         staged.append(get_card_info(cid, slot_idx=actual_slot_idx, owner_id=player_id, is_staged=True))
 
+    # 相手の手札はスロット順に並べる。
+    #
+    # 観測の opponent_hand_cards は「公開されているカードだけを左詰め」した配列
+    # （スロット位置が漏れないようにするため）なので、その添字はスロット番号では
+    # ない。以前はこれをスロット番号として使っており、公開カードが別のスロットに
+    # 表示され、表示可否の判定も別のスロットを見ていた。
+    #
+    # ここはデバッグ用の表示なので、スロットとの対応は state から直接取る。
+    # 見えてよいかどうかは観測と同じ条件（公開済み、または展開済み。ただし
+    # 自分が霧なら公開済みは見えない）で判定する。
     opp_id = 1 - player_id
+    is_me_fog = state.get_curses(player_id, godfield_core.CurseType.CURSE_FOG)
     opp_hand = []
-    for idx, cid in enumerate(obs.get_opponent_hand_cards()):
+    for idx in range(godfield_core.MAX_HAND_SIZE):
         if state.get_apparent_hand(opp_id, idx) == -1:
             continue
+        visible = state.get_is_deployed(opp_id, idx) or (
+            state.get_is_known_to_opp(opp_id, idx) and not is_me_fog
+        )
+        # 非公開のスロットも「裏向きのカード」として描くため、プレースホルダの
+        # カードIDを渡す（get_card_info は -1 だと None を返して枠ごと消える）。
+        # 見えるかどうかは cid ではなく visible で判定するので、公開された
+        # カードID 0（両替）が裏向き扱いになることはない。
+        cid = state.get_true_hand(opp_id, idx) if visible else HIDDEN_CARD_PLACEHOLDER
         card_info = get_card_info(cid, slot_idx=idx, owner_id=opp_id)
         if card_info:
             card_info["slot_idx"] = idx
-            card_info["hidden"] = cid == 0 or cid == -1
+            card_info["hidden"] = not visible
             card_info["selected"] = state.get_is_used(opp_id, idx)
             card_info["deployed"] = state.get_is_deployed(opp_id, idx)
-            deployed_order = -1
-            if card_info["deployed"]:
-                num_deployed = state.get_num_deployed_miracles(opp_id)
-                for k in range(num_deployed):
-                    if state.get_deployed_miracle_order(opp_id, k) == idx:
-                        deployed_order = k
-                        break
-            card_info["deployed_order"] = deployed_order
+            card_info["deployed_order"] = deployed_order_of(idx, card_info["deployed"])
         opp_hand.append(card_info)
 
     opp_staged = []
