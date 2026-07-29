@@ -234,3 +234,29 @@ uv run python visualize_server.py
 サーバーが起動したら、ブラウザで以下のURLを開いてください：
 👉 **[http://localhost:8000/](http://localhost:8000/)**
 
+---
+
+## 学習用サーバーについて (Training Server Environment)
+
+強化学習（RL）の本番学習には、計算資源の豊富な専用の学習用サーバーを利用します。
+
+### ハードウェア仕様
+* **CPU**: AMD EPYC 7452 32-Core Processor
+* **GPU**: NVIDIA RTX 3090 × 4
+* **OS**: Linux (Ubuntu) - 最新のGPUドライバ適用済み
+
+### アクセス方法
+学習用サーバー `istanbul02` には、踏み台サーバー `pisa` を経由して SSH 接続します。
+ローカルマシンの `~/.ssh/config` 等でプロキシジャンプ（ProxyJump）の設定が行われている前提で、以下のコマンドで直接アクセス可能です。
+
+```bash
+ssh istanbul02
+```
+
+* **ユーザー名**: `otani`
+* **作業ディレクトリ**: `/home/otani/GodFieldAI`
+
+### GitHubへのアクセス (SSH Agent Forwarding)
+サーバー上でのリポジトリの clone や pull などの Git 操作は、ローカルマシンの SSH 鍵を転送する **SSH Agent Forwarding** を利用して行います。
+これにより、サーバー上に直接秘密鍵を配置することなく安全に GitHub へアクセス可能です。
+

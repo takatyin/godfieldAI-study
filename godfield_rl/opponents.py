@@ -82,6 +82,40 @@ class HeuristicOpponent:
         return actions.astype(np.int32)
 
 
+class FrozenOpponent:
+    """保存された学習済みモデル（方策）を用いて行動を決定する相手。"""
+
+    def __init__(self, model):
+        self.model = model
+
+    def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
+        # MaskablePPO の predict は action_masks を受け取る
+        actions, _ = self.model.predict(observations, action_masks=action_masks, deterministic=False)
+        return actions.astype(np.int32)
+
+
+class PoolOpponent:
+    """複数の相手方策の中から、ステップ単位（バッチ単位）でランダムに選んで推論する相手。
+    
+    GPUのバッチ効率を保つため、act() が呼ばれるたびに1つのモデルが選ばれ、
+    そのモデルがバッチ内の全環境の相手をまとめて担当します。
+    """
+
+    def __init__(self, opponents: list[Opponent] | None = None, seed: int = 0):
+        self.opponents = opponents if opponents is not None else []
+        self._rng = np.random.default_rng(seed)
+
+    def add_opponent(self, opponent: Opponent):
+        self.opponents.append(opponent)
+
+    def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
+        if not self.opponents:
+            raise RuntimeError("対戦相手のプールが空です。")
+        # プールからランダムに1つの対戦相手を選ぶ
+        opponent = self._rng.choice(self.opponents)
+        return opponent.act(observations, action_masks)
+
+
 def make_opponent(kind: str, seed: int = 0) -> Opponent:
     """名前から相手方策を作ります。"""
     if kind == "random":

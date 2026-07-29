@@ -13,6 +13,9 @@ dependencies = [
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",
     "websockets>=11.0",
+    "wandb>=0.28.1",
+    "tensorboard>=2.21.0",
+    "optuna>=4.9.0",
 ]
 
 # 開発用の依存。`uv sync` が既定で入れるので、追加の指定なしに環境が揃う。
