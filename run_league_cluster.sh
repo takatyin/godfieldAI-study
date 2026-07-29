@@ -5,8 +5,11 @@
 
 echo "Starting Asynchronous League Training across 4 GPUs..."
 
+# ログディレクトリの作成
+mkdir -p logs
+
 # 古いログをクリーンアップ
-rm -f league_worker_*.log
+rm -f logs/league_worker_*.log
 
 # 4つのプロセスを独立して起動
 for i in {0..3}; do
@@ -17,9 +20,9 @@ for i in {0..3}; do
         --total-timesteps 50000000 \
         --self-play-save-freq 1000000 \
         --tensorboard-log "logs/league_tb" \
-        > "league_worker_$i.log" 2>&1 &
+        > "logs/league_worker_$i.log" 2>&1 &
 done
 
 echo "All 4 League Workers launched in background!"
 echo "They are independently training and sharing models in 'models/league_pool'."
-echo "You can check logs with: tail -f league_worker_0.log"
+echo "You can check logs with: tail -f logs/league_worker_0.log"

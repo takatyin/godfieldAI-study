@@ -55,3 +55,11 @@ compile_commands.json
 
 # Cloned godfield-flash repository for specification analysis
 godfield-flash/
+
+# RL Training Outputs
+models/
+logs/
+experiments/
+*.log
+*.db
+*.sqlite3
