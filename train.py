@@ -7,7 +7,7 @@ from sb3_contrib import MaskablePPO
 from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
 
 from godfield_rl.env_wrapper import GodFieldVectorEnv
-from godfield_rl.feature_extractor import GodFieldFeatureExtractor
+from godfield_rl.feature_extractor import GodFieldFeatureExtractor, GodFieldTransformerExtractor
 from godfield_rl.opponents import make_opponent, PoolOpponent
 from godfield_rl.callbacks import WinRateCallback, SelfPlayCallback
 
@@ -33,6 +33,7 @@ def main():
     parser.add_argument("--self-play", action="store_true", help="Enable Self-Play league training")
     parser.add_argument("--self-play-save-freq", type=int, default=1_000_000, help="Steps between self-play model snapshots")
     parser.add_argument("--worker-id", type=int, default=0, help="Worker ID for distributed league training")
+    parser.add_argument("--use-transformer", action="store_true", help="Use Transformer feature extractor instead of MLP")
 
     parser.add_argument(
         "--opponent",
@@ -81,13 +82,24 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Setting up MaskablePPO model on {device}...")
 
-    policy_kwargs = dict(
-        features_extractor_class=GodFieldFeatureExtractor,
-        features_extractor_kwargs=dict(
-            card_embed_dim=16,
-            features_dim=256,
-        ),
-    )
+    if args.use_transformer:
+        print("Using Transformer Feature Extractor!")
+        policy_kwargs = dict(
+            features_extractor_class=GodFieldTransformerExtractor,
+            features_extractor_kwargs=dict(
+                d_model=128,
+                features_dim=256,
+            ),
+        )
+    else:
+        print("Using MLP Feature Extractor!")
+        policy_kwargs = dict(
+            features_extractor_class=GodFieldFeatureExtractor,
+            features_extractor_kwargs=dict(
+                card_embed_dim=16,
+                features_dim=256,
+            ),
+        )
 
     model = MaskablePPO(
         "MlpPolicy",
