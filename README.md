@@ -260,3 +260,30 @@ ssh istanbul02
 サーバー上でのリポジトリの clone や pull などの Git 操作は、ローカルマシンの SSH 鍵を転送する **SSH Agent Forwarding** を利用して行います。
 これにより、サーバー上に直接秘密鍵を配置することなく安全に GitHub へアクセス可能です。
 
+### 学習
+まずはtmuxでセッションを永続化
+```
+tmux new -s train
+```
+次に学習を実行
+```
+./run_transformer_cluster.sh
+```
+そしてtmuxの画面でCtrl+b -> " で上下分割。Ctrl+b -> % で左右分割する。
+Ctrl+oで移動。
+Ctrl+b -> d でデタッチ。
+```
+tmux attach -t train
+```
+でアタッチできる。
+
+### 学習を止めるには
+```
+pkill -f train.py
+ps aux | grep train.py
+```
+途中結果を消すには
+```
+# プールに残っている過去のモデルをすべて削除
+rm -f models/league_pool_transformer/*.zip
+```
