@@ -98,10 +98,14 @@
             </div>
 
             <!-- Controls -->
-            <div class="flex items-center gap-6" v-if="data">
+            <div class="flex items-center gap-4" v-if="data">
                 <div class="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-lg text-sm border border-slate-800">
                     <input type="checkbox" id="aiToggle" v-model="aiEnabled" @change="toggleAI" class="cursor-pointer">
                     <label htmlFor="aiToggle" class="cursor-pointer font-semibold select-none">相手(P1)をAI操作にする</label>
+                    
+                    <select v-if="aiEnabled && data.available_opponents" v-model="currentOpponent" @change="changeOpponent" class="ml-2 bg-slate-800 text-slate-200 border border-slate-700 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option v-for="opp in data.available_opponents" :key="opp" :value="opp">{{ opp }}</option>
+                    </select>
                 </div>
 
                 <button @click="resetGame" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 font-semibold rounded-lg border border-slate-700 transition">
@@ -585,7 +589,8 @@
                     connected: false,
                     aiEnabled: true,
                     ws: null,
-                    currentActorId: 0
+                    currentActorId: 0,
+                    currentOpponent: 'heuristic'
                 };
             },
             methods: {
@@ -606,6 +611,9 @@
                             this.data = msg;
                             this.currentActorId = msg.current_actor_id;
                             this.aiEnabled = msg.ai_enabled;
+                            if (msg.current_opponent) {
+                                this.currentOpponent = msg.current_opponent;
+                            }
                         } catch (e) {
                             console.error("Failed to parse websocket message", e);
                         }
@@ -620,6 +628,16 @@
                 sendAction(actionId) {
                     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                         this.ws.send(JSON.stringify({ type: 'action', action_id: actionId }));
+                    }
+                },
+                changeOpponent() {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({ type: 'change_opponent', opponent: this.currentOpponent }));
+                    }
+                },
+                toggleAI() {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({ type: 'toggle_ai', ai_enabled: this.aiEnabled }));
                     }
                 },
                 resetGame() {

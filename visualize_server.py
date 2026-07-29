@@ -11,6 +11,8 @@ from fastapi.staticfiles import StaticFiles
 
 import godfield_core
 from godfield_rl.agents.heuristic_agent import get_ai_action
+from godfield_rl.opponents import make_opponent, FrozenOpponent
+from sb3_contrib import MaskablePPO
 from visualizer.constants import CARDS, project_root
 from visualizer.presenter import serialize_observation
 
@@ -33,6 +35,19 @@ env_pool = godfield_core.EnvPool(1)
 state = None
 ai_enabled = True  # Player 1 is controlled by AI by default
 
+# Setup Opponents
+opponents = {
+    "heuristic": make_opponent("heuristic"),
+    "random": make_opponent("random"),
+}
+try:
+    mlp_model = MaskablePPO.load("assets/models/best_mlp_gen50.zip")
+    opponents["mlp_gen50"] = FrozenOpponent(mlp_model)
+    current_opponent_type = "mlp_gen50"
+except Exception as e:
+    print(f"Could not load mlp_gen50 model: {e}")
+    current_opponent_type = "heuristic"
+
 
 def reset_game(seed=None):
     global state
@@ -45,7 +60,21 @@ def reset_game(seed=None):
 async def run_ai_steps():
     # If it is Player 1's turn and AI is enabled, auto-step Player 1
     while not state.is_done and state.current_actor_id == 1 and ai_enabled:
-        ai_act = get_ai_action(state)
+        opponent = opponents[current_opponent_type]
+        
+        if current_opponent_type in ["heuristic", "random"]:
+            ai_act = opponent.act(state)
+        else:
+            # FrozenOpponent (PPO) expects numpy arrays
+            obs_flat = env_pool.get_observations()
+            obs_flat = obs_flat.reshape(1, -1)
+            features_dim = godfield_core.OBSERVATION_FEATURE_SIZE
+            action_dim = godfield_core.ACTION_SPACE_SIZE
+            
+            obs_tensor = obs_flat[:, :features_dim - action_dim]
+            masks_tensor = obs_flat[:, features_dim - action_dim : features_dim]
+            ai_act = opponent.act(obs_tensor, masks_tensor)[0]
+            
         if ai_act is None:
             break
         godfield_core.step_game(state, godfield_core.ActionType(ai_act))
@@ -74,6 +103,8 @@ def get_current_observations_json():
             "p1_obs": serialize_observation(obs1, 1, state),
             "current_actor_id": state.current_actor_id,
             "ai_enabled": ai_enabled,
+            "available_opponents": list(opponents.keys()),
+            "current_opponent": current_opponent_type,
             "current_phase": state.current_phase.name,
             "attacker_id": state.attacker_id,
             "defender_id": state.defender_id,
@@ -133,6 +164,13 @@ async def websocket_endpoint(websocket: WebSocket):
             elif msg["type"] == "toggle_ai":
                 ai_enabled = msg.get("ai_enabled", True)
                 await run_ai_steps()
+
+            elif msg["type"] == "change_opponent":
+                new_opp = msg.get("opponent")
+                if new_opp in opponents:
+                    global current_opponent_type
+                    current_opponent_type = new_opp
+                    await run_ai_steps()
 
             await websocket.send_text(get_current_observations_json())
 
