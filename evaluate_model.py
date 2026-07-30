@@ -41,7 +41,7 @@ def main():
     pbar = tqdm(total=args.episodes, desc="Evaluating")
     
     while episodes < args.episodes:
-        action_masks = np.array([env.action_masks(i) for i in range(args.num_envs)])
+        action_masks = env.action_masks()
         actions, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
         obs, rewards, dones, infos = env.step(actions)
         
