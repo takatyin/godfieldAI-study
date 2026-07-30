@@ -28,13 +28,16 @@ from godfield_core import (
     EventType,
     GamePhase,
     PhenomenonType,
+    RollKind,
 )
 from tests.core.dsl import (
     Side,
     all_cards,
     card_feature,
     card_id,
+    card_name,
     cards_of_element,
+    cards_where,
     element_of,
 )
 
@@ -133,22 +136,46 @@ def test_rainbow_curtain_unlocks_the_wall_against_an_elemental_attack(board):
     g.expect(p1_hp=40, phase=GamePhase.PHASE_MAIN)
 
 
-def test_rainbow_curtain_can_only_be_the_first_card(board):
-    """虹のカーテンを2枚目以降に重ねられないことを検証します。"""
+def test_rainbow_curtain_can_be_stacked_any_number_of_times(board):
+    """虹のカーテンを何枚でも重ねられることを検証します。
+
+    2枚目以降に機械的な意味はありません（守0で属性を消すだけ）が、手札を回す目的で
+    重ねることがあるため合法手として残っています。
+    """
     torch = "weapons/torch"
     g = board(
         p0=Side(hp=40, mp=10, hand=[torch]),
-        p1=Side(hp=40, mp=10, hand=[CURTAIN, CURTAIN]),
+        p1=Side(hp=40, mp=10, hand=[CURTAIN] * 3),
     )
     g.rng.deck_always(FILLER)
 
     g.attack(torch)
-    g.select_slots(0)  # 1枚目のカーテン
+    for slot in range(3):
+        assert g.legal_actions()[int(ActionType.ACTION_SELECT_HAND_0) + slot], (
+            f"{slot + 1}枚目の虹のカーテンが置けません"
+        )
+        g.select_slots(slot)
+    assert g.state.get_num_staged_cards(1) == 3
 
-    actions = g.legal_actions()
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is False, (
-        "2枚目の虹のカーテンは重ねられないべきです"
+
+def test_rainbow_curtain_cannot_follow_a_plain_armor(board):
+    """一般防具を置いた後には虹のカーテンを重ねられないことを検証します。
+
+    カーテンが何枚でも置けるのは「まだ何も防御していない」あいだだけです。
+    """
+    torch = "weapons/torch"
+    armor = "armor/aqua-shoes"  # 水属性なので火属性の武器攻撃に出せる
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[torch]),
+        p1=Side(hp=40, mp=10, hand=[armor, CURTAIN]),
     )
+    g.rng.deck_always(FILLER)
+
+    g.attack(torch)
+    g.expect_legal([CURTAIN])
+
+    g.select(armor)
+    g.expect_illegal([CURTAIN])
 
 
 def test_rainbow_curtain_unlocks_plain_armor_and_keeps_the_reaction(board):
@@ -270,9 +297,8 @@ def test_rainbow_curtain_still_allows_a_reaction_armor(board):
         p1=Side(hp=40, mp=20, hand=[CURTAIN, sky_armor]),
     )
     g.rng.deck_always(FILLER)
-    # スカイアーマーは弾きを持つ。ここで見たいのは「2枚目として出せること」と
-    # その防御力が乗ることなので、弾きは起こさない側に固定する
-    # （固定しないと50%で攻守が入れ替わり、被弾の検証が成立しない）。
+    # スカイアーマーは弾きを持つ。ここで見たいのは「2枚目として出せること」なので、
+    # 弾きは失敗側に固定する（固定しないと50%で攻守が入れ替わり、被弾を見られない）。
     g.rng.bounce(success=False)
 
     g.attack(meteor)
@@ -283,9 +309,10 @@ def test_rainbow_curtain_still_allows_a_reaction_armor(board):
 
     g.defend(sky_armor)
 
-    guard = card_feature(CURTAIN, "defense_power") + card_feature(sky_armor, "defense_power")
-    damage = max(0, card_feature(meteor, "attack_power") - guard)
-    g.expect(p1_hp=40 - damage)
+    # 弾きが発動した（そして失敗した）ので、スカイアーマーの防御力は乗らない。
+    # 虹のカーテンは防御力0なので、攻撃力がそのまま通る。
+    assert card_feature(CURTAIN, "defense_power") == 0
+    g.expect(p1_hp=40 - card_feature(meteor, "attack_power"))
 
 
 def test_countering_element_armor_is_legal_against_a_miracle_without_the_curtain(board):
@@ -1182,3 +1209,492 @@ def test_a_spiritual_card_can_follow_wall_and_turbulence(board, reaction, attack
 
     g.defend(SPIRIT_DOLL)
     g.expect(p1_mp=mp_cost - 1)  # 精霊系で相殺されるのでMPは減らない
+
+
+# ============================================================================
+# リアクションで使ったカードの防御力は乗らない
+# ============================================================================
+
+
+def _bouncing_armors_with_defense() -> list[int]:
+    """弾き（bounce）を持ち、かつ防御力も持つ防具を集めます。
+
+    「弾きに失敗して被弾する」経路を持つのはこの組み合わせだけなので、
+    防御力が差し引かれるかどうかが実際の被弾量に出ます。
+    """
+    return [
+        c
+        for c in cards_where(type="defense", reaction_type="bounce")
+        if card_feature(c, "defense_power", 0) > 0
+    ]
+
+
+BOUNCING_ARMORS = _bouncing_armors_with_defense()
+
+
+@pytest.mark.parametrize("armor", BOUNCING_ARMORS, ids=[card_name(c) for c in BOUNCING_ARMORS])
+def test_a_failed_bounce_does_not_apply_the_reaction_card_defense(board, armor):
+    """弾きに失敗したとき、そのカードの防御力が差し引かれないことを検証します。
+
+    リアクション効果を使ったカードは「その効果を使った」ぶん防御力を持ち込みません。
+    以前は通常の防具と同じように守が合算されており、スカイアーマー（守9）で
+    ＜滝＞（攻25）を弾き損ねても16ダメージしか受けませんでした。正しくは25です。
+
+    防具として使った場合（＝リアクションが発動しない置き方）と対比することで、
+    「常に0になった」わけではないことも同時に示します。
+    """
+    attack = "miracles/waterfall"  # 水属性 ATK25。スカイ系は無属性なので奇跡に出せる
+    power = card_feature(attack, "attack_power")
+    guard = card_feature(armor, "defense_power")
+    assert power > guard, "防御力で受けきれる組み合わせでは差が見えない"
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[armor]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=False)
+
+    g.attack(attack)
+    g.defend(armor)
+
+    g.expect(p1_hp=99 - power)
+    assert any(
+        e.type == EventType.CONFIRM_DEFENSE and e.value == 0 for e in g.event_log()
+    ), "確定時の防御力も0として記録されるべきです"
+
+
+@pytest.mark.parametrize("armor", BOUNCING_ARMORS, ids=[card_name(c) for c in BOUNCING_ARMORS])
+def test_the_same_armor_still_guards_when_its_reaction_does_not_fire(board, armor):
+    """同じ防具でも、リアクションが発動しない置き方なら防御力が乗ることを検証します。
+
+    リアクションが発動するのは仮置きの先頭（虹のカーテンは何枚並んでいてもよい）に
+    置いた場合だけです。一般防具を挟めば、スカイ系も普通の無属性防具として働きます。
+    上のテストと対で、「リアクションを使ったから0になる」ことを示します。
+
+    攻撃は**奇跡**にします。スカイ系は物理防御では `is_active_reaction_card` が
+    false になるため、物理攻撃で試すと「位置に関係なく発動しない」ことしか
+    確認できず、対照になりません（実際、以前このテストは物理攻撃で書かれており、
+    位置の規則が解決側で守られていない不具合を通してしまっていました）。
+    """
+    attack = "miracles/flame"        # 火属性 ATK10
+    first = CURTAIN                  # 無属性化して一般防具を解禁する
+    second = "armor/leather-cap"     # 無属性の一般防具（これでリアクション位置を潰す）
+    power = card_feature(attack, "attack_power")
+    guard = (card_feature(first, "defense_power", 0)
+             + card_feature(second, "defense_power", 0)
+             + card_feature(armor, "defense_power"))
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[first, second, armor]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.select(first)
+    g.select(second)
+    assert card_name(card_id(armor)) in g.legal_cards(), (
+        "一般防具としてなら置けるはずです（この前提が崩れたら対照になりません）"
+    )
+    g.defend(armor)
+
+    # 弾き判定は行われない（指示すると空振りになるので、ここでは指示しない）
+    assert not any(e.type == EventType.BOUNCE_ATTACK for e in g.event_log()), (
+        "一般防具を挟んだ後に置いたリアクションカードの効果が発動しています"
+    )
+    g.expect(p1_hp=99 - max(0, power - guard), phase=GamePhase.PHASE_MAIN)
+
+
+
+
+# ============================================================================
+# リアクションカード自身のステータスが跳ね返る攻撃に混ざらないこと
+# ============================================================================
+
+PHYSICAL_ATTACK = "weapons/dragon-claws"   # 無属性 ATK15
+MIRACLE_ATTACK = "miracles/waterfall"      # 水属性 ATK25
+
+_ALL_REACTIONS = sorted(
+    set(_reactions_for("atk_defence_phase")) | set(_reactions_for("miracle_defence_phase"))
+)
+
+FIRED_EVENT = {
+    "block": EventType.BLOCK_ATTACK,
+    "reflect": EventType.REFLECT_DAMAGE,
+    "bounce": EventType.BOUNCE_ATTACK,
+}
+
+
+def _defend_with_reaction(board, reaction, attack):
+    """1枚のリアクションで防御する。発動しなかった場合は None を返します。
+
+    同じカードでも、物理攻撃と奇跡攻撃のどちらでリアクションが発動するかは
+    カードによって違います（スカイ系は物理には出せても効果は発動せず、
+    ただの無属性防具として働きます）。どちらで発動するかをテスト側で決め打ちすると
+    実装の規則をテストに複製することになるので、両方試して発動した方を使います。
+    """
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[reaction]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=True, optional=True)  # 弾きは成功側に固定（失敗すると返らない）
+
+    g.attack(attack)
+    if card_name(card_id(reaction)) not in g.legal_cards():
+        return None
+    before = (g.state.pending_attack_power, g.state.pending_attack_element)
+    g.defend(reaction)
+
+    fired = FIRED_EVENT[card_feature(reaction, "reaction_type")]
+    if not any(e.type == fired for e in g.event_log()):
+        return None
+    return g, before
+
+
+@pytest.mark.parametrize("reaction", _ALL_REACTIONS, ids=lambda r: r)
+def test_a_reaction_does_not_change_the_attack_it_sends_back(board, reaction):
+    """はね返した・弾いた攻撃の威力と属性が、元のまま変わらないことを検証します。
+
+    リアクションカードには攻撃力を持つもの（反射剣 攻10、乱弾武剣 攻5、
+    エンゼルアクス 攻15 など）と防御力を持つもの（スカイアーマー 守9 など）が
+    あります。これらが跳ね返る攻撃に混ざると、返された側が受ける威力が変わって
+    しまいます。阻止の場合は攻撃そのものが消えるので、誰も被弾しないことを見ます。
+
+    カードを名指しせずマスタから全件集めるので、リアクションカードが増えても
+    自動で検証対象に入ります。
+    """
+    result = None
+    for attack in (PHYSICAL_ATTACK, MIRACLE_ATTACK):
+        result = _defend_with_reaction(board, reaction, attack)
+        if result is not None:
+            break
+    assert result is not None, (
+        f"{reaction} のリアクションが物理・奇跡のどちらでも発動しませんでした"
+    )
+    g, (power_before, element_before) = result
+
+    if card_feature(reaction, "reaction_type") == "block":
+        g.expect(p0_hp=99, p1_hp=99)
+        return
+
+    # 攻守が入れ替わり、元の攻撃者が同じ攻撃を受ける側に立つ
+    g.expect(attacker=1, defender=0, actor=0, p0_hp=99, p1_hp=99)
+    assert g.state.pending_attack_power == power_before, (
+        f"跳ね返った攻撃の威力が {power_before} から {g.state.pending_attack_power}"
+        f" に変わっています（{reaction} 自身の"
+        f"攻撃力{card_feature(reaction, 'attack_power', 0)}・"
+        f"防御力{card_feature(reaction, 'defense_power', 0)}が混ざっていないか）"
+    )
+    assert g.state.pending_attack_element == element_before, "属性が変わっています"
+
+
+REFLECT_CARDS = [r for r in _ALL_REACTIONS if card_feature(r, "reaction_type") == "reflect"]
+
+
+@pytest.mark.parametrize("reaction", REFLECT_CARDS, ids=lambda r: r)
+def test_reflection_never_rolls_and_always_succeeds(board, reaction):
+    """はね返す（reflect）が判定なしで必ず成功することを検証します。
+
+    50%の判定を持つのは弾く（bounce）だけです。反射に判定が混ざると
+    「返せるはずが返せない」局面が生まれます。
+    """
+    result = None
+    for attack in (PHYSICAL_ATTACK, MIRACLE_ATTACK):
+        result = _defend_with_reaction(board, reaction, attack)
+        if result is not None:
+            break
+    assert result is not None, f"{reaction} の反射が発動しませんでした"
+    g, _ = result
+
+    assert g.rng.consumed(RollKind.BOUNCE) == 0, (
+        "反射で弾き判定が行われています（反射は100%成功のはず）"
+    )
+    g.expect(attacker=1, defender=0, actor=0, p1_hp=99)
+
+
+# ============================================================================
+# 精霊系として使ったカードの防御力は乗らない
+# ============================================================================
+
+
+def _spiritual_armors() -> list[int]:
+    """精霊系のうち、防御力を持つもの（＝防御側で守が乗りうるもの）。"""
+    return [
+        c
+        for c in godfield_core.get_spiritual_zero_mp_cards()
+        if card_feature(c, "defense_power", 0) > 0
+    ]
+
+
+SPIRITUAL_ARMORS = _spiritual_armors()
+
+
+@pytest.mark.parametrize(
+    "spirit", SPIRITUAL_ARMORS, ids=[card_name(c) for c in SPIRITUAL_ARMORS]
+)
+def test_a_spiritual_card_used_as_spiritual_adds_no_defense(board, spirit):
+    """＜乱気流＞の後ろに置いた精霊系の防御力が乗らないことを検証します。
+
+    リアクション奇跡の後ろに置ける精霊系は、その消費MPを0にするためのものであって
+    防具として出したわけではありません。攻撃側では「精霊系を奇跡に重ねた場合は
+    攻撃力も属性も持ち込まない」と除外しているのに、防御側には同じ除外が無く、
+    ＜乱気流＞＋精霊の帯（守12）で ＜滝＞（攻25）を弾き損ねると被弾が13でした。
+    正しくは25です。
+    """
+    attack = "miracles/waterfall"
+    power = card_feature(attack, "attack_power")
+    guard = card_feature(spirit, "defense_power")
+    assert guard > 0 and power > guard, "守が乗ったかどうかを被弾量で見分けられる前提"
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[TURBULENCE, spirit]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=False)
+
+    g.attack(attack)
+    g.select(TURBULENCE)
+    g.expect_legal([spirit])
+    g.defend(spirit)
+
+    g.expect(p1_hp=99 - power)
+
+
+@pytest.mark.parametrize(
+    "spirit", SPIRITUAL_ARMORS, ids=[card_name(c) for c in SPIRITUAL_ARMORS]
+)
+def test_a_spiritual_card_used_as_plain_armor_still_guards(board, spirit):
+    """精霊系を普通の防具として使った場合は、防御力が乗ることを検証します。
+
+    1枚目に単独で置く場合と、虹のカーテンの後ろに置く場合が該当します。
+    上のテストと対で、「精霊系の守が常に0になった」わけではないことを示します。
+    """
+    attack = "weapons/dragon-claws"  # 無属性なので精霊系（無属性）を単独で出せる
+    power = card_feature(attack, "attack_power")
+    guard = card_feature(spirit, "defense_power")
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[spirit]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.defend(spirit)
+
+    g.expect(p1_hp=99 - max(0, power - guard))
+
+
+def test_spiritual_card_list_is_fully_covered():
+    """C++ の精霊系カード一覧が、テストでカバーされていることを確認します。
+
+    精霊系が追加されたときに、検証が無いまま通り過ぎるのを防ぎます。
+    防御力を持たないもの（精霊の杖・精霊のぬいぐるみ）は防御側の検証対象外ですが、
+    攻撃側は tests/core/test_combat_flow.py が見ています。
+    """
+    all_spirits = set(godfield_core.get_spiritual_zero_mp_cards())
+    with_defense = set(SPIRITUAL_ARMORS)
+    without_defense = all_spirits - with_defense
+    assert with_defense, "防御力を持つ精霊系が1枚もありません"
+    assert all(card_feature(c, "defense_power", 0) == 0 for c in without_defense), (
+        "防御力を持つ精霊系が検証対象から漏れています: "
+        + ", ".join(card_name(c) for c in sorted(without_defense))
+    )
+
+# ============================================================================
+# 虹のカーテンの重ねがけとリアクションの位置規則
+# ============================================================================
+
+_MIRACLE_REACTION_CASES = [
+    ("armor/sky-armor", EventType.BOUNCE_ATTACK),
+    ("armor/moonlight-armor", EventType.REFLECT_DAMAGE),
+    ("armor/angel-armor", EventType.BLOCK_ATTACK),
+]
+
+
+@pytest.mark.parametrize("num_curtains", [1, 2, 3], ids=["カーテン1枚", "カーテン2枚", "カーテン3枚"])
+@pytest.mark.parametrize(
+    ("reaction", "fired"), _MIRACLE_REACTION_CASES, ids=lambda v: getattr(v, "name", v)
+)
+def test_a_reaction_still_fires_after_any_number_of_curtains(board, num_curtains, reaction, fired):
+    """虹のカーテンを何枚重ねた後でも、リアクションが置けて発動することを検証します。
+
+    カーテンは属性を消すだけなので、何枚並んでいてもその後ろは「先頭」のままです。
+    以前は例外が「カーテンちょうど1枚の直後」に限定されており、2枚重ねると
+    リアクションを置けませんでした。
+    """
+    attack = "miracles/flame"  # 火属性なので、カーテンが無いと一般防具は出せない
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN] * num_curtains + [reaction]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=True, optional=True)
+
+    g.attack(attack)
+    for slot in range(num_curtains):
+        g.select_slots(slot)
+    assert g.state.get_num_staged_cards(1) == num_curtains
+
+    g.expect_legal([reaction])
+    g.defend(reaction)
+
+    assert any(e.type == fired for e in g.event_log()), (
+        f"カーテン{num_curtains}枚の後に置いた {reaction} が発動していません"
+    )
+    # 無属性化されたうえで解決されている
+    assert g.state.pending_attack_element == Element.ELEM_NONE
+
+
+@pytest.mark.parametrize(
+    ("reaction", "fired"), _MIRACLE_REACTION_CASES, ids=lambda v: getattr(v, "name", v)
+)
+def test_a_reaction_after_a_plain_armor_does_not_fire(board, reaction, fired):
+    """一般防具を挟んだ後に置いたリアクションカードの効果が発動しないことを検証します。
+
+    防御力を持つリアクションカードは「普通の防具」としてなら後ろにも置けます。
+    そのときは効果を持たず、防御力だけが合算されなければいけません。
+
+    以前は合法手の判定だけが位置を見ており、解決側は見ていませんでした。そのため
+    `虹のカーテン ＋ 一般防具 ＋ スカイアーマー` と置くと弾きが発動し、
+    本来ダメージ0で終わるはずの局面で攻守が入れ替わっていました。
+    """
+    attack = "miracles/flame"
+    plain = "armor/leather-cap"   # 無属性の一般防具
+    power = card_feature(attack, "attack_power")
+    guard = card_feature(plain, "defense_power") + card_feature(reaction, "defense_power")
+    assert card_feature(CURTAIN, "defense_power", 0) == 0
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN, plain, reaction]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.select(CURTAIN)
+    g.select(plain)
+    assert card_name(card_id(reaction)) in g.legal_cards(), (
+        "一般防具としてなら置けるはずです"
+    )
+    g.defend(reaction)
+
+    assert not any(e.type == fired for e in g.event_log()), (
+        f"一般防具を挟んだ後の {reaction} の効果が発動しています"
+    )
+    # 攻守は入れ替わらず、防御力が合算されてターンが終わる
+    g.expect(p1_hp=99 - max(0, power - guard), p0_hp=99, phase=GamePhase.PHASE_MAIN)
+
+
+@pytest.mark.parametrize(
+    ("reaction", "fired"), _MIRACLE_REACTION_CASES, ids=lambda v: getattr(v, "name", v)
+)
+def test_more_armor_can_follow_a_reaction_card_placed_as_plain_armor(board, reaction, fired):
+    """普通の防具として置いたリアクションカードの後にも、防具を重ねられることを検証します。
+
+    リアクションとして置いた場合は「精霊系しか続けられない」制限がかかりますが、
+    一般防具として置いたのなら普通の防具と同じ扱いでなければ辻褄が合いません。
+    """
+    attack = "miracles/flame"
+    plain = "armor/leather-cap"
+    extra = "armor/wood-shield"
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN, plain, reaction, extra]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.select(CURTAIN)
+    g.select(plain)
+    g.select(reaction)
+
+    g.expect_legal([extra])
+
+
+@pytest.mark.parametrize("num_curtains", [0, 1, 2], ids=["1枚目に置く", "カーテン1枚の後", "カーテン2枚の後"])
+@pytest.mark.parametrize(
+    ("reaction", "fired"), _MIRACLE_REACTION_CASES, ids=lambda v: getattr(v, "name", v)
+)
+def test_nothing_can_follow_a_reaction_card_used_as_a_reaction(board, num_curtains, reaction, fired):
+    """リアクションとして置いた後は、確定しか選べなくなることを検証します。
+
+    仮置きの先頭に置いた時点で「リアクションカードの使用」と確定するので、そこに
+    一般防具を重ねることはできません。防具として使いたいなら先に一般防具を
+    置く必要があります（そちらは上のテストが見ています）。
+
+    1枚目に置いた単体奇跡にプラス攻撃を重ねられないのと同じ構図です。
+    `プラス武器 ＋ ＜火の玉＞` は合法でも `＜火の玉＞ ＋ プラス武器` は非合法、
+    という順序依存がここにもあります。
+    """
+    attack = "miracles/flame"
+    plain = "armor/leather-cap"   # 無属性なのでカーテンさえあれば置ける一般防具
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN] * num_curtains + [reaction, plain]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    for slot in range(num_curtains):
+        g.select_slots(slot)
+    if num_curtains:
+        # カーテンだけを置いた時点では、まだ一般防具を重ねられる
+        g.expect_legal([plain])
+
+    g.select(reaction)
+
+    assert g.legal_cards() == [], (
+        f"リアクションとして置いた後は確定のみのはずですが {g.legal_cards()} が置けます"
+    )
+    assert g.legal_actions()[int(ActionType.ACTION_CONFIRM)], "確定すら選べません"
+
+
+@pytest.mark.parametrize(
+    ("plays", "why"),
+    [
+        (["armor/sky-armor"], "リアクションとして置いた（守は乗らない）"),
+        (["armor/moonlight-armor"], "リアクションとして置いた（守は乗らない）"),
+        ([TURBULENCE, "armor/spiritual-sash"], "精霊系として置いた（守は乗らない）"),
+        ([CURTAIN, "armor/leather-cap", "armor/sky-armor"], "一般防具として置いた（守が乗る）"),
+        ([CURTAIN, "armor/leather-cap"], "普通に重ねた（守が乗る）"),
+    ],
+    ids=["スカイアーマー単独", "月光のよろい単独", "乱気流+精霊の帯",
+         "カーテン+一般防具+スカイアーマー", "カーテン+一般防具"],
+)
+def test_observed_defense_power_matches_the_defense_that_actually_applies(board, plays, why):
+    """観測に載る防御力が、実際に効く防御力と一致することを検証します。
+
+    `pending_defense_power` はエージェントが「今どれだけ防げているか」を見るための
+    値です。ダメージ計算と別々に集計していたため、リアクションカードを置いたときに
+    観測だけが守9を表示し、実際には0という食い違いが起きていました。
+    エージェントから見ると「守9あるはずが攻撃力そのまま通った」ことになります。
+    """
+    attack = "miracles/waterfall"   # 水 ATK25
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=list(plays)),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=False, optional=True)
+
+    g.attack(attack)
+    for c in plays:
+        assert card_name(card_id(c)) in g.legal_cards(), f"{c} を置けません"
+        g.select(c)
+
+    observed = g.state.pending_defense_power
+    g.confirm()
+
+    applied = next(
+        (int(e.value) for e in g.event_log() if e.type == EventType.CONFIRM_DEFENSE), None
+    )
+    assert applied is not None, "CONFIRM_DEFENSE が記録されていません"
+    assert observed == applied, (
+        f"観測の防御力 {observed} と実際に効いた防御力 {applied} が食い違っています"
+    )

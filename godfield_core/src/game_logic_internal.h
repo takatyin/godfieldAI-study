@@ -73,6 +73,23 @@ void update_staged_pending_info(InternalState &state, int player_id);
 bool is_spiritual_zero_mp_card(int card_id);
 
 /**
+ * @brief 仮置きの i 番目が「精霊系として使われている」かを返します。
+ *
+ * 精霊系は直前（左隣）に置かれた奇跡1枚の消費MPを0にするカードです。その用途で
+ * 使われている場合、そのカード自身の攻撃力・属性・防御力はどれも持ち込みません
+ * （プラス攻撃でもなければ防具として出したわけでもないため）。
+ *
+ * 判定はMPの計算（calculate_mp_cost_excluding_magical_stick）と同じ「直前が奇跡か」
+ * で行います。ここが食い違うと「消費MPは0になったのに防御力だけ乗る」という
+ * 中途半端な状態になります。実際、防御側にこの除外が無かったため、
+ * ＜乱気流＞＋精霊の帯（守12）で弾き損ねると被弾が12減っていました。
+ *
+ * 1枚目に置いた場合や、虹のカーテンの後ろに置いた場合は「普通の防具・武器として
+ * 使った」ことになるので false を返し、攻撃力・防御力は通常どおり働きます。
+ */
+bool is_used_as_spiritual(const StagedCardIds &card_ids, size_t i);
+
+/**
  * @brief 同じカードの組み合わせが複数箇所で列挙されていたものを述語にしたもの。
  *
  * 片方だけ直す事故を防ぐため、2箇所以上で同じ列挙が現れるものはここに集約する。
@@ -238,8 +255,44 @@ bool resolve_turn_end_steps(InternalState &state);
 
 /**
  * @brief カードが現在のフェイズおよび攻撃属性に対してアクティブなリアクション（反射/弾く/阻止）カードであるかを判定します。
+ *
+ * これはカード自身の性質だけを見ます。実際に効果が出るかは仮置きの位置にも依存
+ * するので、解決するときは is_reaction_position() と併せて判定してください。
  */
 bool is_active_reaction_card(const InternalState &state, int card_id, GamePhase phase, Element attack_element);
+
+/**
+ * @brief 防御の仮置きを1回走査して得られる、位置に依存する評価結果。
+ *
+ * 防御の仮置きは「先頭かどうか」で意味が変わります。
+ *
+ *   - リアクションカードは**先頭に置いたときだけ**効果が出る。虹のカーテンは属性を
+ *     消すだけなので何枚並べてもよく、その後ろは依然として先頭とみなす。
+ *     一般防具を挟むと、それ以降のリアクションカードは効果を持たない普通の防具になる。
+ *   - 効果を使ったカード（リアクション、精霊系）は防御力を持ち込まない。
+ *
+ * この規則は合法手の判定・解決・観測の3箇所で必要になります。それぞれが自前で
+ * 仮置きを走査していたため実際に食い違いが起きました（解決側だけ位置を見ておらず、
+ * 「虹のカーテン＋一般防具＋スカイアーマー」でスカイアーマーの弾きが発動していた。
+ * また観測だけがリアクションカードの守を足しており、効かない防御力が見えていた）。
+ * 走査を1箇所に集約して、同じ結果を全員が使うようにします。
+ */
+struct StagedDefenseInfo {
+    bool has_curtain = false;                  // 虹のカーテンが1枚でもあるか
+    Element effective_atk_element = ELEM_NONE; // カーテンを考慮した攻撃属性
+    int reaction_index = -1;                   // 効果が出るリアクションの位置（無ければ -1）
+    int reaction_card_id = CARD_EMPTY;
+    int total_defense = 0;                     // 実際に効く防御力の合計
+    bool next_is_front = true;                 // 次に置くカードが「先頭扱い」になるか
+};
+
+/**
+ * @brief 防御の仮置きを評価します（合法手の判定・解決・観測で共有）。
+ *
+ * @param phase リアクションが有効かの判定に使うフェイズ。防御フェイズ以外を渡すと
+ *              リアクションは見つからず、防御力の単純合計（精霊系は除く）になります。
+ */
+StagedDefenseInfo evaluate_staged_defense(const InternalState &state, int player, GamePhase phase);
 
 /**
  * @brief 対象プレイヤーの仮置き場（staged_cards）に積まれているカードのID一覧を取得します。
@@ -330,10 +383,24 @@ std::vector<int> get_guardian_action_percents();
  */
 std::vector<int> get_absorption_sources();
 
+/**
+ * @brief 精霊系カードの一覧（テストが全種を網羅するために公開）。
+ */
+std::vector<int> get_spiritual_zero_mp_cards();
+
 void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse);
 void apply_curse(InternalState &state, int player_id, CurseType type);
 void remove_curse(InternalState &state, int player_id, CurseType type);
 void confirm_all_staged_cards(InternalState &state, int player);
+/**
+ * @brief ダメージと武器の特殊効果（吸収・自傷）を適用し、そのあと死亡判定を1度行います。
+ *
+ * 1回の攻撃解決すべてを含むわけではない点に注意してください。防御側の状態異常付与や
+ * 防具の副作用（熱狂仮面など）まで含めて1回の解決とみなすのは
+ * execute_standard_defense() / resolve_self_targeted_attack() の責務で、
+ * そちらは apply_attack_damage_and_effects() を使って死亡判定を自分で行います。
+ * ここを使うのは、単発でダメージを与えて終わる処理（あぶないウス・悪魔など）です。
+ */
 void apply_damage(InternalState &state, int player_id, int damage, bool absorption = false, bool deal_same_damage = false);
 
 /**
@@ -347,6 +414,15 @@ void apply_damage(InternalState &state, int player_id, int damage, bool absorpti
 void apply_damage_without_revive(InternalState &state, int player_id, int damage);
 
 /**
+ * @brief ダメージと武器の特殊効果（吸収・自傷）だけを適用します（お守りでの復活はしない）。
+ *
+ * 呼び出し側は、状態異常付与や防具の副作用まで解決し終えてから
+ * run_immediate_revive() を呼ぶ責任があります。
+ */
+void apply_attack_damage_and_effects(InternalState &state, int player_id, int damage,
+                                     bool absorption, bool deal_same_damage);
+
+/**
  * @brief 闇属性攻撃による即死を適用します（防御力を貫通してHPが0になる）。
  *
  * 守護神の退散判定は「攻撃のダメージでHPが減ったこと」に対して行うものであり、
@@ -356,10 +432,12 @@ void apply_damage_without_revive(InternalState &state, int player_id, int damage
 void apply_darkness_instant_death(InternalState &state, int player_id);
 
 /**
- * @brief 自分自身に闇属性攻撃を撃った場合の死亡処理をまとめて行います。
+ * @brief 自分自身に闇属性攻撃を撃った場合の死亡処理をまとめて行います（復活はしない）。
  *
  * 武器・雑貨経路と奇跡経路の2箇所から呼ばれます。以前は奇跡経路に即死処理が
  * 無く、自分に＜闇＞を撃っても攻撃力分のダメージしか入りませんでした。
+ * 呼び出し側は、カード効果や状態異常付与まで解決し終えてから
+ * run_immediate_revive() を呼ぶ責任があります。
  */
 void apply_darkness_self_death(InternalState &state, int player_id, int damage);
 
@@ -378,8 +456,9 @@ void set_pending_from_staged_attack(InternalState &state, int attacker,
 /**
  * @brief 自分自身を対象にした攻撃（武器・奇跡の共通処理）を解決します。
  *
- * ダメージ適用（闇属性なら即死）・カード効果・状態異常付与を `times` 回行い、
- * 最後に太陽のお守りによる復活を判定します。
+ * ダメージ適用（闇属性なら即死）・武器の特殊効果・カード効果・状態異常付与までを
+ * 1回の攻撃解決とみなし、そのあとで太陽のお守りによる復活を判定します。連撃は
+ * 1発ごとに独立した解決なので、判定も1発ごとに行います。
  *
  * 武器経路と奇跡経路で別々に書かれていたため、闇属性の即死が奇跡側にしか無く、
  * 闇属性の「武器」を自分に撃っても攻撃力分のダメージしか入らない不具合がありました。
@@ -391,10 +470,13 @@ void resolve_self_targeted_attack(InternalState &state, int attacker,
                                   const StagedCardIds &used_cards, int times);
 
 /**
- * @brief 天国病の発作による死亡を適用します。
+ * @brief 天国病の発作による死亡を適用します（復活はしない）。
  *
- * 闇属性即死と違い、発作は病気による死なので守護神の退散判定を行い、
- * 太陽のお守りによる復活も発生します。
+ * 闇属性即死と違い、発作は病気による死なので守護神の退散判定を行います。
+ * 太陽のお守りによる復活も発生しますが、それをどのタイミングで判定するかは
+ * 呼び出し側の責務です。攻撃の解決中に起きた発作は、防具の副作用まで含めた
+ * 解決が終わったあとで1度だけ判定しなければならないため（そうしないと1回の攻撃で
+ * お守りが複数枚消費される）、ここでは復活させません。
  */
 void apply_heaven_seizure_death(InternalState &state, int player_id);
 

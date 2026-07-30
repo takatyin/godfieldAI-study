@@ -54,6 +54,13 @@ bool is_spiritual_zero_mp_card(int card_id) {
             card_id == ID_SPIRITUAL_DOLL);
 }
 
+bool is_used_as_spiritual(const StagedCardIds &card_ids, size_t i) {
+    if (i == 0 || i >= card_ids.size()) return false;
+    if (!is_spiritual_zero_mp_card(card_ids[i])) return false;
+    int prev = card_ids[i - 1];
+    return prev != CARD_EMPTY && g_card_registry[prev].is_miracle();
+}
+
 void deploy_miracle(InternalState &state, int player_id, int slot_idx) {
     if (state.is_deployed[player_id][slot_idx]) {
         return;
@@ -1262,6 +1269,49 @@ bool try_execute_super_mirror_reflection(InternalState &state, ActionType action
     return false;
 }
 
+StagedDefenseInfo evaluate_staged_defense(const InternalState &state, int player, GamePhase phase) {
+    StagedDefenseInfo info;
+    info.effective_atk_element = state.pending_attack_element;
+
+    const StagedCardIds staged = get_staged_card_ids(state, player);
+
+    // 1. 虹のカーテンの有無（属性の無属性化）。位置に関係なく1枚でもあれば効く。
+    for (int card_id : staged) {
+        if (card_id == ID_RAINBOW_CURTAIN) {
+            info.has_curtain = true;
+            info.effective_atk_element = ELEM_NONE;
+        }
+    }
+
+    // 2. 効果が出るリアクション。虹のカーテンは透明なので飛ばし、最初に現れた
+    //    それ以外のカードだけが「先頭」＝リアクションとして機能しうる。
+    for (size_t i = 0; i < staged.size(); ++i) {
+        int card_id = staged[i];
+        if (card_id == ID_RAINBOW_CURTAIN) continue;
+        if (card_id != CARD_EMPTY &&
+            is_active_reaction_card(state, card_id, phase, info.effective_atk_element)) {
+            info.reaction_index = static_cast<int>(i);
+            info.reaction_card_id = card_id;
+        }
+        // カーテン以外を置いた時点で先頭ではなくなる（リアクションとして機能したか
+        // どうかに関わらず）
+        info.next_is_front = false;
+        break;
+    }
+
+    // 3. 実際に効く防御力。効果の方を使ったカードは防具として出していないので除く。
+    for (size_t i = 0; i < staged.size(); ++i) {
+        int card_id = staged[i];
+        if (card_id == CARD_EMPTY) continue;
+        if (static_cast<int>(i) == info.reaction_index) continue;
+        if (is_used_as_spiritual(staged, i)) continue;
+        int def = g_card_registry[card_id].defense_power;
+        if (def > 0) info.total_defense += def;
+    }
+
+    return info;
+}
+
 bool is_active_reaction_card(const InternalState &state, int card_id, GamePhase phase, Element attack_element) {
     if (card_id == CARD_EMPTY) return false;
     if (phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
@@ -1320,18 +1370,25 @@ void apply_defense_gear_effects(InternalState &state, int player_id) {
 
     if (has_dreaming_hat) {
         apply_curse(state, player_id, CURSE_TYPE_DREAM);
-        bool is_staged[MAX_HAND_SIZE] = {false};
-        for (int k = 0; k < state.num_staged_cards[player_id]; ++k) {
-            int slot = staged_hand_slot(state, player_id, k);
-            if (slot != NO_HAND_SLOT) is_staged[slot] = true;
-        }
+
+        // 神器一新は「未使用（is_used でない）スロットだけを破棄し、その場で補充まで行う」。
+        // 使用済みスロットは触らず、通常どおりターン終了時のクリーンアップで補充される。
+        //
+        // 補充をクリーンアップまで遅らせると、直後の死亡判定が空の手札を見ることになる。
+        // 太陽のお守りは神器一新で破棄されるので死ぬのが基本だが、補充で新たなお守りを
+        // 引いた場合はそれが発動する。遅延させるとこの分岐が消えてしまう。
+        //
+        // 判定は is_used で行う（仮置き中かどうかではない）。連撃の2発目以降では、
+        // 1発目で使ったカードが「仮置きされていないが is_used」の状態で残るため、
+        // 仮置きだけを見ると本来触らないはずのスロットまで破棄してしまう。
         for (int j = 0; j < MAX_HAND_SIZE; ++j) {
-            if (!is_staged[j]) {
-                if (state.true_hand[player_id][j] != CARD_EMPTY || state.is_deployed[player_id][j]) {
-                    clear_hand_slot(state, player_id, j);
-                    state.is_used[player_id][j] = true;
-                }
+            if (state.is_used[player_id][j]) continue;
+            if (state.true_hand[player_id][j] == CARD_EMPTY && !state.is_deployed[player_id][j]) {
+                continue;
             }
+            clear_hand_slot(state, player_id, j);
+            int new_card = draw_card_with_apocalypse(state, player_id);
+            add_card_to_hand_slot(state, player_id, j, new_card, true);
         }
     }
 }
@@ -1368,6 +1425,11 @@ static bool try_revive_with_amulet(InternalState &state, int player_id) {
 
     state.hp[player_id] = SUN_AMULET_REVIVE_HP;
     consume_hand_card(state, player_id, amulet_slot);
+    // 復活は「HPが0になった直後に静かに10へ戻る」形なので、イベントに残さないと
+    // 履歴からは何も起きていないように見える。1回の攻撃でお守りが3枚消費される
+    // 不具合が長く残っていたのも、ログに出ないため誰も気付けなかったことが大きい。
+    push_event(state, player_id, EventType::REVIVE, ID_SUN_AMULET, player_id,
+               static_cast<float>(SUN_AMULET_REVIVE_HP));
     return true;
 }
 
@@ -1399,21 +1461,36 @@ void apply_damage_without_revive(InternalState &state, int player_id, int damage
     try_guardian_leave(state, player_id, state.hp[player_id] < hp_before);
 }
 
-void apply_damage(InternalState &state, int player_id, int damage, bool absorption, bool deal_same_damage) {
+void apply_attack_damage_and_effects(InternalState &state, int player_id, int damage,
+                                     bool absorption, bool deal_same_damage) {
     if (damage <= 0) return;
 
+    // 1回の攻撃の解決順序は
+    //   ダメージ適用 → 武器の特殊効果（吸収・自傷）→ 防御側の状態異常付与
+    //   → 防具の副作用（熱狂仮面など）→ 死亡判定
+    // であり、途中に死亡判定は挟まらない。この関数はそのうち前半2つだけを行う。
+    //
+    // 以前は本体ダメージと自傷ダメージの間で復活させていた。そのため邪神の大剣
+    // （威力14・与えたダメージ分だけ自傷）をHP14で自分に撃つと
+    //   14 -> HP0 -> お守りで復活してHP10 -> 自傷14 -> HP0（お守りは消費済み）-> 死亡
+    // となっていたが、実機では
+    //   14 -> HP0 -> 自傷14（HP0のまま）-> お守りで復活してHP10
+    // で生き残る。吸収武器を自分に撃つとHPが0になってもお守りが発動せず吸収の
+    // 回復が入る挙動と同じで、2つのセグメントは1回の攻撃解決として扱われる。
     apply_damage_without_revive(state, player_id, damage);
 
     if (absorption) {
         state.hp[player_id] = std::min(99, state.hp[player_id] + damage);
     }
-
-    run_immediate_revive(state);
-
     if (deal_same_damage) {
         apply_damage_without_revive(state, player_id, damage);
-        run_immediate_revive(state);
     }
+}
+
+void apply_damage(InternalState &state, int player_id, int damage, bool absorption, bool deal_same_damage) {
+    if (damage <= 0) return;
+    apply_attack_damage_and_effects(state, player_id, damage, absorption, deal_same_damage);
+    run_immediate_revive(state);
 }
 
 void apply_darkness_instant_death(InternalState &state, int player_id) {
@@ -1445,15 +1522,19 @@ void resolve_self_targeted_attack(InternalState &state, int attacker,
         if (is_darkness) {
             apply_darkness_self_death(state, attacker, info.attack_power);
         } else {
-            apply_damage(state, attacker, info.attack_power,
-                         state.pending_absorption, state.pending_deal_same_damage);
+            apply_attack_damage_and_effects(state, attacker, info.attack_power,
+                                            state.pending_absorption,
+                                            state.pending_deal_same_damage);
         }
         apply_card_effects_to_target(state, attacker, used_cards);
         if (state.pending_attack_curse != CURSE_NONE) {
             apply_curse_to_player(state, attacker, state.pending_attack_curse);
         }
+        // 連撃は1発ごとに独立した攻撃解決なので、死亡判定も1発ごとに1回行う。
+        // ここをループの外に出すと、1発目で死んだのに2発目まで解決してから
+        // まとめて復活する（＝お守り1枚で連撃全部を耐える）ことになる。
+        run_immediate_revive(state);
     }
-    run_immediate_revive(state);
 }
 
 void apply_darkness_self_death(InternalState &state, int player_id, int damage) {
@@ -1461,7 +1542,6 @@ void apply_darkness_self_death(InternalState &state, int player_id, int damage) 
     push_event(state, player_id, EventType::TAKE_DAMAGE, -1, player_id,
                static_cast<float>(damage));
     apply_darkness_instant_death(state, player_id);
-    run_immediate_revive(state);
 }
 
 void apply_heaven_seizure_death(InternalState &state, int player_id) {
@@ -1470,7 +1550,6 @@ void apply_heaven_seizure_death(InternalState &state, int player_id) {
     try_guardian_leave(state, player_id, state.hp[player_id] < hp_before);
     push_event(state, player_id, EventType::EFFECT_SICKNESS, -1, player_id,
                static_cast<float>(SicknessEvent::TYPE_HEAVEN | SicknessEvent::FLAG_SEIZURE));
-    run_immediate_revive(state);
 }
 
 bool run_death_check(InternalState &state) {
@@ -1933,6 +2012,14 @@ std::vector<int> get_absorption_sources() {
     return std::vector<int>(ABSORPTION_SOURCES, ABSORPTION_SOURCES + ABSORPTION_SOURCE_COUNT);
 }
 
+/**
+ * @brief 精霊系（直前の奇跡の消費MPを0にする）カードの一覧（テストが全種を網羅するために公開）。
+ */
+std::vector<int> get_spiritual_zero_mp_cards() {
+    return {ID_SPIRITUAL_STAFF, ID_SPIRITUAL_SOCKS, ID_SPIRITUAL_HOOD,
+            ID_SPIRITUAL_SASH, ID_SPIRITUAL_DOLL};
+}
+
 
 // ============================================================================
 // 守護神ごとの行動 / Guardian actions
@@ -2185,6 +2272,10 @@ bool resolve_turn_end_steps(InternalState &state) {
                         if (state.sickness[me] == SICKNESS_HEAVEN) { // 天国病悪化 -> 死亡 (発作)
                             state.heaven_seizure_occurred[me] = true;
                             apply_heaven_seizure_death(state, me);
+                            // ターン終了時の悪化は攻撃の解決とは独立した1ステップなので、
+                            // ここで復活を判定する（この直後の SICKNESS_DAMAGE で
+                            // 天国病の回復判定に入るため、判定を遅らせると結果が変わる）。
+                            run_immediate_revive(state);
                         } else if (state.sickness[me] == SICKNESS_COLD) { // 風邪 -> 熱病
                             apply_sickness(state, me, SICKNESS_FEVER);
                         } else if (state.sickness[me] == SICKNESS_FEVER) { // 熱病 -> 地獄病
@@ -2288,6 +2379,11 @@ bool resolve_turn_end_steps(InternalState &state) {
                         else if (g_id == GUARDIAN_MOON) {
                             if (resolve_moon_action(state, me, opp)) return true;
                         }
+
+                        // 防御フェイズを開かずに効果だけで完結した行動（海王神の全行動、
+                        // 金星神のお金、地球神が引いた雑貨、月神の補助奇跡）は、ここで
+                        // 死亡判定を行う。天国草のように発作を起こしうるものが含まれる。
+                        run_immediate_revive(state);
                     }
                 }
                 state.turn_end_state = TurnEndSubstep::CLEANUP_DEATH_CHECK;

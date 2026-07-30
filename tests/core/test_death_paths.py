@@ -8,18 +8,20 @@
   太陽のお守りによる復活も発生します。
 - **竜巻**: ダメージではなくHPの強制上書きなので退散判定は行わず、
   既に死亡しているプレイヤーを蘇生させることもありません。
+- **両替**: ダメージではなく再配分なので退散判定は行いませんが、お守りは発動します。
 
 これらは実装上どれも「HPに0を代入する」という同じ形をしているため、区別が
 コードから読み取りにくく、実際に取りこぼしが発生していました。ここで固定します。
 
-【注意】このファイルが固定しているのは **実機での確認が取れていない仮定** です。
-詳細と、実機仕様が判明した場合に見直すべき点は docs/rules.md の 8.1 節を参照して
-ください。挙動を変更する際、ここのテストが落ちることは「壊した」ことの証明には
-なりません。
+【注意】このファイルが固定しているものの多くは **実機での確認が取れていない仮定**
+です（両替の項だけは実機で確認済み）。詳細と、実機仕様が判明した場合に見直すべき点は
+docs/rules.md の 8.1 節を参照してください。挙動を変更する際、未検証の項目について
+ここのテストが落ちることは「壊した」ことの証明にはなりません。
 """
 
 import pytest
 
+import godfield_core
 from godfield_core import (
     Element,
     EventType,
@@ -29,7 +31,7 @@ from godfield_core import (
     RollKind,
     SicknessType,
 )
-from tests.core.dsl import Side, all_cards, card_feature, card_name, element_of
+from tests.core.dsl import Side, all_cards, card_feature, card_id, card_name, element_of
 
 MARS = int(GuardianType.MARS)
 NONE = int(GuardianType.NONE)
@@ -367,3 +369,38 @@ def test_mirage_makes_a_darkness_attack_elementless(board):
     g.take_hit()
     assert not any(e.type == EventType.INSTANT_DEATH for e in g.event_log())
     assert g.state.get_hp(1) > 0
+
+
+# ============================================================================
+# 両替: ダメージではなくHP・MP・お金の再配分
+# ============================================================================
+
+
+def test_exchange_to_zero_hp_revives_with_the_sun_amulet(board):
+    """両替でHPを0にしてもお守りが発動することを検証します（実機で確認済み）。
+
+    ダメージではなく再配分なので守護神の退散判定は行われませんが、ターン終了処理の
+    死亡判定に入るため復活はします。docs/rules.md 8.1 は以前これを「お守りなし
+    （即ゲーム終了）」と記載しており、実装とも実際の仕様とも食い違っていました。
+    """
+    revive_hp = godfield_core.SUN_AMULET_REVIVE_HP
+    g = board(
+        p0=Side(hp=20, mp=20, money=20, guardian=MARS,
+                hand=["deals/exchange", AMULET]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select("deals/exchange")
+    g.expect(phase=GamePhase.PHASE_EXCHANGE_HP)
+    g.num(0)   # HP を 0 にする
+    g.expect(phase=GamePhase.PHASE_EXCHANGE_MP)
+    g.num(0)   # MP も 0（残りは全部お金になる）
+
+    g.expect(p0_hp=revive_hp, p0_mp=0, p0_money=60, is_done=False)
+    # 再配分はダメージではないので退散判定は行われない（判定を指示すると空振りになる）
+    g.expect(p0_guardian=MARS)
+    assert card_name(card_id(AMULET)) not in g.hand(0), "お守りが消費されていません"
+    assert any(e.type == EventType.REVIVE for e in g.event_log()), (
+        "復活が REVIVE イベントとして記録されていません"
+    )

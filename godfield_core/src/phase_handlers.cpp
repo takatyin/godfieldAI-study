@@ -42,7 +42,7 @@ StagedAttackInfo evaluate_staged_attack(InternalState &state, int player_id) {
         // 1枚目に置かれた場合は別で、精霊の杖は攻撃力12の無属性武器として普通に働く
         // （usage_timing が main_atk_phase と miracle_plus_phase の両方を持つ）。
         // 以前はこの区別が無く、＜炎＞（攻10）に精霊の杖を重ねると攻撃力が22になっていた。
-        const bool used_as_spiritual = (i > 0) && is_spiritual_zero_mp_card(card_id);
+        const bool used_as_spiritual = is_used_as_spiritual(card_ids, i);
 
         if (used_as_spiritual) {
             // 攻撃力にも属性にも関与しない
@@ -163,16 +163,11 @@ void update_staged_pending_info(InternalState &state, int player_id) {
         state.pending_is_group_attack = is_group;
     }
 
-    // 防御力計算
-    int def_power = 0;
-    for (int cid : card_ids) {
-        if (cid == CARD_EMPTY) continue;
-        const CardFeatures &f = g_card_registry[cid];
-        if (f.defense_power > 0) {
-            def_power += f.defense_power;
-        }
-    }
-    state.pending_defense_power = def_power;
+    // 防御力は解決側と同じ関数で求める。効果の方を使ったカード（リアクション・
+    // 精霊系）は防具として出していないので守を持ち込まない。
+    // ここが解決側とずれると、エージェントには効かない防御力が見える。
+    state.pending_defense_power =
+        evaluate_staged_defense(state, player_id, state.current_phase).total_defense;
 }
 
 
@@ -439,6 +434,9 @@ void step_phase_main_target_select(InternalState &state, ActionType action, int 
                 } else {
                     apply_card_effects_to_target(state, target, used_cards);
                 }
+                // 効果をすべて解決してから死亡判定を行う。天国草を自分に使って発作死する
+                // 経路もここに含まれる（apply_heaven_seizure_death は自分では復活させない）。
+                run_immediate_revive(state);
                 state.num_staged_cards[me] = 0;
                 if (!state.is_done && state.current_phase != GamePhase::PHASE_DEFENSE) {
                     state.current_phase = GamePhase::PHASE_END;
@@ -577,6 +575,11 @@ static void execute_standard_defense(InternalState &state, int me, int opp, Game
         // 済んでおり、HPを0にするこの部分では退散判定を行いません。
         apply_darkness_instant_death(state, me);
     }
+    // 吸収と自傷は武器の特殊効果なので、どちらも死亡判定より前に解決する。
+    // 途中でお守りを発動させると、邪神の大剣を弾き損ねた側が本体で復活してから
+    // 自傷で死ぬ（＝お守りが無駄になる）ことになる。実機では2つのセグメントを
+    // まとめて解決し、そのあとで1度だけ復活する。詳細は
+    // combat_resolution.cpp の apply_damage() のコメントを参照。
     if (state.pending_absorption) {
         if (is_bounce_failure) {
             state.hp[me] = std::clamp(state.hp[me] + damage, 0, 99);
@@ -584,31 +587,15 @@ static void execute_standard_defense(InternalState &state, int me, int opp, Game
             state.hp[opp] = std::clamp(state.hp[opp] + damage, 0, 99);
         }
     }
-    run_immediate_revive(state);
     if (state.pending_deal_same_damage && damage > 0) {
         if (is_bounce_failure) {
             apply_damage_without_revive(state, me, damage);
         } else {
             apply_damage_without_revive(state, opp, damage);
         }
-        run_immediate_revive(state);
     }
 
-    if (state.hp[me] == 0) {
-        run_immediate_revive(state);
-    }
-    if (state.hp[me] == 0) {
-        if (phase == GamePhase::PHASE_DEFENSE) {
-            if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
-                state.current_phase = GamePhase::PHASE_END;
-                return;
-            }
-        } else {
-            state.current_phase = GamePhase::PHASE_END;
-            return;
-        }
-    }
-
+    // 命中時の状態異常付与とCP奪取。HPが0になっていても解決される。
     if (phase == GamePhase::PHASE_DEFENSE || phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
         bool is_hit = (state.pending_attack_power > 0) ? (damage > 0) : (total_def == 0);
         if (is_hit) {
@@ -626,16 +613,33 @@ static void execute_standard_defense(InternalState &state, int me, int opp, Game
     auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
     apply_card_effects_to_target(state, me, attacker_used_cards);
 
-    if (phase == GamePhase::PHASE_DEFENSE) {
-        apply_defense_gear_effects(state, me);
-        if (state.hp[me] == 0) {
-            run_immediate_revive(state);
-        }
-        if (state.hp[me] == 0) {
+    // 防具の副作用は、武器攻撃・奇跡攻撃のどちらに対して出した場合も発動する。
+    // 以前はここが PHASE_DEFENSE に限定されており、奇跡攻撃に対して熱狂仮面や
+    // 夢見る帽子を出しても熱病・夢・神器一新が一切起きなかった（指輪の反撃が
+    // 物理防御に限定されていたのと同じ取りこぼし）。
+    // 属性防具は対抗属性の奇跡に出せるうえ（＜滝＞に熱狂仮面、＜岩＞に夢見る帽子）、
+    // 虹のカーテンを併用すれば属性を問わず出せるので、到達しない経路ではない。
+    apply_defense_gear_effects(state, me);
+
+    // ここまでが1回の攻撃解決。太陽のお守りによる復活はここで1度だけ判定する。
+    //
+    // 以前は「ダメージ直後」「発作（apply_heaven_seizure_death の内部）」
+    // 「熱狂仮面の解決後」の3箇所で復活していたため、1回の攻撃でお守りが最大3枚
+    // 消費された。実機では、HPが0になったあとも武器の状態異常付与と防具の副作用が
+    // 順に解決され、最後にお守りが1枚だけ発動する（激烈疾風剣＋オーラを熱狂仮面4枚で
+    // 防いだ場合、HP0 -> 風邪 -> 熱病 -> 地獄病 -> 天国病 -> 発作 -> お守りでHP10・
+    // 天国病、で確定）。
+    run_immediate_revive(state);
+
+    if (state.hp[me] == 0) {
+        if (phase == GamePhase::PHASE_DEFENSE) {
             if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
                 state.current_phase = GamePhase::PHASE_END;
                 return;
             }
+        } else {
+            state.current_phase = GamePhase::PHASE_END;
+            return;
         }
     }
 
@@ -659,35 +663,35 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
     } else if (action == ACTION_CONFIRM) {
         for (int i = 0; i < state.num_staged_cards[me]; ++i) {
             int h_idx = staged_hand_slot(state, me, i);
-            state.is_known_to_opp[me][h_idx] = true;
-            int card_id = state.apparent_hand[me][h_idx];
-            if (card_id < 0) card_id = state.true_hand[me][h_idx];
-            if (card_id == ID_RAINBOW_CURTAIN) rainbow = true;
-            total_def += g_card_registry[card_id].defense_power;
+            // 防御の仮置きは手札由来のみだが、NO_HAND_SLOT(-1) を添字にすると
+            // 静かに範囲外へ書き込むので念のため弾く。
+            if (h_idx != NO_HAND_SLOT) state.is_known_to_opp[me][h_idx] = true;
         }
 
-        int first_card = staged_card_id(state, me, 0);
-        push_event(state, me, EventType::CONFIRM_DEFENSE, first_card, opp, static_cast<float>(total_def));
-
         bool is_darkness_attack = (state.pending_attack_element == ELEM_DARKNESS);
+
+        // 位置に依存する評価（カーテンによる無属性化・効果が出るリアクション・
+        // 実際に効く防御力）は、合法手の判定や観測と同じ関数で求める。
+        // 以前はここだけ自前で走査しており、
+        //   - 位置を見ていなかったため、一般防具を挟んだ後に置いたスカイアーマーの
+        //     弾きが発動して攻守が入れ替わっていた
+        //   - 観測（pending_defense_power）だけがリアクションカードの守を足しており、
+        //     エージェントには効かない防御力が見えていた
+        // という食い違いが起きた。
+        const StagedDefenseInfo staged = evaluate_staged_defense(state, me, phase);
+        rainbow = staged.has_curtain;
         if (rainbow) {
             state.pending_attack_element = ELEM_NONE;
         }
+        total_def = staged.total_defense;
 
-        ReactionType react_type = REACTION_NONE;
-        int react_card_id = -1;
-        Element effective_atk_element = state.pending_attack_element;
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            int h_idx = staged_hand_slot(state, me, i);
-            int card_id = state.apparent_hand[me][h_idx];
-            if (card_id < 0) card_id = state.true_hand[me][h_idx];
-            const CardFeatures &f = g_card_registry[card_id];
-            if (card_id == ID_RAINBOW_CURTAIN) continue;
-            if (is_active_reaction_card(state, card_id, phase, effective_atk_element)) {
-                react_type = f.reaction_type;
-                react_card_id = card_id;
-            }
-        }
+        const int react_card_id = staged.reaction_card_id;
+        const ReactionType react_type =
+            (staged.reaction_index >= 0) ? g_card_registry[react_card_id].reaction_type
+                                         : REACTION_NONE;
+
+        int first_card = staged_card_id(state, me, 0);
+        push_event(state, me, EventType::CONFIRM_DEFENSE, first_card, opp, static_cast<float>(total_def));
 
         int total_mp_cost = calculate_staged_mp_cost(state, me);
 
@@ -898,7 +902,10 @@ void step_phase_sundry_select_mirror(InternalState &state, ActionType action, in
             state.pending_attack_source_id = CARD_EMPTY;
             state.pending_attack_curse = CURSE_NONE;
         }
-        
+
+        // 雑貨・守護神の行動をすべて解決してから死亡判定を行う
+        run_immediate_revive(state);
+
         state.num_staged_cards[0] = 0;
         state.num_staged_cards[1] = 0;
         

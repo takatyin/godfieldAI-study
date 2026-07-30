@@ -143,39 +143,109 @@ def test_dream_masks_only_newly_drawn_cards(board):
     assert g.state.get_true_hand(0, 1) == card_id(real), "真のカードは変わらない"
 
 
-@pytest.mark.parametrize(
-    ("hp_before", "hp_after", "is_done", "why"),
-    [
-        # 1撃目でHP0 -> お守りで復活(10) -> 自傷でHP0 -> お守りは既に消費済みで死亡
-        (14, 0, True, "1撃目で死んで復活し、自傷で再度死ぬ"),
-        # 1撃目ではHP6で生存（復活なし） -> 自傷でHP0 -> お守りで復活して生存
-        (20, 10, False, "1撃目は耐え、自傷で死んでお守りで復活する"),
-    ],
-    ids=["HP14で死亡", "HP20で生存"],
-)
-def test_evil_broadsword_self_harm_and_amulet_timing(board, hp_before, hp_after, is_done, why):
-    """邪神の大剣を自分に使った際の、自傷ダメージと太陽のお守りの発動タイミングを検証します。
+EVIL_BROADSWORD = "weapons/evil-broadsword"
+SUN_AMULET = "sundries/sun-amulet"
+AMULET_HP = godfield_core.SUN_AMULET_REVIVE_HP
 
-    邪神の大剣は与えたダメージと同じだけ自分も受けるため、自分に使うと同じ威力を
-    2回連続で受けます。お守りは1枚しかないので、1撃目で死ぬか2撃目で死ぬかによって
-    最終的な生死が変わります。この境界が実装の要点です。
+
+@pytest.mark.parametrize(
+    ("hp_before", "hp_after", "amulet_used", "why"),
+    [
+        # 本体で0になっても、そこでお守りは発動しない。自傷分は0のまま吸収され、
+        # 2セグメントを解決し終えてから1度だけ復活する。
+        (10, AMULET_HP, True, "本体だけで死ぬ量でも、自傷まで解決してから1度だけ復活する"),
+        (14, AMULET_HP, True, "ちょうど本体で0になる境界"),
+        # 本体では耐え、自傷で0になる。復活は1度だけなので結果は同じ。
+        (15, AMULET_HP, True, "本体は耐え、自傷で死んで復活する"),
+        (28, AMULET_HP, True, "2セグメント合計でちょうど0になる境界"),
+        # 合計28を耐えるならお守りは発動しない（温存される）。
+        (29, 1, False, "合計28を1だけ上回るので生き残り、お守りは残る"),
+        (40, 12, False, "余裕があるのでお守りは残る"),
+    ],
+    ids=["HP10", "HP14", "HP15", "HP28", "HP29", "HP40"],
+)
+def test_evil_broadsword_on_self_checks_death_once_after_the_self_harm(
+    board, hp_before, hp_after, amulet_used, why
+):
+    """邪神の大剣を自分に撃ったときの、自傷と太陽のお守りの解決順序を検証します。
+
+    解決順序は「武器のダメージ適用 → 武器の特殊効果（自傷）→ 死亡判定」であり、
+    本体ダメージと自傷ダメージの間に死亡判定は挟まりません。したがって本体だけで
+    HPが0になる量であっても、自傷分（HP0に対しては無効）を解決したあとで
+    お守りが1度だけ発動し、必ず生き残ります。
+
+    以前はセグメントの間で復活させていたため、HP14以下では
+    「本体で死亡 -> お守りで復活 -> 自傷で再度死亡（お守りは消費済み）」となり、
+    お守りを持っているのに死ぬという正反対の結果になっていました。
     """
-    sword = "weapons/evil-broadsword"
-    damage = card_feature(sword, "attack_power")
-    assert hp_before <= damage * 2, "2撃で死にうる体力である前提のテスト"
+    damage = card_feature(EVIL_BROADSWORD, "attack_power")
+    assert damage == 14, "以下の期待値は威力14を前提にしている"
 
     g = board(
-        p0=Side(hp=hp_before, hand=[sword, "sundries/sun-amulet"]),
+        p0=Side(hp=hp_before, hand=[EVIL_BROADSWORD, SUN_AMULET]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+    g.attack(EVIL_BROADSWORD, to_self=True)
+
+    g.expect(p0_hp=hp_after, is_done=False, actor=1, phase=GamePhase.PHASE_MAIN)
+    assert (card_name(card_id(SUN_AMULET)) not in g.hand(0)) == amulet_used, (
+        "お守りが消費されたかどうかが期待と違います"
+    )
+
+
+def test_evil_broadsword_on_self_kills_without_an_amulet(board):
+    """お守りが無ければ、同じ局面でちゃんと死ぬことを確認します（上のテストの対照）。"""
+    g = board(
+        p0=Side(hp=10, hand=[EVIL_BROADSWORD]),
+        p1=Side(hp=40),
+    )
+    g.rng.deck_always(FILLER)
+    g.attack(EVIL_BROADSWORD, to_self=True)
+
+    g.expect(p0_hp=0, is_done=True)
+
+
+def test_evil_broadsword_bounce_failure_checks_death_once_after_the_self_harm(board):
+    """弾き失敗の経路でも、死亡判定が自傷のあとに1度だけ行われることを検証します。
+
+    弾き失敗は「自分が自分に攻撃した」扱いなので、本体と自傷の両方を弾いた側が
+    受けます。自傷を伴う経路が防御解決側にもう1つあるため、こちらも固定します。
+    """
+    damage = card_feature(EVIL_BROADSWORD, "attack_power")
+    g = board(
+        p0=Side(hp=40, hand=[EVIL_BROADSWORD]),
+        p1=Side(hp=damage, hand=["weapons/bouncing-sword", SUN_AMULET]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=False)
+
+    g.attack(EVIL_BROADSWORD)
+    g.defend("weapons/bouncing-sword")
+
+    g.expect(p1_hp=AMULET_HP, p0_hp=40, is_done=False)
+    assert card_name(card_id(SUN_AMULET)) not in g.hand(1), "お守りは1度だけ消費される"
+
+
+def test_absorption_on_self_does_not_burn_the_amulet(board):
+    """吸収武器を自分に撃つと、HPが0を経由してもお守りが発動しないことを検証します。
+
+    自傷と同じ「ダメージ適用 -> 武器の特殊効果 -> 死亡判定」の順序から従う挙動で、
+    邪神の大剣の解決順序の根拠にもなっています。
+    """
+    sword = "weapons/ghost-sword"
+    power = card_feature(sword, "attack_power")
+
+    g = board(
+        p0=Side(hp=1, hand=[sword, SUN_AMULET]),
         p1=Side(hp=40),
     )
     g.rng.deck_always(FILLER)
     g.attack(sword, to_self=True)
 
-    g.expect(p0_hp=hp_after, is_done=is_done)
-    # お守りはどちらの経路でも消費される
-    assert card_name(card_id("sundries/sun-amulet")) not in g.hand(0)
-    if not is_done:
-        g.expect(actor=1, phase=GamePhase.PHASE_MAIN)
+    # 1 - power で0になるが、吸収の回復が死亡判定より前に入るので生き残る
+    g.expect(p0_hp=power, is_done=False)
+    assert card_name(card_id(SUN_AMULET)) in g.hand(0), "お守りは発動しない"
 
 
 VENUS = int(godfield_core.GuardianType.VENUS)
@@ -245,7 +315,6 @@ def test_venus_fine_takes_money_from_whoever_accepts(board, reflected):
 GALE_SWORD = "weapons/severe-gale-sword"  # ATK13・命中率100%・風邪を付与
 AURA = "miracles/aura"
 FEVER_MASK = "armor/fever-mask"  # DEF10・被弾時に熱病を付与
-SUN_AMULET = "sundries/sun-amulet"
 
 # ターン終了時の病気による増減（エンジン側の定数）
 SICKNESS_TURN_END_DELTA = {
@@ -315,6 +384,87 @@ def test_four_fever_masks_cause_a_fatal_seizure(board):
     g.confirm()
 
     g.expect(p0_hp=0)
+
+
+def test_one_attack_consumes_only_one_sun_amulet(board):
+    """1回の攻撃解決で太陽のお守りが1枚しか消費されないことを検証します。
+
+    実機で確認された解決順序は次のとおりです。ダメージでHPが0になっても、
+    そこで死亡判定は行われません。
+
+      1. 激烈疾風剣＋オーラ2枚のダメージがちょうど通ってHP0
+      2. 武器の効果で風邪
+      3. 熱狂仮面4枚の効果で 熱病 -> 地獄病 -> 天国病 -> 発作
+      4. ここで初めてお守りが1枚発動し、HP10・天国病で復活
+
+    以前は「ダメージ直後」「発作（apply_heaven_seizure_death の内部）」
+    「熱狂仮面の解決後」の3箇所で復活していたため、この局面でお守りが3枚
+    消費されていました。
+    """
+    power = severe_gale_with_two_auras_power()
+    guard = card_feature(FEVER_MASK, "defense_power") * 4
+    damage = power - guard
+    assert damage > 0, "ダメージが通らないと風邪が付かず、検証したい局面にならない"
+
+    heaven_heal = SICKNESS_TURN_END_DELTA[godfield_core.SicknessType.SICKNESS_HEAVEN]
+    g = board(
+        # HPをちょうどダメージ量にして、武器のダメージだけでHP0になる状況を作る
+        p0=Side(hp=damage, mp=50, money=10,
+                hand=[FEVER_MASK] * 4 + [SUN_AMULET] * 3),
+        p1=Side(hp=40, mp=50, money=10, hand=[GALE_SWORD, AURA, AURA]),
+        actor=1,
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.sickness_worsen(False)  # ターン終了時の追加悪化は起こさない
+
+    g.select_slots(0, 1, 2)  # 激烈疾風剣 + オーラ + オーラ
+    g.target_opp()
+    g.select_slots(0, 1, 2, 3)  # 熱狂仮面4枚
+    g.confirm()
+
+    g.expect(
+        p0_hp=AMULET_HP + heaven_heal,
+        p0_sickness=godfield_core.SicknessType.SICKNESS_HEAVEN,
+        is_done=False,
+    )
+    remaining = g.hand(0).count(card_name(card_id(SUN_AMULET)))
+    assert remaining == 2, (
+        f"1回の攻撃で消費されるお守りは1枚だけであるべきです（残り {remaining} 枚）"
+    )
+
+
+def test_each_hit_of_a_multi_attack_checks_death_separately(board):
+    """連撃では1発ごとに死亡判定が行われ、お守りが1発ずつ消費されることを検証します。
+
+    「1回の攻撃解決の中では死亡判定を1度だけ」という規則の裏返しで、独立した攻撃が
+    2回あるなら判定も2回あります。まとめて1回にしてしまうとお守り1枚で連撃全体を
+    耐えてしまうので、そちらへ寄せすぎていないことを固定します。
+    """
+    saw = "weapons/saw-boom-boom"  # 2回攻撃
+    meteor = "miracles/meteor"     # プラス攻撃（火力を復活後のHPより上げるため）
+    power = card_feature(saw, "attack_power") + card_feature(meteor, "attack_power")
+    assert power > AMULET_HP, "復活後のHPを超える火力でないと2発目で死なない"
+
+    g = board(
+        p0=Side(hp=40, mp=40, hand=[saw, meteor]),
+        p1=Side(hp=AMULET_HP, hand=[SUN_AMULET] * 2),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.select_slots(0, 1)
+    g.target_opp()
+    assert g.state.remaining_attacks == 2, "のこぶんぶんは2回攻撃する前提"
+
+    g.take_hit()  # 1発目: HP0 -> お守り1枚目で復活
+    g.expect(p1_hp=AMULET_HP)
+    assert g.hand(1).count(card_name(card_id(SUN_AMULET))) == 1
+
+    g.take_hit()  # 2発目: 再度HP0 -> お守り2枚目で復活
+
+    g.expect(p1_hp=AMULET_HP, is_done=False)
+    assert card_name(card_id(SUN_AMULET)) not in g.hand(1), (
+        "連撃の2発目でも死亡判定が行われ、2枚目のお守りが消費されるべきです"
+    )
 
 
 def test_seizure_death_is_survivable_with_the_sun_amulet(board):

@@ -142,6 +142,11 @@ def _fmt_type_27(ev, actor_name, card_name, target_name):
 def _fmt_type_28(ev, actor_name, card_name, target_name):
     return f"{actor_name} 闇属性の攻撃を防ぎきれず即死した！"
 
+def _fmt_type_29(ev, actor_name, card_name, target_name):
+    hp = int(ev.value)
+    revived = f"HP{hp} で復活した！" if hp > 0 else "復活した！"
+    return f"{actor_name} 【{card_name}】 で{revived}" if ev.card_id > 0 else f"{actor_name} {revived}"
+
 FORMATTERS = {
     1: _fmt_type_1,
     2: _fmt_type_2,
@@ -171,6 +176,7 @@ FORMATTERS = {
     26: _fmt_type_26,
     27: _fmt_type_27,
     28: _fmt_type_28,
+    29: _fmt_type_29,
 }
 
 def format_event_log(ev, player_id):
