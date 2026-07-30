@@ -8,6 +8,7 @@ from godfield_rl.callbacks import SelfPlayCallback, WinRateCallback
 from godfield_rl.env_wrapper import GodFieldVectorEnv
 from godfield_rl.feature_extractor import GodFieldFeatureExtractor, GodFieldTransformerExtractor
 from godfield_rl.opponents import FrozenOpponent, PoolOpponent, make_opponent
+from godfield_rl.shaping import make_shaper
 
 
 def main():
@@ -27,6 +28,11 @@ def main():
     parser.add_argument("--ent-coef", type=float, default=0.00258, help="Entropy coefficient")
     parser.add_argument("--clip-range", type=float, default=0.3, help="PPO clip range")
     parser.add_argument("--gamma", type=float, default=0.995, help="Discount factor")
+
+    # 報酬シェーピング（ポテンシャルベース。詳細は godfield_rl/shaping.py）
+    parser.add_argument("--shape-hp", type=float, default=0.0, help="HP差のポテンシャル重み（0で無効）")
+    parser.add_argument("--shape-mp", type=float, default=0.0, help="MP差のポテンシャル重み")
+    parser.add_argument("--shape-money", type=float, default=0.0, help="所持金差のポテンシャル重み")
 
     parser.add_argument("--self-play", action="store_true", help="Enable Self-Play league training")
     parser.add_argument("--self-play-save-freq", type=int, default=1_000_000, help="Steps between self-play model snapshots")
@@ -63,29 +69,41 @@ def main():
             save_code=True,
         )
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # ポテンシャルベースの報酬シェーピング。gamma は PPO と必ず同じ値を渡す
+    # （ずれると打ち消し合いが崩れ、「最適方策が変わらない」保証が失われる）。
+    shaper = make_shaper(args.shape_hp, args.shape_mp, args.shape_money, args.gamma)
+    if shaper is not None:
+        print(f"Reward shaping (potential-based): hp={shaper.hp} mp={shaper.mp} money={shaper.money}")
+
     print(f"Initializing {args.num_envs} GodField parallel environments in C++...")
     if args.self_play:
         print("Opponent policy: Self-Play Pool")
         if args.start_opponent_model:
             print(f"Loading initial opponent from {args.start_opponent_model}...")
-            start_model = MaskablePPO.load(args.start_opponent_model, device="cpu")
+            # 相手の推論はロールアウト時間の大半を占めるので、学習者と同じデバイスに載せる。
+            # 以前は device="cpu" 固定で、最初の世代のあいだ極端に遅くなっていた。
+            start_model = MaskablePPO.load(args.start_opponent_model, device=device)
             initial_opponent = FrozenOpponent(start_model)
         else:
             initial_opponent = make_opponent("heuristic", seed=args.seed)
 
         pool_opponent = PoolOpponent(opponents=[initial_opponent], seed=args.seed)
-        vec_env = GodFieldVectorEnv(args.num_envs, opponent=pool_opponent)
+        vec_env = GodFieldVectorEnv(args.num_envs, opponent=pool_opponent, shaper=shaper)
 
-        # 評価用の環境 (Heuristic相手の絶対的な強さを測るため)
+        # 評価用の環境 (Heuristic相手の絶対的な強さを測るため)。
+        # 評価は「勝てるか」だけを見たいので、シェーピングは入れない。
         eval_env = GodFieldVectorEnv(100, opponent=make_opponent("heuristic", seed=args.seed + 1))
         eval_env.seed(args.seed + 1)
     else:
         print(f"Opponent policy: {args.opponent}")
-        vec_env = GodFieldVectorEnv(args.num_envs, opponent=make_opponent(args.opponent, seed=args.seed))
+        vec_env = GodFieldVectorEnv(
+            args.num_envs, opponent=make_opponent(args.opponent, seed=args.seed), shaper=shaper
+        )
 
     vec_env.seed(args.seed)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Setting up MaskablePPO model on {device}...")
 
     if args.use_transformer:

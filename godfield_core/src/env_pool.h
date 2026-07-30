@@ -49,6 +49,17 @@ public:
      */
     pybind11::array_t<float> get_terminal_observations_for(int player_id);
 
+    /**
+     * @brief 全環境の HP / MP / お金を真の値で返します。形は (環境数, 6)。
+     *        並びは [p0_hp, p0_mp, p0_money, p1_hp, p1_mp, p1_money]。
+     *
+     * 報酬シェーピング用です。観測（get_observations）は霧がかかると相手の
+     * HP/MP/お金が 0 に潰れるため、そこからポテンシャルを作ると霧の付与・解除で
+     * 巨大な偽の報酬が出ます。学習者が見るのはあくまで観測で、報酬の計算にだけ
+     * 真の状態を使う、という切り分けです。
+     */
+    pybind11::array_t<int> get_player_stats();
+
     InternalState get_state(int env_id) const { return states_[env_id]; }
     void set_state(int env_id, const InternalState &state) {
         states_[env_id] = state;
@@ -68,6 +79,8 @@ private:
     std::vector<float> rewards_per_player_[2];
     std::vector<float> dones_;
     std::vector<int> current_actors_;
+    // get_player_stats() が返す配列の実体。呼び出しごとに詰め直す。
+    std::vector<int> player_stats_;
 
     // Internal helper functions for game logic
     void reset_env(int env_id, int seed);

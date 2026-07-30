@@ -519,6 +519,10 @@ class EnvPool:
         ...
     def get_observations(self) -> numpy.typing.NDArray[numpy.float32]:
         ...
+    def get_player_stats(self) -> numpy.typing.NDArray[numpy.int32]:
+        """
+        全環境の HP / MP / お金を真の値で返します。形は (環境数, 6) で、並びは [p0_hp, p0_mp, p0_money, p1_hp, p1_mp, p1_money]。観測は霧がかかると相手の値が0に潰れるため、報酬シェーピングにはこちらを使ってください。
+        """
     def get_rewards(self) -> numpy.typing.NDArray[numpy.float32]:
         ...
     def get_rewards_for(self, player_id: typing.SupportsInt | typing.SupportsIndex) -> numpy.typing.NDArray[numpy.float32]:

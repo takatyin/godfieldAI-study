@@ -748,6 +748,11 @@ PYBIND11_MODULE(godfield_core, m) {
         .def("get_observations", &EnvPool::get_observations)
         .def("step_subset", &EnvPool::step_subset, py::arg("env_ids"), py::arg("actions"))
         .def("get_current_actors", &EnvPool::get_current_actors)
+        .def("get_player_stats", &EnvPool::get_player_stats,
+             "全環境の HP / MP / お金を真の値で返します。形は (環境数, 6) で、"
+             "並びは [p0_hp, p0_mp, p0_money, p1_hp, p1_mp, p1_money]。"
+             "観測は霧がかかると相手の値が0に潰れるため、報酬シェーピングには"
+             "こちらを使ってください。")
         .def("get_rewards_for", &EnvPool::get_rewards_for, py::arg("player_id"))
         .def("get_terminal_observations_for", &EnvPool::get_terminal_observations_for, py::arg("player_id"))
         .def("get_rewards", &EnvPool::get_rewards)

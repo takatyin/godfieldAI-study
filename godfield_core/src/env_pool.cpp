@@ -73,6 +73,28 @@ void EnvPool::step_subset(pybind11::array_t<int> env_ids, pybind11::array_t<int>
     }
 }
 
+pybind11::array_t<int> EnvPool::get_player_stats() {
+    constexpr int kStatsPerEnv = 6;   // p0 の HP/MP/お金 と p1 の HP/MP/お金
+    player_stats_.resize(static_cast<size_t>(num_envs_) * kStatsPerEnv);
+    for (int i = 0; i < num_envs_; ++i) {
+        const InternalState &s = states_[i];
+        int *row = player_stats_.data() + static_cast<size_t>(i) * kStatsPerEnv;
+        row[0] = s.hp[0];
+        row[1] = s.mp[0];
+        row[2] = s.money[0];
+        row[3] = s.hp[1];
+        row[4] = s.mp[1];
+        row[5] = s.money[1];
+    }
+    pybind11::handle base = pybind11::cast(this);
+    return pybind11::array_t<int>(
+        {static_cast<pybind11::ssize_t>(num_envs_), static_cast<pybind11::ssize_t>(kStatsPerEnv)},
+        {static_cast<pybind11::ssize_t>(sizeof(int) * kStatsPerEnv), static_cast<pybind11::ssize_t>(sizeof(int))},
+        player_stats_.data(),
+        base
+    );
+}
+
 pybind11::array_t<int> EnvPool::get_current_actors() {
     pybind11::handle base = pybind11::cast(this);
     return pybind11::array_t<int>(
