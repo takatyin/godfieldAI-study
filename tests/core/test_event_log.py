@@ -10,7 +10,7 @@ import pytest
 
 import godfield_core
 from godfield_core import CurseEvent, EventType, GamePhase, GuardianType
-from tests.core.dsl import Side, card_id, card_name, ev
+from tests.core.dsl import Side, card_feature, card_id, card_name, ev
 from visualizer.event_formatter import FORMATTERS, format_event_log
 
 FILLER = "armor/wood-shield"
@@ -405,6 +405,55 @@ def test_every_staging_phase_logs_the_card_it_stages(board, phase_name, first, e
         ev(EventType.STAGE_CARD, card=first),
         ev(EventType.STAGE_CARD, card=extra),
     )
+
+
+# ============================================================================
+# 太陽のお守りによる復活
+# ============================================================================
+
+SUN_AMULET = "sundries/sun-amulet"
+
+
+def test_sun_amulet_revive_is_logged_once_per_attack(board):
+    """お守りによる復活が REVIVE として記録され、1回の攻撃で1つだけ出ることを検証します。
+
+    復活はHPが0から10へ静かに戻るだけなので、記録が無いと履歴からは何も起きて
+    いないように見えます。実際、1回の攻撃でお守りが3枚消費される不具合が長く
+    残っていたのも、ログに出ないため気付けなかったことが大きいです。
+
+    ここでは「ダメージでHP0 -> 風邪 -> 熱狂仮面で熱病・地獄病・天国病・発作」と
+    死因が2つ重なる局面を作り、それでも REVIVE が1つだけであることを見ます。
+    """
+    sword = "weapons/severe-gale-sword"  # ATK13・風邪を付与
+    mask = "armor/fever-mask"            # DEF10・使用者に熱病
+    aura = "miracles/aura"
+    damage = card_feature(sword, "attack_power") * 2 * 2 - card_feature(mask, "defense_power") * 4
+    assert damage > 0, "ダメージが通らないと風邪が付かず、死因が1つしか重ならない"
+
+    g = board(
+        p0=Side(hp=damage, mp=50, hand=[mask] * 4 + [SUN_AMULET] * 2),
+        p1=Side(hp=40, mp=50, hand=[sword, aura, aura]),
+        actor=1,
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.sickness_worsen(False)
+
+    g.select_slots(0, 1, 2)
+    g.target_opp()
+    g.select_slots(0, 1, 2, 3)
+    g.confirm()
+
+    revives = events_of(g, EventType.REVIVE)
+    assert len(revives) == 1, (
+        f"1回の攻撃で復活は1回だけであるべきです（{len(revives)}回記録されています）"
+    )
+    assert int(revives[0].card_id) == card_id(SUN_AMULET)
+    assert int(revives[0].target_id) == 0
+    assert int(revives[0].value) == godfield_core.SUN_AMULET_REVIVE_HP
+
+    text = format_event_log(revives[0], 0)["text"]
+    assert card_name(card_id(SUN_AMULET)) in text, text
+    assert str(godfield_core.SUN_AMULET_REVIVE_HP) in text, text
 
 
 # ============================================================================

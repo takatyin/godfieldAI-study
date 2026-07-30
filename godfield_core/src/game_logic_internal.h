@@ -334,6 +334,15 @@ void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse);
 void apply_curse(InternalState &state, int player_id, CurseType type);
 void remove_curse(InternalState &state, int player_id, CurseType type);
 void confirm_all_staged_cards(InternalState &state, int player);
+/**
+ * @brief ダメージと武器の特殊効果（吸収・自傷）を適用し、そのあと死亡判定を1度行います。
+ *
+ * 1回の攻撃解決すべてを含むわけではない点に注意してください。防御側の状態異常付与や
+ * 防具の副作用（熱狂仮面など）まで含めて1回の解決とみなすのは
+ * execute_standard_defense() / resolve_self_targeted_attack() の責務で、
+ * そちらは apply_attack_damage_and_effects() を使って死亡判定を自分で行います。
+ * ここを使うのは、単発でダメージを与えて終わる処理（あぶないウス・悪魔など）です。
+ */
 void apply_damage(InternalState &state, int player_id, int damage, bool absorption = false, bool deal_same_damage = false);
 
 /**
@@ -347,6 +356,15 @@ void apply_damage(InternalState &state, int player_id, int damage, bool absorpti
 void apply_damage_without_revive(InternalState &state, int player_id, int damage);
 
 /**
+ * @brief ダメージと武器の特殊効果（吸収・自傷）だけを適用します（お守りでの復活はしない）。
+ *
+ * 呼び出し側は、状態異常付与や防具の副作用まで解決し終えてから
+ * run_immediate_revive() を呼ぶ責任があります。
+ */
+void apply_attack_damage_and_effects(InternalState &state, int player_id, int damage,
+                                     bool absorption, bool deal_same_damage);
+
+/**
  * @brief 闇属性攻撃による即死を適用します（防御力を貫通してHPが0になる）。
  *
  * 守護神の退散判定は「攻撃のダメージでHPが減ったこと」に対して行うものであり、
@@ -356,10 +374,12 @@ void apply_damage_without_revive(InternalState &state, int player_id, int damage
 void apply_darkness_instant_death(InternalState &state, int player_id);
 
 /**
- * @brief 自分自身に闇属性攻撃を撃った場合の死亡処理をまとめて行います。
+ * @brief 自分自身に闇属性攻撃を撃った場合の死亡処理をまとめて行います（復活はしない）。
  *
  * 武器・雑貨経路と奇跡経路の2箇所から呼ばれます。以前は奇跡経路に即死処理が
  * 無く、自分に＜闇＞を撃っても攻撃力分のダメージしか入りませんでした。
+ * 呼び出し側は、カード効果や状態異常付与まで解決し終えてから
+ * run_immediate_revive() を呼ぶ責任があります。
  */
 void apply_darkness_self_death(InternalState &state, int player_id, int damage);
 
@@ -378,8 +398,9 @@ void set_pending_from_staged_attack(InternalState &state, int attacker,
 /**
  * @brief 自分自身を対象にした攻撃（武器・奇跡の共通処理）を解決します。
  *
- * ダメージ適用（闇属性なら即死）・カード効果・状態異常付与を `times` 回行い、
- * 最後に太陽のお守りによる復活を判定します。
+ * ダメージ適用（闇属性なら即死）・武器の特殊効果・カード効果・状態異常付与までを
+ * 1回の攻撃解決とみなし、そのあとで太陽のお守りによる復活を判定します。連撃は
+ * 1発ごとに独立した解決なので、判定も1発ごとに行います。
  *
  * 武器経路と奇跡経路で別々に書かれていたため、闇属性の即死が奇跡側にしか無く、
  * 闇属性の「武器」を自分に撃っても攻撃力分のダメージしか入らない不具合がありました。
@@ -391,10 +412,13 @@ void resolve_self_targeted_attack(InternalState &state, int attacker,
                                   const StagedCardIds &used_cards, int times);
 
 /**
- * @brief 天国病の発作による死亡を適用します。
+ * @brief 天国病の発作による死亡を適用します（復活はしない）。
  *
- * 闇属性即死と違い、発作は病気による死なので守護神の退散判定を行い、
- * 太陽のお守りによる復活も発生します。
+ * 闇属性即死と違い、発作は病気による死なので守護神の退散判定を行います。
+ * 太陽のお守りによる復活も発生しますが、それをどのタイミングで判定するかは
+ * 呼び出し側の責務です。攻撃の解決中に起きた発作は、防具の副作用まで含めた
+ * 解決が終わったあとで1度だけ判定しなければならないため（そうしないと1回の攻撃で
+ * お守りが複数枚消費される）、ここでは復活させません。
  */
 void apply_heaven_seizure_death(InternalState &state, int player_id);
 

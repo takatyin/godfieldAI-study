@@ -200,7 +200,8 @@ enum class EventType : uint8_t {
     GUARDIAN_ENTER = 25,  // 守護神降臨
     GUARDIAN_LEAVE = 26,  // 守護神退散
     EFFECT_CURSE = 27,    // 呪い状態変化
-    INSTANT_DEATH = 28    // 闇属性による即死 (ダメージとは別枠でHPが0になる)
+    INSTANT_DEATH = 28,   // 闇属性による即死 (ダメージとは別枠でHPが0になる)
+    REVIVE = 29           // 太陽のお守りによる復活 (value=復活後のHP)
 };
 
 // ============================================================================

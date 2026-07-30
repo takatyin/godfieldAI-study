@@ -566,6 +566,7 @@ MIRAGE = "miracles/mirage"             # 攻撃回数を枚数倍する
 AURA = "miracles/aura"                 # 攻撃力2倍・無属性化
 FEVER_MASK = "armor/fever-mask"        # 被弾すると装備者が熱病になる
 DREAMING_HAT = "armor/dreaming-hat"    # 被弾すると装備者が夢になり手札が一新される
+RAINBOW_CURTAIN = "armor/rainbow-curtain"  # 攻撃を無属性化する（属性違いの防具を通せる）
 SUN_AMULET = "sundries/sun-amulet"
 ASCENSION_BOW = "weapons/ascension-bow"
 
@@ -595,6 +596,49 @@ def test_fever_mask_inflicts_fever_on_its_wearer(board):
         p1_sickness=godfield_core.SicknessType.SICKNESS_FEVER,
         phase=GamePhase.PHASE_MAIN,
     )
+
+
+@pytest.mark.parametrize(
+    ("miracle", "armor", "curtain", "why"),
+    [
+        # 属性防具は対抗属性の奇跡に出せる
+        ("miracles/waterfall", FEVER_MASK, None, "水属性の奇跡に火属性の熱狂仮面"),
+        ("miracles/rock", DREAMING_HAT, None, "土属性の奇跡に木属性の夢見る帽子"),
+        # 虹のカーテンを併用すれば属性は問わない
+        ("miracles/rock", FEVER_MASK, RAINBOW_CURTAIN, "属性違いをカーテンで通す"),
+        ("miracles/waterfall", DREAMING_HAT, RAINBOW_CURTAIN, "属性違いをカーテンで通す"),
+    ],
+    ids=["滝に熱狂仮面", "岩に夢見る帽子", "岩にカーテン+熱狂仮面", "滝にカーテン+夢見る帽子"],
+)
+def test_defense_gear_side_effects_also_fire_against_miracles(board, miracle, armor, curtain, why):
+    """防具の副作用が、奇跡攻撃に対して出した場合にも発動することを検証します。
+
+    以前は副作用の解決が物理防御フェイズに限定されており、奇跡攻撃に対して
+    熱狂仮面や夢見る帽子を出しても熱病・夢・神器一新が一切起きませんでした
+    （指輪の反撃が物理防御に限定されていたのと同じ取りこぼしです）。
+
+    属性防具は対抗属性の奇跡に出せるうえ、虹のカーテンを併用すれば属性を問わず
+    出せるため、到達しない経路ではありません。
+    """
+    g = board(
+        p0=Side(hp=99, mp=50, hand=[miracle]),
+        p1=Side(hp=99, mp=50, hand=([curtain] if curtain else []) + [armor]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(miracle)
+    g.expect(phase=GamePhase.PHASE_MIRACLE_DEFENSE, actor=1)
+    if curtain:
+        g.select(curtain)
+    assert card_name(card_id(armor)) in g.legal_cards(), (
+        f"{card_name(card_id(armor))} が奇跡防御で出せません（この前提が崩れたら意味のないテスト）"
+    )
+    g.defend(armor)
+
+    if armor == FEVER_MASK:
+        g.expect(p1_sickness=godfield_core.SicknessType.SICKNESS_FEVER)
+    else:
+        g.expect(p1_curses={godfield_core.CurseType.CURSE_DREAM})
 
 
 def test_dreaming_hat_inflicts_dream_and_replaces_the_entire_hand(board):
@@ -639,6 +683,47 @@ def test_dreaming_hat_inflicts_dream_and_replaces_the_entire_hand(board):
     for slot in range(godfield_core.MAX_HAND_SIZE):
         assert g.state.get_is_used(1, slot) is False
         assert g.state.get_is_deployed(1, slot) is False
+
+
+@pytest.mark.parametrize(
+    ("refill", "survives", "why"),
+    [
+        (FILLER, False, "補充が防具なので、お守りを失って死ぬ"),
+        (SUN_AMULET, True, "補充で新たなお守りを引いたのでそれが発動する"),
+    ],
+    ids=["補充が木の盾なら死ぬ", "補充がお守りなら生き残る"],
+)
+def test_dreaming_hat_discards_the_sun_amulet_before_the_death_check(board, refill, survives, why):
+    """神器一新が太陽のお守りを破棄したうえで、その場で補充まで行うことを検証します。
+
+    防具の副作用は死亡判定より前に解決されるため、瀕死で夢見る帽子を使って
+    貫通ダメージを受けると、手札のお守りは破棄済みで発動しません。ただし神器一新は
+    破棄と同時に補充まで行うので、補充で新たなお守りを引いた場合はそれが発動します。
+
+    補充をターン終了時のクリーンアップまで遅らせると、死亡判定が空の手札を見ることに
+    なり、後者の分岐が消えてしまいます。そこを固定するのがこのテストの主題です。
+    """
+    sword = "weapons/dragon-claws"  # ATK15・無属性・状態異常なし
+    power = card_feature(sword, "attack_power")
+    guard = card_feature(DREAMING_HAT, "defense_power")
+    assert power > guard, "貫通ダメージが出ない組み合わせでは死亡判定に届かない"
+
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[sword]),
+        p1=Side(hp=1, mp=10, hand=[DREAMING_HAT, SUN_AMULET]),
+    )
+    g.rng.deck_always(refill)
+
+    g.attack(sword)
+    g.defend(DREAMING_HAT)
+
+    if survives:
+        g.expect(p1_hp=godfield_core.SUN_AMULET_REVIVE_HP, is_done=False)
+    else:
+        g.expect(p1_hp=0, is_done=True)
+        assert card_name(card_id(SUN_AMULET)) not in g.hand(1), (
+            "元のお守りは神器一新で破棄されているべきです"
+        )
 
 
 def test_dreaming_hat_also_discards_deployed_miracles(board):

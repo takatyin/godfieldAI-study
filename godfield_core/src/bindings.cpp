@@ -667,6 +667,7 @@ PYBIND11_MODULE(godfield_core, m) {
         .value("GUARDIAN_LEAVE", EventType::GUARDIAN_LEAVE)
         .value("EFFECT_CURSE", EventType::EFFECT_CURSE)
         .value("INSTANT_DEATH", EventType::INSTANT_DEATH)
+        .value("REVIVE", EventType::REVIVE)
         .export_values();
 
     py::module_ se = m.def_submodule("SicknessEvent", "Sickness Event Bitmask Constants");

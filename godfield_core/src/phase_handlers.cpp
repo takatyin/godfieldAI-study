@@ -439,6 +439,9 @@ void step_phase_main_target_select(InternalState &state, ActionType action, int 
                 } else {
                     apply_card_effects_to_target(state, target, used_cards);
                 }
+                // 効果をすべて解決してから死亡判定を行う。天国草を自分に使って発作死する
+                // 経路もここに含まれる（apply_heaven_seizure_death は自分では復活させない）。
+                run_immediate_revive(state);
                 state.num_staged_cards[me] = 0;
                 if (!state.is_done && state.current_phase != GamePhase::PHASE_DEFENSE) {
                     state.current_phase = GamePhase::PHASE_END;
@@ -577,6 +580,11 @@ static void execute_standard_defense(InternalState &state, int me, int opp, Game
         // 済んでおり、HPを0にするこの部分では退散判定を行いません。
         apply_darkness_instant_death(state, me);
     }
+    // 吸収と自傷は武器の特殊効果なので、どちらも死亡判定より前に解決する。
+    // 途中でお守りを発動させると、邪神の大剣を弾き損ねた側が本体で復活してから
+    // 自傷で死ぬ（＝お守りが無駄になる）ことになる。実機では2つのセグメントを
+    // まとめて解決し、そのあとで1度だけ復活する。詳細は
+    // combat_resolution.cpp の apply_damage() のコメントを参照。
     if (state.pending_absorption) {
         if (is_bounce_failure) {
             state.hp[me] = std::clamp(state.hp[me] + damage, 0, 99);
@@ -584,31 +592,15 @@ static void execute_standard_defense(InternalState &state, int me, int opp, Game
             state.hp[opp] = std::clamp(state.hp[opp] + damage, 0, 99);
         }
     }
-    run_immediate_revive(state);
     if (state.pending_deal_same_damage && damage > 0) {
         if (is_bounce_failure) {
             apply_damage_without_revive(state, me, damage);
         } else {
             apply_damage_without_revive(state, opp, damage);
         }
-        run_immediate_revive(state);
     }
 
-    if (state.hp[me] == 0) {
-        run_immediate_revive(state);
-    }
-    if (state.hp[me] == 0) {
-        if (phase == GamePhase::PHASE_DEFENSE) {
-            if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
-                state.current_phase = GamePhase::PHASE_END;
-                return;
-            }
-        } else {
-            state.current_phase = GamePhase::PHASE_END;
-            return;
-        }
-    }
-
+    // 命中時の状態異常付与とCP奪取。HPが0になっていても解決される。
     if (phase == GamePhase::PHASE_DEFENSE || phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
         bool is_hit = (state.pending_attack_power > 0) ? (damage > 0) : (total_def == 0);
         if (is_hit) {
@@ -626,16 +618,33 @@ static void execute_standard_defense(InternalState &state, int me, int opp, Game
     auto attacker_used_cards = get_staged_card_ids(state, state.attacker_id);
     apply_card_effects_to_target(state, me, attacker_used_cards);
 
-    if (phase == GamePhase::PHASE_DEFENSE) {
-        apply_defense_gear_effects(state, me);
-        if (state.hp[me] == 0) {
-            run_immediate_revive(state);
-        }
-        if (state.hp[me] == 0) {
+    // 防具の副作用は、武器攻撃・奇跡攻撃のどちらに対して出した場合も発動する。
+    // 以前はここが PHASE_DEFENSE に限定されており、奇跡攻撃に対して熱狂仮面や
+    // 夢見る帽子を出しても熱病・夢・神器一新が一切起きなかった（指輪の反撃が
+    // 物理防御に限定されていたのと同じ取りこぼし）。
+    // 属性防具は対抗属性の奇跡に出せるうえ（＜滝＞に熱狂仮面、＜岩＞に夢見る帽子）、
+    // 虹のカーテンを併用すれば属性を問わず出せるので、到達しない経路ではない。
+    apply_defense_gear_effects(state, me);
+
+    // ここまでが1回の攻撃解決。太陽のお守りによる復活はここで1度だけ判定する。
+    //
+    // 以前は「ダメージ直後」「発作（apply_heaven_seizure_death の内部）」
+    // 「熱狂仮面の解決後」の3箇所で復活していたため、1回の攻撃でお守りが最大3枚
+    // 消費された。実機では、HPが0になったあとも武器の状態異常付与と防具の副作用が
+    // 順に解決され、最後にお守りが1枚だけ発動する（激烈疾風剣＋オーラを熱狂仮面4枚で
+    // 防いだ場合、HP0 -> 風邪 -> 熱病 -> 地獄病 -> 天国病 -> 発作 -> お守りでHP10・
+    // 天国病、で確定）。
+    run_immediate_revive(state);
+
+    if (state.hp[me] == 0) {
+        if (phase == GamePhase::PHASE_DEFENSE) {
             if (state.remaining_attacks <= 0 && state.num_pending_counters <= 0) {
                 state.current_phase = GamePhase::PHASE_END;
                 return;
             }
+        } else {
+            state.current_phase = GamePhase::PHASE_END;
+            return;
         }
     }
 
@@ -898,7 +907,10 @@ void step_phase_sundry_select_mirror(InternalState &state, ActionType action, in
             state.pending_attack_source_id = CARD_EMPTY;
             state.pending_attack_curse = CURSE_NONE;
         }
-        
+
+        // 雑貨・守護神の行動をすべて解決してから死亡判定を行う
+        run_immediate_revive(state);
+
         state.num_staged_cards[0] = 0;
         state.num_staged_cards[1] = 0;
         
