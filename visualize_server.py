@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 import godfield_core
 from godfield_rl.agents.heuristic_agent import get_ai_action
 from godfield_rl.opponents import make_opponent, FrozenOpponent
+from godfield_rl.feature_extractor import GodFieldTransformerExtractor
 from sb3_contrib import MaskablePPO
 from visualizer.constants import CARDS, project_root
 from visualizer.presenter import serialize_observation
@@ -41,12 +42,21 @@ opponents = {
     "random": make_opponent("random"),
 }
 try:
+    transformer_model = MaskablePPO.load(
+        "assets/models/best_transformer_gen50.zip",
+        custom_objects={"features_extractor_class": GodFieldTransformerExtractor}
+    )
+    opponents["transformer_gen50"] = FrozenOpponent(transformer_model)
+    current_opponent_type = "transformer_gen50"
+except Exception as e:
+    print(f"Could not load transformer_gen50 model: {e}")
+    current_opponent_type = "heuristic"
+
+try:
     mlp_model = MaskablePPO.load("assets/models/best_mlp_gen50.zip")
     opponents["mlp_gen50"] = FrozenOpponent(mlp_model)
-    current_opponent_type = "mlp_gen50"
 except Exception as e:
     print(f"Could not load mlp_gen50 model: {e}")
-    current_opponent_type = "heuristic"
 
 
 def reset_game(seed=None):
