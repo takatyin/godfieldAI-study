@@ -28,15 +28,19 @@ class WinRateCallback(BaseCallback):
         if "dones" in self.locals and "rewards" in self.locals:
             dones = self.locals["dones"]
             rewards = self.locals["rewards"]
+            infos = self.locals.get("infos") or [{}] * len(dones)
 
             for i in range(len(dones)):
                 if dones[i]:
                     self.episodes += 1
-                    r = rewards[i]
-                    if r == 1.0:
+                    # 勝敗は必ず info の game_outcome を見る。報酬シェーピングを
+                    # 入れると終端報酬がちょうど ±1 でなくなり、報酬の値で判定すると
+                    # 全部「引き分け」に数えてしまう。
+                    r = infos[i].get("game_outcome", rewards[i])
+                    if r > 0:
                         self.wins += 1
                         self.recent_results.append(1)
-                    elif r == -1.0:
+                    elif r < 0:
                         self.losses += 1
                         self.recent_results.append(-1)
                     else:

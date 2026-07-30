@@ -125,3 +125,38 @@ def test_player_stats_reports_the_true_values_even_under_fog():
     # 一方、観測では相手（P1）の値が隠れている
     obs = godfield_core.get_observation(pool.get_state(0), 0)
     assert obs.hp_opp == 0.0, "霧がかかっていれば観測では相手のHPは見えない"
+
+
+def test_step_reports_the_unshaped_outcome_in_info():
+    """シェーピングを入れても、勝敗そのものが info から取れることを検証します。
+
+    WinRateCallback は報酬の値で勝敗を判定していたため、シェーピングを入れると
+    終端報酬がちょうど ±1 でなくなり、全局が「引き分け」に数えられていました。
+    勝率が学習の主要な指標なので、ここが壊れると何も分からなくなります。
+    """
+    from godfield_rl.env_wrapper import GodFieldVectorEnv
+    from godfield_rl.opponents import make_opponent
+
+    shaper = PotentialShaper(hp=0.5, gamma=0.995)
+    env = GodFieldVectorEnv(16, opponent=make_opponent("heuristic", seed=1), shaper=shaper)
+    env.seed(3)
+    obs = env.reset()
+
+    seen = []
+    for _ in range(400):
+        masks = env.action_masks()
+        actions = np.argmax(np.random.random(masks.shape) * masks, axis=1)
+        obs, rewards, dones, infos = env.step(actions.astype(np.int32))
+        for i in np.flatnonzero(dones):
+            assert "game_outcome" in infos[i], "終局した環境に game_outcome がありません"
+            seen.append((float(rewards[i]), infos[i]["game_outcome"]))
+    env.close()
+
+    assert seen, "1局も終わりませんでした（テストの前提が崩れています）"
+    outcomes = {o for _, o in seen}
+    assert outcomes <= {1.0, -1.0, 0.0}, f"勝敗以外の値が入っています: {outcomes}"
+    assert outcomes & {1.0, -1.0}, "勝敗のついた局がありません"
+    # シェーピングを入れているので、報酬そのものは ±1 からずれている
+    assert any(r != o for r, o in seen), (
+        "シェーピングが報酬に反映されていません（このテストが意味を持ちません）"
+    )

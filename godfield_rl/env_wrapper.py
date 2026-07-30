@@ -163,6 +163,10 @@ class GodFieldVectorEnv(VecEnv):
 
         obs, self._current_masks = self._get_obs_and_masks()
 
+        # シェーピングを足す前の勝敗（+1 / -1 / 0）。シェーピングを入れると報酬が
+        # ちょうど ±1 でなくなるため、勝率の集計はこちらを見る必要がある。
+        outcomes = rewards.copy()
+
         # ポテンシャルベースのシェーピング。相手の手番まで消化し終えた「次に学習者が
         # 選ぶ局面」で Φ(s') を取る（学習者の遷移は s -> s' なので、その間の相手の
         # 手番も含めて1つの遷移とみなす）。
@@ -178,6 +182,7 @@ class GodFieldVectorEnv(VecEnv):
         for i in np.flatnonzero(terminated):
             infos[i]["terminal_observation"] = terminal_obs[i].copy()
             infos[i]["TimeLimit.truncated"] = False
+            infos[i]["game_outcome"] = float(outcomes[i])
 
         return obs, rewards, terminated, infos
 
