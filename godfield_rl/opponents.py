@@ -134,10 +134,18 @@ class PoolOpponent:
         return opponent.act(observations, action_masks)
 
 
+OPPONENT_KINDS = ("random", "heuristic", "strategic")
+
+
 def make_opponent(kind: str, seed: int = 0) -> Opponent:
     """名前から相手方策を作ります。"""
     if kind == "random":
         return RandomOpponent(seed)
     if kind == "heuristic":
         return HeuristicOpponent(seed)
-    raise ValueError(f"未知の相手方策です: {kind!r} (random / heuristic のいずれか)")
+    if kind == "strategic":
+        # strategy はカードマスタを読むので、必要になったときだけ import する。
+        from godfield_rl.strategy import StrategicOpponent
+
+        return StrategicOpponent(seed)
+    raise ValueError(f"未知の相手方策です: {kind!r} ({' / '.join(OPPONENT_KINDS)} のいずれか)")

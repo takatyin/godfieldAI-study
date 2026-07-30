@@ -5,14 +5,14 @@ from tqdm import tqdm
 
 from godfield_rl.env_wrapper import GodFieldVectorEnv
 from godfield_rl.feature_extractor import GodFieldFeatureExtractor, GodFieldTransformerExtractor
-from godfield_rl.opponents import make_opponent
+from godfield_rl.opponents import OPPONENT_KINDS, make_opponent
 
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate GodField RL Agent")
     parser.add_argument("model_path", type=str, help="Path to the trained model (.zip)")
     parser.add_argument("--use-transformer", action="store_true", help="Set if the model is a Transformer")
-    parser.add_argument("--opponent", choices=["heuristic", "random"], default="heuristic", help="Opponent to evaluate against")
+    parser.add_argument("--opponent", choices=list(OPPONENT_KINDS), default="heuristic", help="Opponent to evaluate against")
     parser.add_argument("--episodes", type=int, default=1000, help="Number of episodes to evaluate")
     parser.add_argument("--num-envs", type=int, default=100, help="Number of parallel environments")
     args = parser.parse_args()

@@ -8,7 +8,7 @@ import godfield_core
 from godfield_rl.callbacks import SelfPlayCallback, WinRateCallback
 from godfield_rl.env_wrapper import GodFieldVectorEnv
 from godfield_rl.feature_extractor import GodFieldFeatureExtractor, GodFieldTransformerExtractor
-from godfield_rl.opponents import FrozenOpponent, PoolOpponent, make_opponent
+from godfield_rl.opponents import OPPONENT_KINDS, FrozenOpponent, PoolOpponent, make_opponent
 from godfield_rl.shaping import make_shaper
 
 
@@ -51,7 +51,7 @@ def main():
 
     parser.add_argument(
         "--opponent",
-        choices=["heuristic", "random"],
+        choices=list(OPPONENT_KINDS),
         default="heuristic",
         help="環境内部で相手の手番を指す方策。学習者の勝率がそのまま強さの指標になる",
     )
