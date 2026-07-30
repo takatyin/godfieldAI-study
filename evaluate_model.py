@@ -31,7 +31,7 @@ def main():
     print(f"Initializing {args.num_envs} environments playing against {args.opponent}...")
     env = GodFieldVectorEnv(args.num_envs, opponent=make_opponent(args.opponent, seed=42))
     
-    obs, info = env.reset()
+    obs = env.reset()
     
     wins = 0
     losses = 0
@@ -43,7 +43,7 @@ def main():
     while episodes < args.episodes:
         action_masks = np.array([env.action_masks(i) for i in range(args.num_envs)])
         actions, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
-        obs, rewards, dones, truncated, infos = env.step(actions)
+        obs, rewards, dones, infos = env.step(actions)
         
         for i in range(args.num_envs):
             if dones[i]:
