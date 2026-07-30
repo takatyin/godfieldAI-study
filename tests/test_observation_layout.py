@@ -79,8 +79,12 @@ def test_internal_state_stays_small():
 
     上限は「現状から少し余裕を持たせた値」です。超えたら、増やす価値があるか
     考えたうえで上限を更新してください（機械的に緩めないこと）。
+
+    【更新履歴】HISTORY_LENGTH を 64 -> 128 にしたぶん、履歴が 1280 バイト増えて
+    3712 バイトになったので上限を 3072 -> 4096 に引き上げた。1024環境で 3.6MB。
+    履歴が短いと1局の序盤が押し出され、「相手が何を使い切ったか」を遡れない。
     """
-    limit = 3072
+    limit = 4096
     size = godfield_core.INTERNAL_STATE_SIZE
     assert size <= limit, (
         f"InternalState が {size} バイトに増えています（上限 {limit}）。"

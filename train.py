@@ -4,6 +4,7 @@ import torch
 from sb3_contrib import MaskablePPO
 from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
 
+import godfield_core
 from godfield_rl.callbacks import SelfPlayCallback, WinRateCallback
 from godfield_rl.env_wrapper import GodFieldVectorEnv
 from godfield_rl.feature_extractor import GodFieldFeatureExtractor, GodFieldTransformerExtractor
@@ -38,6 +39,13 @@ def main():
     parser.add_argument("--self-play-save-freq", type=int, default=1_000_000, help="Steps between self-play model snapshots")
     parser.add_argument("--worker-id", type=int, default=0, help="Worker ID for distributed league training")
     parser.add_argument("--use-transformer", action="store_true", help="Use Transformer feature extractor instead of MLP")
+    # Transformer の大きさ。系列長は 1 + 手札4ブロック + 履歴 なので、
+    # 履歴（C++ の HISTORY_LENGTH）を増やすと注意の計算が2乗で効く。
+    parser.add_argument("--d-model", type=int, default=128, help="Transformer の埋め込み次元（nhead で割り切れること）")
+    parser.add_argument("--nhead", type=int, default=4, help="Transformer のヘッド数")
+    parser.add_argument("--num-layers", type=int, default=2, help="Transformer の層数")
+    parser.add_argument("--dim-feedforward", type=int, default=256, help="Transformer の中間層の幅")
+    parser.add_argument("--features-dim", type=int, default=256, help="方策へ渡す特徴量の次元")
     parser.add_argument("--start-opponent-model", type=str, default=None, help="Path to initial opponent model zip file")
     parser.add_argument("--pool-dir", type=str, default="models/league_pool", help="Directory to save/load league models")
 
@@ -107,12 +115,19 @@ def main():
     print(f"Setting up MaskablePPO model on {device}...")
 
     if args.use_transformer:
-        print("Using Transformer Feature Extractor!")
+        seq_len = 1 + godfield_core.MAX_HAND_SIZE * 4 + godfield_core.HISTORY_LENGTH
+        print(
+            f"Using Transformer Feature Extractor: d_model={args.d_model} nhead={args.nhead} "
+            f"layers={args.num_layers} ff={args.dim_feedforward} seq_len={seq_len}"
+        )
         policy_kwargs = dict(
             features_extractor_class=GodFieldTransformerExtractor,
             features_extractor_kwargs=dict(
-                d_model=128,
-                features_dim=256,
+                d_model=args.d_model,
+                nhead=args.nhead,
+                num_layers=args.num_layers,
+                dim_feedforward=args.dim_feedforward,
+                features_dim=args.features_dim,
             ),
         )
     else:
@@ -121,7 +136,7 @@ def main():
             features_extractor_class=GodFieldFeatureExtractor,
             features_extractor_kwargs=dict(
                 card_embed_dim=16,
-                features_dim=256,
+                features_dim=args.features_dim,
             ),
         )
 

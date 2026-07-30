@@ -54,7 +54,19 @@ constexpr int NUM_GUARDIAN_TYPES = 11;
 constexpr int MAX_HAND_SIZE = 18;     // 最大手札枚数（使用済み奇跡含む）
 constexpr int CARD_EMPTY = -1;        // 手札スロットが空であることを示す仮想カードID
 constexpr int ACTION_SPACE_SIZE = 122; // 行動の次元数
-constexpr int HISTORY_LENGTH = 64;    // イベント履歴の長さ（リングバッファ、2のべき乗推奨）
+// イベント履歴の長さ（リングバッファ、2のべき乗推奨）。
+//
+// 1局は学習者の意思決定が平均31手で、その間に相手の手番・自動進行・カードの
+// 仮置きなども履歴に載る。64 では1局の序盤が押し出されており、
+// 「相手が何を使い切ったか」を遡れなかった。
+//
+// 増やすと3つに効く:
+//   - InternalState が 1イベント20バイト × 差分だけ増える（環境数ぶん並ぶ）
+//   - 観測が 1イベント5float × 差分だけ増える
+//   - Transformer の系列長が伸び、注意は系列長の2乗で効く
+// 変えたら tests/test_observation_layout.py のサイズ上限と、
+// tools/diagnose_policy.py での実測スループットを併せて確認すること。
+constexpr int HISTORY_LENGTH = 128;
 
 // ゲームの進行と終末の時（Apocalypse）用パラメータ
 constexpr int APOCALYPSE_TURN = 150;   // 終末の時が発動するターン数
