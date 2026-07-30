@@ -73,6 +73,23 @@ void update_staged_pending_info(InternalState &state, int player_id);
 bool is_spiritual_zero_mp_card(int card_id);
 
 /**
+ * @brief 仮置きの i 番目が「精霊系として使われている」かを返します。
+ *
+ * 精霊系は直前（左隣）に置かれた奇跡1枚の消費MPを0にするカードです。その用途で
+ * 使われている場合、そのカード自身の攻撃力・属性・防御力はどれも持ち込みません
+ * （プラス攻撃でもなければ防具として出したわけでもないため）。
+ *
+ * 判定はMPの計算（calculate_mp_cost_excluding_magical_stick）と同じ「直前が奇跡か」
+ * で行います。ここが食い違うと「消費MPは0になったのに防御力だけ乗る」という
+ * 中途半端な状態になります。実際、防御側にこの除外が無かったため、
+ * ＜乱気流＞＋精霊の帯（守12）で弾き損ねると被弾が12減っていました。
+ *
+ * 1枚目に置いた場合や、虹のカーテンの後ろに置いた場合は「普通の防具・武器として
+ * 使った」ことになるので false を返し、攻撃力・防御力は通常どおり働きます。
+ */
+bool is_used_as_spiritual(const StagedCardIds &card_ids, size_t i);
+
+/**
  * @brief 同じカードの組み合わせが複数箇所で列挙されていたものを述語にしたもの。
  *
  * 片方だけ直す事故を防ぐため、2箇所以上で同じ列挙が現れるものはここに集約する。
@@ -329,6 +346,11 @@ std::vector<int> get_guardian_action_percents();
  * @brief HP吸収を持つカードの一覧（テストが全種を網羅するために公開）。
  */
 std::vector<int> get_absorption_sources();
+
+/**
+ * @brief 精霊系カードの一覧（テストが全種を網羅するために公開）。
+ */
+std::vector<int> get_spiritual_zero_mp_cards();
 
 void apply_curse_to_player(InternalState &state, int player_id, HitCurse curse);
 void apply_curse(InternalState &state, int player_id, CurseType type);

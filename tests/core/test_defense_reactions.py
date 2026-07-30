@@ -28,13 +28,16 @@ from godfield_core import (
     EventType,
     GamePhase,
     PhenomenonType,
+    RollKind,
 )
 from tests.core.dsl import (
     Side,
     all_cards,
     card_feature,
     card_id,
+    card_name,
     cards_of_element,
+    cards_where,
     element_of,
 )
 
@@ -270,9 +273,8 @@ def test_rainbow_curtain_still_allows_a_reaction_armor(board):
         p1=Side(hp=40, mp=20, hand=[CURTAIN, sky_armor]),
     )
     g.rng.deck_always(FILLER)
-    # スカイアーマーは弾きを持つ。ここで見たいのは「2枚目として出せること」と
-    # その防御力が乗ることなので、弾きは起こさない側に固定する
-    # （固定しないと50%で攻守が入れ替わり、被弾の検証が成立しない）。
+    # スカイアーマーは弾きを持つ。ここで見たいのは「2枚目として出せること」なので、
+    # 弾きは失敗側に固定する（固定しないと50%で攻守が入れ替わり、被弾を見られない）。
     g.rng.bounce(success=False)
 
     g.attack(meteor)
@@ -283,9 +285,10 @@ def test_rainbow_curtain_still_allows_a_reaction_armor(board):
 
     g.defend(sky_armor)
 
-    guard = card_feature(CURTAIN, "defense_power") + card_feature(sky_armor, "defense_power")
-    damage = max(0, card_feature(meteor, "attack_power") - guard)
-    g.expect(p1_hp=40 - damage)
+    # 弾きが発動した（そして失敗した）ので、スカイアーマーの防御力は乗らない。
+    # 虹のカーテンは防御力0なので、攻撃力がそのまま通る。
+    assert card_feature(CURTAIN, "defense_power") == 0
+    g.expect(p1_hp=40 - card_feature(meteor, "attack_power"))
 
 
 def test_countering_element_armor_is_legal_against_a_miracle_without_the_curtain(board):
@@ -1182,3 +1185,285 @@ def test_a_spiritual_card_can_follow_wall_and_turbulence(board, reaction, attack
 
     g.defend(SPIRIT_DOLL)
     g.expect(p1_mp=mp_cost - 1)  # 精霊系で相殺されるのでMPは減らない
+
+
+# ============================================================================
+# リアクションで使ったカードの防御力は乗らない
+# ============================================================================
+
+
+def _bouncing_armors_with_defense() -> list[int]:
+    """弾き（bounce）を持ち、かつ防御力も持つ防具を集めます。
+
+    「弾きに失敗して被弾する」経路を持つのはこの組み合わせだけなので、
+    防御力が差し引かれるかどうかが実際の被弾量に出ます。
+    """
+    return [
+        c
+        for c in cards_where(type="defense", reaction_type="bounce")
+        if card_feature(c, "defense_power", 0) > 0
+    ]
+
+
+BOUNCING_ARMORS = _bouncing_armors_with_defense()
+
+
+@pytest.mark.parametrize("armor", BOUNCING_ARMORS, ids=[card_name(c) for c in BOUNCING_ARMORS])
+def test_a_failed_bounce_does_not_apply_the_reaction_card_defense(board, armor):
+    """弾きに失敗したとき、そのカードの防御力が差し引かれないことを検証します。
+
+    リアクション効果を使ったカードは「その効果を使った」ぶん防御力を持ち込みません。
+    以前は通常の防具と同じように守が合算されており、スカイアーマー（守9）で
+    ＜滝＞（攻25）を弾き損ねても16ダメージしか受けませんでした。正しくは25です。
+
+    防具として使った場合（＝リアクションが発動しない置き方）と対比することで、
+    「常に0になった」わけではないことも同時に示します。
+    """
+    attack = "miracles/waterfall"  # 水属性 ATK25。スカイ系は無属性なので奇跡に出せる
+    power = card_feature(attack, "attack_power")
+    guard = card_feature(armor, "defense_power")
+    assert power > guard, "防御力で受けきれる組み合わせでは差が見えない"
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[armor]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=False)
+
+    g.attack(attack)
+    g.defend(armor)
+
+    g.expect(p1_hp=99 - power)
+    assert any(
+        e.type == EventType.CONFIRM_DEFENSE and e.value == 0 for e in g.event_log()
+    ), "確定時の防御力も0として記録されるべきです"
+
+
+@pytest.mark.parametrize("armor", BOUNCING_ARMORS, ids=[card_name(c) for c in BOUNCING_ARMORS])
+def test_the_same_armor_still_guards_when_its_reaction_does_not_fire(board, armor):
+    """同じ防具でも、リアクションが発動しない置き方なら防御力が乗ることを検証します。
+
+    リアクションは1枚目（虹のカーテンの直後なら2枚目）でしか発動しません。
+    1枚目に別の防具を置けば、スカイ系も普通の無属性防具として働きます。
+    上のテストと対で、「リアクションを使ったから0になる」ことを示します。
+    """
+    attack = "weapons/dragon-claws"   # 無属性 ATK15
+    first = "armor/leather-clothes"   # 無属性の一般防具
+    power = card_feature(attack, "attack_power")
+    guard = card_feature(first, "defense_power") + card_feature(armor, "defense_power")
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[first, armor]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.select(first)
+    g.defend(armor)
+
+    # 弾き判定は行われない（指示すると空振りになるので、ここでは指示しない）
+    g.expect(p1_hp=99 - max(0, power - guard))
+    assert not any(e.type == EventType.BOUNCE_ATTACK for e in g.event_log()), (
+        "2枚目に置いたリアクションカードの効果が発動しています"
+    )
+
+
+
+
+# ============================================================================
+# リアクションカード自身のステータスが跳ね返る攻撃に混ざらないこと
+# ============================================================================
+
+PHYSICAL_ATTACK = "weapons/dragon-claws"   # 無属性 ATK15
+MIRACLE_ATTACK = "miracles/waterfall"      # 水属性 ATK25
+
+_ALL_REACTIONS = sorted(
+    set(_reactions_for("atk_defence_phase")) | set(_reactions_for("miracle_defence_phase"))
+)
+
+FIRED_EVENT = {
+    "block": EventType.BLOCK_ATTACK,
+    "reflect": EventType.REFLECT_DAMAGE,
+    "bounce": EventType.BOUNCE_ATTACK,
+}
+
+
+def _defend_with_reaction(board, reaction, attack):
+    """1枚のリアクションで防御する。発動しなかった場合は None を返します。
+
+    同じカードでも、物理攻撃と奇跡攻撃のどちらでリアクションが発動するかは
+    カードによって違います（スカイ系は物理には出せても効果は発動せず、
+    ただの無属性防具として働きます）。どちらで発動するかをテスト側で決め打ちすると
+    実装の規則をテストに複製することになるので、両方試して発動した方を使います。
+    """
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[reaction]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=True, optional=True)  # 弾きは成功側に固定（失敗すると返らない）
+
+    g.attack(attack)
+    if card_name(card_id(reaction)) not in g.legal_cards():
+        return None
+    before = (g.state.pending_attack_power, g.state.pending_attack_element)
+    g.defend(reaction)
+
+    fired = FIRED_EVENT[card_feature(reaction, "reaction_type")]
+    if not any(e.type == fired for e in g.event_log()):
+        return None
+    return g, before
+
+
+@pytest.mark.parametrize("reaction", _ALL_REACTIONS, ids=lambda r: r)
+def test_a_reaction_does_not_change_the_attack_it_sends_back(board, reaction):
+    """はね返した・弾いた攻撃の威力と属性が、元のまま変わらないことを検証します。
+
+    リアクションカードには攻撃力を持つもの（反射剣 攻10、乱弾武剣 攻5、
+    エンゼルアクス 攻15 など）と防御力を持つもの（スカイアーマー 守9 など）が
+    あります。これらが跳ね返る攻撃に混ざると、返された側が受ける威力が変わって
+    しまいます。阻止の場合は攻撃そのものが消えるので、誰も被弾しないことを見ます。
+
+    カードを名指しせずマスタから全件集めるので、リアクションカードが増えても
+    自動で検証対象に入ります。
+    """
+    result = None
+    for attack in (PHYSICAL_ATTACK, MIRACLE_ATTACK):
+        result = _defend_with_reaction(board, reaction, attack)
+        if result is not None:
+            break
+    assert result is not None, (
+        f"{reaction} のリアクションが物理・奇跡のどちらでも発動しませんでした"
+    )
+    g, (power_before, element_before) = result
+
+    if card_feature(reaction, "reaction_type") == "block":
+        g.expect(p0_hp=99, p1_hp=99)
+        return
+
+    # 攻守が入れ替わり、元の攻撃者が同じ攻撃を受ける側に立つ
+    g.expect(attacker=1, defender=0, actor=0, p0_hp=99, p1_hp=99)
+    assert g.state.pending_attack_power == power_before, (
+        f"跳ね返った攻撃の威力が {power_before} から {g.state.pending_attack_power}"
+        f" に変わっています（{reaction} 自身の"
+        f"攻撃力{card_feature(reaction, 'attack_power', 0)}・"
+        f"防御力{card_feature(reaction, 'defense_power', 0)}が混ざっていないか）"
+    )
+    assert g.state.pending_attack_element == element_before, "属性が変わっています"
+
+
+REFLECT_CARDS = [r for r in _ALL_REACTIONS if card_feature(r, "reaction_type") == "reflect"]
+
+
+@pytest.mark.parametrize("reaction", REFLECT_CARDS, ids=lambda r: r)
+def test_reflection_never_rolls_and_always_succeeds(board, reaction):
+    """はね返す（reflect）が判定なしで必ず成功することを検証します。
+
+    50%の判定を持つのは弾く（bounce）だけです。反射に判定が混ざると
+    「返せるはずが返せない」局面が生まれます。
+    """
+    result = None
+    for attack in (PHYSICAL_ATTACK, MIRACLE_ATTACK):
+        result = _defend_with_reaction(board, reaction, attack)
+        if result is not None:
+            break
+    assert result is not None, f"{reaction} の反射が発動しませんでした"
+    g, _ = result
+
+    assert g.rng.consumed(RollKind.BOUNCE) == 0, (
+        "反射で弾き判定が行われています（反射は100%成功のはず）"
+    )
+    g.expect(attacker=1, defender=0, actor=0, p1_hp=99)
+
+
+# ============================================================================
+# 精霊系として使ったカードの防御力は乗らない
+# ============================================================================
+
+
+def _spiritual_armors() -> list[int]:
+    """精霊系のうち、防御力を持つもの（＝防御側で守が乗りうるもの）。"""
+    return [
+        c
+        for c in godfield_core.get_spiritual_zero_mp_cards()
+        if card_feature(c, "defense_power", 0) > 0
+    ]
+
+
+SPIRITUAL_ARMORS = _spiritual_armors()
+
+
+@pytest.mark.parametrize(
+    "spirit", SPIRITUAL_ARMORS, ids=[card_name(c) for c in SPIRITUAL_ARMORS]
+)
+def test_a_spiritual_card_used_as_spiritual_adds_no_defense(board, spirit):
+    """＜乱気流＞の後ろに置いた精霊系の防御力が乗らないことを検証します。
+
+    リアクション奇跡の後ろに置ける精霊系は、その消費MPを0にするためのものであって
+    防具として出したわけではありません。攻撃側では「精霊系を奇跡に重ねた場合は
+    攻撃力も属性も持ち込まない」と除外しているのに、防御側には同じ除外が無く、
+    ＜乱気流＞＋精霊の帯（守12）で ＜滝＞（攻25）を弾き損ねると被弾が13でした。
+    正しくは25です。
+    """
+    attack = "miracles/waterfall"
+    power = card_feature(attack, "attack_power")
+    guard = card_feature(spirit, "defense_power")
+    assert guard > 0 and power > guard, "守が乗ったかどうかを被弾量で見分けられる前提"
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[TURBULENCE, spirit]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=False)
+
+    g.attack(attack)
+    g.select(TURBULENCE)
+    g.expect_legal([spirit])
+    g.defend(spirit)
+
+    g.expect(p1_hp=99 - power)
+
+
+@pytest.mark.parametrize(
+    "spirit", SPIRITUAL_ARMORS, ids=[card_name(c) for c in SPIRITUAL_ARMORS]
+)
+def test_a_spiritual_card_used_as_plain_armor_still_guards(board, spirit):
+    """精霊系を普通の防具として使った場合は、防御力が乗ることを検証します。
+
+    1枚目に単独で置く場合と、虹のカーテンの後ろに置く場合が該当します。
+    上のテストと対で、「精霊系の守が常に0になった」わけではないことを示します。
+    """
+    attack = "weapons/dragon-claws"  # 無属性なので精霊系（無属性）を単独で出せる
+    power = card_feature(attack, "attack_power")
+    guard = card_feature(spirit, "defense_power")
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[spirit]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.defend(spirit)
+
+    g.expect(p1_hp=99 - max(0, power - guard))
+
+
+def test_spiritual_card_list_is_fully_covered():
+    """C++ の精霊系カード一覧が、テストでカバーされていることを確認します。
+
+    精霊系が追加されたときに、検証が無いまま通り過ぎるのを防ぎます。
+    防御力を持たないもの（精霊の杖・精霊のぬいぐるみ）は防御側の検証対象外ですが、
+    攻撃側は tests/core/test_combat_flow.py が見ています。
+    """
+    all_spirits = set(godfield_core.get_spiritual_zero_mp_cards())
+    with_defense = set(SPIRITUAL_ARMORS)
+    without_defense = all_spirits - with_defense
+    assert with_defense, "防御力を持つ精霊系が1枚もありません"
+    assert all(card_feature(c, "defense_power", 0) == 0 for c in without_defense), (
+        "防御力を持つ精霊系が検証対象から漏れています: "
+        + ", ".join(card_name(c) for c in sorted(without_defense))
+    )

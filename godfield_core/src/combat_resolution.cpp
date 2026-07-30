@@ -54,6 +54,13 @@ bool is_spiritual_zero_mp_card(int card_id) {
             card_id == ID_SPIRITUAL_DOLL);
 }
 
+bool is_used_as_spiritual(const StagedCardIds &card_ids, size_t i) {
+    if (i == 0 || i >= card_ids.size()) return false;
+    if (!is_spiritual_zero_mp_card(card_ids[i])) return false;
+    int prev = card_ids[i - 1];
+    return prev != CARD_EMPTY && g_card_registry[prev].is_miracle();
+}
+
 void deploy_miracle(InternalState &state, int player_id, int slot_idx) {
     if (state.is_deployed[player_id][slot_idx]) {
         return;
@@ -1960,6 +1967,14 @@ bool is_absorption_source(int card_id) {
  */
 std::vector<int> get_absorption_sources() {
     return std::vector<int>(ABSORPTION_SOURCES, ABSORPTION_SOURCES + ABSORPTION_SOURCE_COUNT);
+}
+
+/**
+ * @brief 精霊系（直前の奇跡の消費MPを0にする）カードの一覧（テストが全種を網羅するために公開）。
+ */
+std::vector<int> get_spiritual_zero_mp_cards() {
+    return {ID_SPIRITUAL_STAFF, ID_SPIRITUAL_SOCKS, ID_SPIRITUAL_HOOD,
+            ID_SPIRITUAL_SASH, ID_SPIRITUAL_DOLL};
 }
 
 

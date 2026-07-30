@@ -309,6 +309,10 @@ PYBIND11_MODULE(godfield_core, m) {
           "HP吸収（与えたダメージ分だけ攻撃側が回復する）を持つカードID一覧。"
           "テストが全種を網羅するために公開しています。");
 
+    m.def("get_spiritual_zero_mp_cards", &get_spiritual_zero_mp_cards,
+          "精霊系（直前の奇跡の消費MPを0にする）カードID一覧。"
+          "テストが全種を網羅するために公開しています。");
+
     m.attr("DREAM_DISGUISE_RATE") = DREAM_DISGUISE_RATE;
     m.attr("SAW_BOOM_BOOM_ATTACK_COUNT") = SAW_BOOM_BOOM_ATTACK_COUNT;
     m.attr("SUN_AMULET_REVIVE_HP") = SUN_AMULET_REVIVE_HP;
