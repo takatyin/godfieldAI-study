@@ -136,22 +136,46 @@ def test_rainbow_curtain_unlocks_the_wall_against_an_elemental_attack(board):
     g.expect(p1_hp=40, phase=GamePhase.PHASE_MAIN)
 
 
-def test_rainbow_curtain_can_only_be_the_first_card(board):
-    """虹のカーテンを2枚目以降に重ねられないことを検証します。"""
+def test_rainbow_curtain_can_be_stacked_any_number_of_times(board):
+    """虹のカーテンを何枚でも重ねられることを検証します。
+
+    2枚目以降に機械的な意味はありません（守0で属性を消すだけ）が、手札を回す目的で
+    重ねることがあるため合法手として残っています。
+    """
     torch = "weapons/torch"
     g = board(
         p0=Side(hp=40, mp=10, hand=[torch]),
-        p1=Side(hp=40, mp=10, hand=[CURTAIN, CURTAIN]),
+        p1=Side(hp=40, mp=10, hand=[CURTAIN] * 3),
     )
     g.rng.deck_always(FILLER)
 
     g.attack(torch)
-    g.select_slots(0)  # 1枚目のカーテン
+    for slot in range(3):
+        assert g.legal_actions()[int(ActionType.ACTION_SELECT_HAND_0) + slot], (
+            f"{slot + 1}枚目の虹のカーテンが置けません"
+        )
+        g.select_slots(slot)
+    assert g.state.get_num_staged_cards(1) == 3
 
-    actions = g.legal_actions()
-    assert actions[ActionType.ACTION_SELECT_HAND_1] is False, (
-        "2枚目の虹のカーテンは重ねられないべきです"
+
+def test_rainbow_curtain_cannot_follow_a_plain_armor(board):
+    """一般防具を置いた後には虹のカーテンを重ねられないことを検証します。
+
+    カーテンが何枚でも置けるのは「まだ何も防御していない」あいだだけです。
+    """
+    torch = "weapons/torch"
+    armor = "armor/aqua-shoes"  # 水属性なので火属性の武器攻撃に出せる
+    g = board(
+        p0=Side(hp=40, mp=10, hand=[torch]),
+        p1=Side(hp=40, mp=10, hand=[armor, CURTAIN]),
     )
+    g.rng.deck_always(FILLER)
+
+    g.attack(torch)
+    g.expect_legal([CURTAIN])
+
+    g.select(armor)
+    g.expect_illegal([CURTAIN])
 
 
 def test_rainbow_curtain_unlocks_plain_armor_and_keeps_the_reaction(board):
@@ -1244,30 +1268,42 @@ def test_a_failed_bounce_does_not_apply_the_reaction_card_defense(board, armor):
 def test_the_same_armor_still_guards_when_its_reaction_does_not_fire(board, armor):
     """同じ防具でも、リアクションが発動しない置き方なら防御力が乗ることを検証します。
 
-    リアクションは1枚目（虹のカーテンの直後なら2枚目）でしか発動しません。
-    1枚目に別の防具を置けば、スカイ系も普通の無属性防具として働きます。
+    リアクションが発動するのは仮置きの先頭（虹のカーテンは何枚並んでいてもよい）に
+    置いた場合だけです。一般防具を挟めば、スカイ系も普通の無属性防具として働きます。
     上のテストと対で、「リアクションを使ったから0になる」ことを示します。
+
+    攻撃は**奇跡**にします。スカイ系は物理防御では `is_active_reaction_card` が
+    false になるため、物理攻撃で試すと「位置に関係なく発動しない」ことしか
+    確認できず、対照になりません（実際、以前このテストは物理攻撃で書かれており、
+    位置の規則が解決側で守られていない不具合を通してしまっていました）。
     """
-    attack = "weapons/dragon-claws"   # 無属性 ATK15
-    first = "armor/leather-clothes"   # 無属性の一般防具
+    attack = "miracles/flame"        # 火属性 ATK10
+    first = CURTAIN                  # 無属性化して一般防具を解禁する
+    second = "armor/leather-cap"     # 無属性の一般防具（これでリアクション位置を潰す）
     power = card_feature(attack, "attack_power")
-    guard = card_feature(first, "defense_power") + card_feature(armor, "defense_power")
+    guard = (card_feature(first, "defense_power", 0)
+             + card_feature(second, "defense_power", 0)
+             + card_feature(armor, "defense_power"))
 
     g = board(
         p0=Side(hp=99, mp=99, hand=[attack]),
-        p1=Side(hp=99, mp=99, hand=[first, armor]),
+        p1=Side(hp=99, mp=99, hand=[first, second, armor]),
     )
     g.rng.deck_always(FILLER)
 
     g.attack(attack)
     g.select(first)
+    g.select(second)
+    assert card_name(card_id(armor)) in g.legal_cards(), (
+        "一般防具としてなら置けるはずです（この前提が崩れたら対照になりません）"
+    )
     g.defend(armor)
 
     # 弾き判定は行われない（指示すると空振りになるので、ここでは指示しない）
-    g.expect(p1_hp=99 - max(0, power - guard))
     assert not any(e.type == EventType.BOUNCE_ATTACK for e in g.event_log()), (
-        "2枚目に置いたリアクションカードの効果が発動しています"
+        "一般防具を挟んだ後に置いたリアクションカードの効果が発動しています"
     )
+    g.expect(p1_hp=99 - max(0, power - guard), phase=GamePhase.PHASE_MAIN)
 
 
 
@@ -1466,4 +1502,199 @@ def test_spiritual_card_list_is_fully_covered():
     assert all(card_feature(c, "defense_power", 0) == 0 for c in without_defense), (
         "防御力を持つ精霊系が検証対象から漏れています: "
         + ", ".join(card_name(c) for c in sorted(without_defense))
+    )
+
+# ============================================================================
+# 虹のカーテンの重ねがけとリアクションの位置規則
+# ============================================================================
+
+_MIRACLE_REACTION_CASES = [
+    ("armor/sky-armor", EventType.BOUNCE_ATTACK),
+    ("armor/moonlight-armor", EventType.REFLECT_DAMAGE),
+    ("armor/angel-armor", EventType.BLOCK_ATTACK),
+]
+
+
+@pytest.mark.parametrize("num_curtains", [1, 2, 3], ids=["カーテン1枚", "カーテン2枚", "カーテン3枚"])
+@pytest.mark.parametrize(
+    ("reaction", "fired"), _MIRACLE_REACTION_CASES, ids=lambda v: getattr(v, "name", v)
+)
+def test_a_reaction_still_fires_after_any_number_of_curtains(board, num_curtains, reaction, fired):
+    """虹のカーテンを何枚重ねた後でも、リアクションが置けて発動することを検証します。
+
+    カーテンは属性を消すだけなので、何枚並んでいてもその後ろは「先頭」のままです。
+    以前は例外が「カーテンちょうど1枚の直後」に限定されており、2枚重ねると
+    リアクションを置けませんでした。
+    """
+    attack = "miracles/flame"  # 火属性なので、カーテンが無いと一般防具は出せない
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN] * num_curtains + [reaction]),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=True, optional=True)
+
+    g.attack(attack)
+    for slot in range(num_curtains):
+        g.select_slots(slot)
+    assert g.state.get_num_staged_cards(1) == num_curtains
+
+    g.expect_legal([reaction])
+    g.defend(reaction)
+
+    assert any(e.type == fired for e in g.event_log()), (
+        f"カーテン{num_curtains}枚の後に置いた {reaction} が発動していません"
+    )
+    # 無属性化されたうえで解決されている
+    assert g.state.pending_attack_element == Element.ELEM_NONE
+
+
+@pytest.mark.parametrize(
+    ("reaction", "fired"), _MIRACLE_REACTION_CASES, ids=lambda v: getattr(v, "name", v)
+)
+def test_a_reaction_after_a_plain_armor_does_not_fire(board, reaction, fired):
+    """一般防具を挟んだ後に置いたリアクションカードの効果が発動しないことを検証します。
+
+    防御力を持つリアクションカードは「普通の防具」としてなら後ろにも置けます。
+    そのときは効果を持たず、防御力だけが合算されなければいけません。
+
+    以前は合法手の判定だけが位置を見ており、解決側は見ていませんでした。そのため
+    `虹のカーテン ＋ 一般防具 ＋ スカイアーマー` と置くと弾きが発動し、
+    本来ダメージ0で終わるはずの局面で攻守が入れ替わっていました。
+    """
+    attack = "miracles/flame"
+    plain = "armor/leather-cap"   # 無属性の一般防具
+    power = card_feature(attack, "attack_power")
+    guard = card_feature(plain, "defense_power") + card_feature(reaction, "defense_power")
+    assert card_feature(CURTAIN, "defense_power", 0) == 0
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN, plain, reaction]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.select(CURTAIN)
+    g.select(plain)
+    assert card_name(card_id(reaction)) in g.legal_cards(), (
+        "一般防具としてなら置けるはずです"
+    )
+    g.defend(reaction)
+
+    assert not any(e.type == fired for e in g.event_log()), (
+        f"一般防具を挟んだ後の {reaction} の効果が発動しています"
+    )
+    # 攻守は入れ替わらず、防御力が合算されてターンが終わる
+    g.expect(p1_hp=99 - max(0, power - guard), p0_hp=99, phase=GamePhase.PHASE_MAIN)
+
+
+@pytest.mark.parametrize(
+    ("reaction", "fired"), _MIRACLE_REACTION_CASES, ids=lambda v: getattr(v, "name", v)
+)
+def test_more_armor_can_follow_a_reaction_card_placed_as_plain_armor(board, reaction, fired):
+    """普通の防具として置いたリアクションカードの後にも、防具を重ねられることを検証します。
+
+    リアクションとして置いた場合は「精霊系しか続けられない」制限がかかりますが、
+    一般防具として置いたのなら普通の防具と同じ扱いでなければ辻褄が合いません。
+    """
+    attack = "miracles/flame"
+    plain = "armor/leather-cap"
+    extra = "armor/wood-shield"
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN, plain, reaction, extra]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    g.select(CURTAIN)
+    g.select(plain)
+    g.select(reaction)
+
+    g.expect_legal([extra])
+
+
+@pytest.mark.parametrize("num_curtains", [0, 1, 2], ids=["1枚目に置く", "カーテン1枚の後", "カーテン2枚の後"])
+@pytest.mark.parametrize(
+    ("reaction", "fired"), _MIRACLE_REACTION_CASES, ids=lambda v: getattr(v, "name", v)
+)
+def test_nothing_can_follow_a_reaction_card_used_as_a_reaction(board, num_curtains, reaction, fired):
+    """リアクションとして置いた後は、確定しか選べなくなることを検証します。
+
+    仮置きの先頭に置いた時点で「リアクションカードの使用」と確定するので、そこに
+    一般防具を重ねることはできません。防具として使いたいなら先に一般防具を
+    置く必要があります（そちらは上のテストが見ています）。
+
+    1枚目に置いた単体奇跡にプラス攻撃を重ねられないのと同じ構図です。
+    `プラス武器 ＋ ＜火の玉＞` は合法でも `＜火の玉＞ ＋ プラス武器` は非合法、
+    という順序依存がここにもあります。
+    """
+    attack = "miracles/flame"
+    plain = "armor/leather-cap"   # 無属性なのでカーテンさえあれば置ける一般防具
+
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=[CURTAIN] * num_curtains + [reaction, plain]),
+    )
+    g.rng.deck_always(FILLER)
+
+    g.attack(attack)
+    for slot in range(num_curtains):
+        g.select_slots(slot)
+    if num_curtains:
+        # カーテンだけを置いた時点では、まだ一般防具を重ねられる
+        g.expect_legal([plain])
+
+    g.select(reaction)
+
+    assert g.legal_cards() == [], (
+        f"リアクションとして置いた後は確定のみのはずですが {g.legal_cards()} が置けます"
+    )
+    assert g.legal_actions()[int(ActionType.ACTION_CONFIRM)], "確定すら選べません"
+
+
+@pytest.mark.parametrize(
+    ("plays", "why"),
+    [
+        (["armor/sky-armor"], "リアクションとして置いた（守は乗らない）"),
+        (["armor/moonlight-armor"], "リアクションとして置いた（守は乗らない）"),
+        ([TURBULENCE, "armor/spiritual-sash"], "精霊系として置いた（守は乗らない）"),
+        ([CURTAIN, "armor/leather-cap", "armor/sky-armor"], "一般防具として置いた（守が乗る）"),
+        ([CURTAIN, "armor/leather-cap"], "普通に重ねた（守が乗る）"),
+    ],
+    ids=["スカイアーマー単独", "月光のよろい単独", "乱気流+精霊の帯",
+         "カーテン+一般防具+スカイアーマー", "カーテン+一般防具"],
+)
+def test_observed_defense_power_matches_the_defense_that_actually_applies(board, plays, why):
+    """観測に載る防御力が、実際に効く防御力と一致することを検証します。
+
+    `pending_defense_power` はエージェントが「今どれだけ防げているか」を見るための
+    値です。ダメージ計算と別々に集計していたため、リアクションカードを置いたときに
+    観測だけが守9を表示し、実際には0という食い違いが起きていました。
+    エージェントから見ると「守9あるはずが攻撃力そのまま通った」ことになります。
+    """
+    attack = "miracles/waterfall"   # 水 ATK25
+    g = board(
+        p0=Side(hp=99, mp=99, hand=[attack]),
+        p1=Side(hp=99, mp=99, hand=list(plays)),
+    )
+    g.rng.deck_always(FILLER)
+    g.rng.bounce(success=False, optional=True)
+
+    g.attack(attack)
+    for c in plays:
+        assert card_name(card_id(c)) in g.legal_cards(), f"{c} を置けません"
+        g.select(c)
+
+    observed = g.state.pending_defense_power
+    g.confirm()
+
+    applied = next(
+        (int(e.value) for e in g.event_log() if e.type == EventType.CONFIRM_DEFENSE), None
+    )
+    assert applied is not None, "CONFIRM_DEFENSE が記録されていません"
+    assert observed == applied, (
+        f"観測の防御力 {observed} と実際に効いた防御力 {applied} が食い違っています"
     )

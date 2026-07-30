@@ -197,6 +197,7 @@ static bool is_element_counter(Element atk_elem, Element def_elem) {
 
 
 struct DefenseStagedState {
+    StagedDefenseInfo staged;   // 位置に依存する評価（解決・観測と共有する）
     bool rainbow = false;
     Element effective_atk_element = ELEM_NONE;
     bool has_staged_reaction = false;
@@ -211,36 +212,32 @@ struct DefenseStagedState {
 
 static DefenseStagedState evaluate_defense_staged_state(const InternalState &state, int me, GamePhase defense_phase) {
     DefenseStagedState dst = {};
-    dst.effective_atk_element = state.pending_attack_element;
 
-    for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = staged_card_id(state, me, i);
-        if (card_id == ID_RAINBOW_CURTAIN) {
-            dst.rainbow = true;
-            dst.effective_atk_element = ELEM_NONE;
-        }
+    // 位置に依存する評価（カーテンによる無属性化・効果が出るリアクション）は
+    // 解決や観測と共有する。ここで自前に走査すると食い違う。
+    dst.staged = evaluate_staged_defense(state, me, defense_phase);
+    dst.rainbow = dst.staged.has_curtain;
+    dst.effective_atk_element = dst.staged.effective_atk_element;
+    dst.has_staged_reaction = (dst.staged.reaction_index >= 0);
+    if (dst.has_staged_reaction &&
+        g_card_registry[dst.staged.reaction_card_id].is_miracle()) {
+        dst.reaction_is_miracle = true;
     }
 
-    for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = staged_card_id(state, me, i);
-        if (card_id == CARD_EMPTY) continue;
-        const CardFeatures &f = g_card_registry[card_id];
-        if (card_id == ID_RAINBOW_CURTAIN) continue;
-        if (is_active_reaction_card(state, card_id, defense_phase, dst.effective_atk_element)) {
-            dst.has_staged_reaction = true;
-            if (f.is_miracle()) dst.reaction_is_miracle = true;
-        } else if (is_spiritual_zero_mp_card(card_id)) {
-            dst.has_staged_spirit = true;
-        }
+    const StagedCardIds staged = get_staged_card_ids(state, me);
+    for (size_t i = 0; i < staged.size(); ++i) {
+        if (is_used_as_spiritual(staged, i)) dst.has_staged_spirit = true;
     }
 
-    for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-        int card_id = staged_card_id(state, me, i);
+    // 防御属性の合成。効果の方を使ったカード（リアクション・精霊系）は防具として
+    // 出していないので、属性も持ち込まない（防御力を合算しないのと同じ理由）。
+    for (size_t i = 0; i < staged.size(); ++i) {
+        int card_id = staged[i];
         if (card_id == CARD_EMPTY) continue;
         if (card_id == ID_RAINBOW_CURTAIN) continue;
         const CardFeatures &f = g_card_registry[card_id];
-        if (is_active_reaction_card(state, card_id, defense_phase, dst.effective_atk_element)) continue;
-        if (is_spiritual_zero_mp_card(card_id)) continue;
+        if (static_cast<int>(i) == dst.staged.reaction_index) continue;
+        if (is_used_as_spiritual(staged, i)) continue;
 
         Element e = f.element;
         if (e == ELEM_NONE) dst.has_non_element = true;
@@ -262,9 +259,12 @@ static bool is_legal_defense_card(const InternalState &state, int me, int card_i
                                   const DefenseStagedState &dst, GamePhase defense_phase) {
     if (!can_afford_staged_plus_card(state, me, i)) return false;
 
-    // 1. 虹のカーテンは1枚目のみ (かつ攻撃力 > 0 のときのみ)
+    // 1. 虹のカーテンは何枚でも置けるが、一般防具を挟んだ後には置けない
+    //    （かつ攻撃力 > 0 のときのみ）。
+    //    2枚目以降に機械的な意味は無い（守0で属性を消すだけ）が、手札を回す目的で
+    //    重ねることがあるので合法手からは外さない。
     if (card_id == ID_RAINBOW_CURTAIN) {
-        return (state.num_staged_cards[me] == 0 && state.pending_attack_power > 0);
+        return (dst.staged.next_is_front && state.pending_attack_power > 0);
     }
 
     // 2. すでにリアクションカードがある場合
@@ -274,18 +274,18 @@ static bool is_legal_defense_card(const InternalState &state, int me, int card_i
 
     // 3. リアクションカードの重ねがけ排他チェック
     //
-    // リアクションカードは1枚目にしか置けないが、虹のカーテンの直後（2枚目）だけは
-    // 例外的に許される。これは物理防御・奇跡防御のどちらでも同じ。
+    // リアクションカードは仮置きの先頭に置いたときだけ効果が出る。虹のカーテンは
+    // 属性を消すだけなので何枚並べてもよく、その後ろは依然として先頭とみなす。
+    // これは物理防御・奇跡防御のどちらでも同じ。
     // 以前は物理防御でしか例外を認めておらず、虹のカーテンの後に＜乱気流＞を
     // 置けなかった（＜壁＞は置けるのに、という非対称になっていた）。
+    //
+    // ここで false になっても、防御力を持つリアクションカードは 4. で「普通の防具」
+    // として置ける。その場合はリアクション効果を持たないので、解決側も
+    // is_reaction_position() で同じ判定をする必要がある。
     bool is_react = is_active_reaction_card(state, card_id, defense_phase, dst.effective_atk_element);
-    if (is_react) {
-        bool allowed_as_first =
-            (state.num_staged_cards[me] == 0) ||
-            (state.num_staged_cards[me] == 1 && staged_card_id(state, me, 0) == ID_RAINBOW_CURTAIN);
-        if (allowed_as_first) {
-            return true;
-        }
+    if (is_react && dst.staged.next_is_front) {
+        return true;
     }
 
     // 4. 一般防具の判定

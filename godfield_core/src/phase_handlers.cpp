@@ -163,19 +163,11 @@ void update_staged_pending_info(InternalState &state, int player_id) {
         state.pending_is_group_attack = is_group;
     }
 
-    // 防御力計算。精霊系として使われているカードは防具として出したわけではないので、
-    // 防御力を持ち込まない（攻撃側で攻撃力・属性を持ち込まないのと同じ理由）。
-    int def_power = 0;
-    for (size_t i = 0; i < card_ids.size(); ++i) {
-        int cid = card_ids[i];
-        if (cid == CARD_EMPTY) continue;
-        if (is_used_as_spiritual(card_ids, i)) continue;
-        const CardFeatures &f = g_card_registry[cid];
-        if (f.defense_power > 0) {
-            def_power += f.defense_power;
-        }
-    }
-    state.pending_defense_power = def_power;
+    // 防御力は解決側と同じ関数で求める。効果の方を使ったカード（リアクション・
+    // 精霊系）は防具として出していないので守を持ち込まない。
+    // ここが解決側とずれると、エージェントには効かない防御力が見える。
+    state.pending_defense_power =
+        evaluate_staged_defense(state, player_id, state.current_phase).total_defense;
 }
 
 
@@ -674,52 +666,29 @@ static void resolve_defense_step(InternalState &state, ActionType action, int me
             // 防御の仮置きは手札由来のみだが、NO_HAND_SLOT(-1) を添字にすると
             // 静かに範囲外へ書き込むので念のため弾く。
             if (h_idx != NO_HAND_SLOT) state.is_known_to_opp[me][h_idx] = true;
-            if (staged_card_id(state, me, i) == ID_RAINBOW_CURTAIN) rainbow = true;
         }
 
         bool is_darkness_attack = (state.pending_attack_element == ELEM_DARKNESS);
+
+        // 位置に依存する評価（カーテンによる無属性化・効果が出るリアクション・
+        // 実際に効く防御力）は、合法手の判定や観測と同じ関数で求める。
+        // 以前はここだけ自前で走査しており、
+        //   - 位置を見ていなかったため、一般防具を挟んだ後に置いたスカイアーマーの
+        //     弾きが発動して攻守が入れ替わっていた
+        //   - 観測（pending_defense_power）だけがリアクションカードの守を足しており、
+        //     エージェントには効かない防御力が見えていた
+        // という食い違いが起きた。
+        const StagedDefenseInfo staged = evaluate_staged_defense(state, me, phase);
+        rainbow = staged.has_curtain;
         if (rainbow) {
             state.pending_attack_element = ELEM_NONE;
         }
+        total_def = staged.total_defense;
 
-        ReactionType react_type = REACTION_NONE;
-        int react_card_id = -1;
-        int react_index = -1;
-        Element effective_atk_element = state.pending_attack_element;
-        for (int i = 0; i < state.num_staged_cards[me]; ++i) {
-            int card_id = staged_card_id(state, me, i);
-            const CardFeatures &f = g_card_registry[card_id];
-            if (card_id == ID_RAINBOW_CURTAIN) continue;
-            if (is_active_reaction_card(state, card_id, phase, effective_atk_element)) {
-                react_type = f.reaction_type;
-                react_card_id = card_id;
-                react_index = i;
-            }
-        }
-
-        // 防御力の合算。リアクション効果が発動したカードは、その効果を使ったぶん
-        // 防御力を持ち込まない（阻止・はね返す・弾くのいずれも同じ）。
-        //
-        // 以前はここを区別せず全カードの守を足していたため、スカイアーマー（守9）で
-        // ＜滝＞（攻25）を弾き損ねると被弾が16になっていた。正しくは25である。
-        // 防御力を持つリアクションカードはスカイ系・月光系・エンゼル系の12種あり、
-        // そのうち弾き（bounce）の5種は失敗しうるので、実際に被弾量が変わる。
-        //
-        // なお1枚目に他の防具を置いた場合や2枚目以降に出した場合はリアクション効果
-        // 自体が発動しないので（is_active_reaction_card が false）、そのときは
-        // 通常の防具として守が合算される。
-        //
-        // 精霊系として使われているカードも同じ理由で除く。＜乱気流＞や＜壁＞の
-        // 後ろに置く精霊系はその消費MPを0にするためのもので、防具として出したわけ
-        // ではない。以前は除いていなかったため、＜乱気流＞＋精霊の帯（守12）で
-        // ＜滝＞（攻25）を弾き損ねると被弾が13になっていた。正しくは25である。
-        const StagedCardIds staged = get_staged_card_ids(state, me);
-        for (size_t i = 0; i < staged.size(); ++i) {
-            if (static_cast<int>(i) == react_index) continue;
-            if (is_used_as_spiritual(staged, i)) continue;
-            if (staged[i] == CARD_EMPTY) continue;
-            total_def += g_card_registry[staged[i]].defense_power;
-        }
+        const int react_card_id = staged.reaction_card_id;
+        const ReactionType react_type =
+            (staged.reaction_index >= 0) ? g_card_registry[react_card_id].reaction_type
+                                         : REACTION_NONE;
 
         int first_card = staged_card_id(state, me, 0);
         push_event(state, me, EventType::CONFIRM_DEFENSE, first_card, opp, static_cast<float>(total_def));

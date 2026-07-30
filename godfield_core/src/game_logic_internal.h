@@ -255,8 +255,44 @@ bool resolve_turn_end_steps(InternalState &state);
 
 /**
  * @brief カードが現在のフェイズおよび攻撃属性に対してアクティブなリアクション（反射/弾く/阻止）カードであるかを判定します。
+ *
+ * これはカード自身の性質だけを見ます。実際に効果が出るかは仮置きの位置にも依存
+ * するので、解決するときは is_reaction_position() と併せて判定してください。
  */
 bool is_active_reaction_card(const InternalState &state, int card_id, GamePhase phase, Element attack_element);
+
+/**
+ * @brief 防御の仮置きを1回走査して得られる、位置に依存する評価結果。
+ *
+ * 防御の仮置きは「先頭かどうか」で意味が変わります。
+ *
+ *   - リアクションカードは**先頭に置いたときだけ**効果が出る。虹のカーテンは属性を
+ *     消すだけなので何枚並べてもよく、その後ろは依然として先頭とみなす。
+ *     一般防具を挟むと、それ以降のリアクションカードは効果を持たない普通の防具になる。
+ *   - 効果を使ったカード（リアクション、精霊系）は防御力を持ち込まない。
+ *
+ * この規則は合法手の判定・解決・観測の3箇所で必要になります。それぞれが自前で
+ * 仮置きを走査していたため実際に食い違いが起きました（解決側だけ位置を見ておらず、
+ * 「虹のカーテン＋一般防具＋スカイアーマー」でスカイアーマーの弾きが発動していた。
+ * また観測だけがリアクションカードの守を足しており、効かない防御力が見えていた）。
+ * 走査を1箇所に集約して、同じ結果を全員が使うようにします。
+ */
+struct StagedDefenseInfo {
+    bool has_curtain = false;                  // 虹のカーテンが1枚でもあるか
+    Element effective_atk_element = ELEM_NONE; // カーテンを考慮した攻撃属性
+    int reaction_index = -1;                   // 効果が出るリアクションの位置（無ければ -1）
+    int reaction_card_id = CARD_EMPTY;
+    int total_defense = 0;                     // 実際に効く防御力の合計
+    bool next_is_front = true;                 // 次に置くカードが「先頭扱い」になるか
+};
+
+/**
+ * @brief 防御の仮置きを評価します（合法手の判定・解決・観測で共有）。
+ *
+ * @param phase リアクションが有効かの判定に使うフェイズ。防御フェイズ以外を渡すと
+ *              リアクションは見つからず、防御力の単純合計（精霊系は除く）になります。
+ */
+StagedDefenseInfo evaluate_staged_defense(const InternalState &state, int player, GamePhase phase);
 
 /**
  * @brief 対象プレイヤーの仮置き場（staged_cards）に積まれているカードのID一覧を取得します。

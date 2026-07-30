@@ -1269,6 +1269,49 @@ bool try_execute_super_mirror_reflection(InternalState &state, ActionType action
     return false;
 }
 
+StagedDefenseInfo evaluate_staged_defense(const InternalState &state, int player, GamePhase phase) {
+    StagedDefenseInfo info;
+    info.effective_atk_element = state.pending_attack_element;
+
+    const StagedCardIds staged = get_staged_card_ids(state, player);
+
+    // 1. 虹のカーテンの有無（属性の無属性化）。位置に関係なく1枚でもあれば効く。
+    for (int card_id : staged) {
+        if (card_id == ID_RAINBOW_CURTAIN) {
+            info.has_curtain = true;
+            info.effective_atk_element = ELEM_NONE;
+        }
+    }
+
+    // 2. 効果が出るリアクション。虹のカーテンは透明なので飛ばし、最初に現れた
+    //    それ以外のカードだけが「先頭」＝リアクションとして機能しうる。
+    for (size_t i = 0; i < staged.size(); ++i) {
+        int card_id = staged[i];
+        if (card_id == ID_RAINBOW_CURTAIN) continue;
+        if (card_id != CARD_EMPTY &&
+            is_active_reaction_card(state, card_id, phase, info.effective_atk_element)) {
+            info.reaction_index = static_cast<int>(i);
+            info.reaction_card_id = card_id;
+        }
+        // カーテン以外を置いた時点で先頭ではなくなる（リアクションとして機能したか
+        // どうかに関わらず）
+        info.next_is_front = false;
+        break;
+    }
+
+    // 3. 実際に効く防御力。効果の方を使ったカードは防具として出していないので除く。
+    for (size_t i = 0; i < staged.size(); ++i) {
+        int card_id = staged[i];
+        if (card_id == CARD_EMPTY) continue;
+        if (static_cast<int>(i) == info.reaction_index) continue;
+        if (is_used_as_spiritual(staged, i)) continue;
+        int def = g_card_registry[card_id].defense_power;
+        if (def > 0) info.total_defense += def;
+    }
+
+    return info;
+}
+
 bool is_active_reaction_card(const InternalState &state, int card_id, GamePhase phase, Element attack_element) {
     if (card_id == CARD_EMPTY) return false;
     if (phase == GamePhase::PHASE_MIRACLE_DEFENSE) {
