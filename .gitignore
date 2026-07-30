@@ -63,3 +63,4 @@ experiments/
 *.log
 *.db
 *.sqlite3
+godfield_agent.zip

@@ -1,4 +1,5 @@
 import asyncio
+import glob
 import json
 import os
 import random
@@ -8,11 +9,10 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from sb3_contrib import MaskablePPO
 
 import godfield_core
-from godfield_rl.feature_extractor import GodFieldTransformerExtractor
-from godfield_rl.opponents import FrozenOpponent, make_opponent
+from godfield_rl.evaluation import load_policy, split_observation
+from godfield_rl.opponents import make_opponent
 from visualizer.constants import CARDS, project_root
 from visualizer.presenter import serialize_observation
 
@@ -35,28 +35,27 @@ env_pool = godfield_core.EnvPool(1)
 state = None
 ai_enabled = True  # Player 1 is controlled by AI by default
 
-# Setup Opponents
-opponents = {
+# 対戦相手。人手の方策は常に使え、学習済みモデルは assets/models にあるものを拾う。
+#
+# 学習済みモデルは観測レイアウトが変わると読めなくなる（HISTORY_LENGTH を変えた等）。
+# 読めないものは黙って落として人手の方策で遊べるようにしてある。
+opponents: dict[str, object] = {
+    "strategic": make_opponent("strategic"),
     "heuristic": make_opponent("heuristic"),
     "random": make_opponent("random"),
 }
-try:
-    transformer_model = MaskablePPO.load(
-        "assets/models/best_transformer_gen50.zip",
-        custom_objects={"features_extractor_class": GodFieldTransformerExtractor}
-    )
-    # 人間と対戦させるので、学習時（探索のために確率的に選ぶ）と違い決定的に指させる。
-    opponents["transformer_gen50"] = FrozenOpponent(transformer_model, deterministic=True)
-    current_opponent_type = "transformer_gen50"
-except Exception as e:
-    print(f"Could not load transformer_gen50 model: {e}")
-    current_opponent_type = "heuristic"
+current_opponent_type = "strategic"
 
-try:
-    mlp_model = MaskablePPO.load("assets/models/best_mlp_gen50.zip")
-    opponents["mlp_gen50"] = FrozenOpponent(mlp_model, deterministic=True)
-except Exception as e:
-    print(f"Could not load mlp_gen50 model: {e}")
+for path in sorted(glob.glob(os.path.join(project_root, "assets", "models", "*.zip"))):
+    name = os.path.splitext(os.path.basename(path))[0]
+    try:
+        # 人間と対戦させるので、学習時（探索のために確率的に選ぶ）と違い決定的に指させる
+        opponents[name] = load_policy(path, deterministic=True)
+        current_opponent_type = name
+    except Exception as exc:
+        print(f"[skip] {name} は読み込めませんでした: {str(exc).splitlines()[0]}")
+
+print(f"対戦相手: {', '.join(opponents)}（既定 {current_opponent_type}）")
 
 
 def reset_game(seed=None):
@@ -74,11 +73,7 @@ def opponent_action(opponent) -> int:
     以前は heuristic / random だけ act(state) で呼んでおり、選ぶと TypeError で
     落ちていました（godfield_rl.agents.heuristic_agent という別実装が残っていた名残）。
     """
-    features_dim = godfield_core.OBSERVATION_FEATURE_SIZE
-    action_dim = godfield_core.ACTION_SPACE_SIZE
-    obs_flat = env_pool.get_observations().reshape(1, -1)
-    obs = obs_flat[:, : features_dim - action_dim]
-    masks = obs_flat[:, features_dim - action_dim : features_dim].astype(bool)
+    obs, masks = split_observation(env_pool.get_observations(), 1)
     return int(opponent.act(obs, masks)[0])
 
 

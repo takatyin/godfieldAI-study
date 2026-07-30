@@ -27,7 +27,6 @@ from collections import defaultdict
 
 import numpy as np
 import torch
-from sb3_contrib import MaskablePPO
 
 import godfield_core
 
@@ -40,6 +39,7 @@ if godfield_core.get_registry_size() == 0:
 
 from godfield_rl import feature_config as fc  # noqa: E402
 from godfield_rl.env_wrapper import GodFieldVectorEnv  # noqa: E402
+from godfield_rl.evaluation import load_policy  # noqa: E402
 from godfield_rl.opponents import make_opponent  # noqa: E402
 
 CARD_BY_ID = {c["id"]: c for c in CARDS}
@@ -65,9 +65,9 @@ def self_only_card_ids() -> set[int]:
     return ids
 
 
-def load_model(path: str, device: str = "cpu") -> MaskablePPO:
+def load_model(path: str, device: str = "cpu"):
     """特徴抽出器の種類は保存済みモデルから復元されるので、指定は不要です。"""
-    return MaskablePPO.load(os.path.join(PROJECT_ROOT, path), device=device)
+    return load_policy(os.path.join(PROJECT_ROOT, path), device=device).model
 
 
 def _target_select_mask(obs: np.ndarray, masks: np.ndarray) -> np.ndarray:
