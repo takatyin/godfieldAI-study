@@ -68,7 +68,7 @@ def measure(policy, batch_size: int, obs_dim: int, amp: bool = False) -> tuple[f
     masks = torch.ones(batch_size, godfield_core.ACTION_SPACE_SIZE, dtype=torch.bool, device="cuda")
     actions = torch.zeros(batch_size, dtype=torch.long, device="cuda")
 
-    def one_step():
+    def one_step() -> None:
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
             values, log_prob, entropy = policy.evaluate_actions(obs, actions, action_masks=masks)
             loss = values.mean() + log_prob.mean() + entropy.mean()
@@ -86,7 +86,6 @@ def measure(policy, batch_size: int, obs_dim: int, amp: bool = False) -> tuple[f
     ms = (time.perf_counter() - t0) / 3 * 1000
 
     peak = torch.cuda.max_memory_allocated() / GB
-    del obs, masks, actions
     torch.cuda.empty_cache()
     return peak, ms
 
