@@ -51,11 +51,18 @@ class RandomOpponent:
 
 
 class HeuristicOpponent:
-    """godfield_rl.agents.heuristic_agent と同じ方針をバッチ処理で実装した相手。
+    """単純な方針で指す相手。学習の初期対戦相手と、強さの基準に使います。
 
     1. 決定系の行動（相手を対象 / 自分を対象・確定）が可能ならそれを優先する
     2. 次に、手札の空でないスロットを選ぶ
     3. どれも該当しなければ合法手からランダムに選ぶ
+
+    【既知の偏り】1. は対象選択で**常に「相手を対象」**を選びます（SELF を先に
+    書いてから OPP で上書きしているため）。武器なら正しいものの、回復系の雑貨を
+    相手に使ってしまうため、これを模倣した学習者も同じ間違いを覚えます。実測では
+    学習済みモデルが対象選択の 100%（19,542回）で「相手」を選んでおり、これを
+    「自分」に直すだけで対ヒューリスティック勝率が +5% 変わりました。
+    ここを変えると学習の初期条件が変わるので、モデルを作り直す前提で触ること。
     """
 
     def __init__(self, seed: int = 0):
@@ -83,20 +90,31 @@ class HeuristicOpponent:
 
 
 class FrozenOpponent:
-    """保存された学習済みモデル（方策）を用いて行動を決定する相手。"""
+    """保存された学習済みモデル（方策）を用いて行動を決定する相手。
 
-    def __init__(self, model):
+    `deterministic` は用途によって変える必要があります。
+
+    - 自己対戦のプールに入れる相手: `False`（既定）。確率的に指すことで対戦の
+      多様性が生まれ、同じ局面ばかりを学習するのを避けられます。
+    - 人間と対戦させる相手（可視化サーバー）: `True`。探索のためのブレは不要で、
+      方策が最も良いと考える手だけを指させたい。
+    """
+
+    def __init__(self, model, deterministic: bool = False):
         self.model = model
+        self.deterministic = deterministic
 
     def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
         # MaskablePPO の predict は action_masks を受け取る
-        actions, _ = self.model.predict(observations, action_masks=action_masks, deterministic=False)
+        actions, _ = self.model.predict(
+            observations, action_masks=action_masks, deterministic=self.deterministic
+        )
         return actions.astype(np.int32)
 
 
 class PoolOpponent:
     """複数の相手方策の中から、ステップ単位（バッチ単位）でランダムに選んで推論する相手。
-    
+
     GPUのバッチ効率を保つため、act() が呼ばれるたびに1つのモデルが選ばれ、
     そのモデルがバッチ内の全環境の相手をまとめて担当します。
     """

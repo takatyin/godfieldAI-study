@@ -8,12 +8,11 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from sb3_contrib import MaskablePPO
 
 import godfield_core
-from godfield_rl.agents.heuristic_agent import get_ai_action
-from godfield_rl.opponents import make_opponent, FrozenOpponent
 from godfield_rl.feature_extractor import GodFieldTransformerExtractor
-from sb3_contrib import MaskablePPO
+from godfield_rl.opponents import FrozenOpponent, make_opponent
 from visualizer.constants import CARDS, project_root
 from visualizer.presenter import serialize_observation
 
@@ -46,7 +45,8 @@ try:
         "assets/models/best_transformer_gen50.zip",
         custom_objects={"features_extractor_class": GodFieldTransformerExtractor}
     )
-    opponents["transformer_gen50"] = FrozenOpponent(transformer_model)
+    # 人間と対戦させるので、学習時（探索のために確率的に選ぶ）と違い決定的に指させる。
+    opponents["transformer_gen50"] = FrozenOpponent(transformer_model, deterministic=True)
     current_opponent_type = "transformer_gen50"
 except Exception as e:
     print(f"Could not load transformer_gen50 model: {e}")
@@ -54,7 +54,7 @@ except Exception as e:
 
 try:
     mlp_model = MaskablePPO.load("assets/models/best_mlp_gen50.zip")
-    opponents["mlp_gen50"] = FrozenOpponent(mlp_model)
+    opponents["mlp_gen50"] = FrozenOpponent(mlp_model, deterministic=True)
 except Exception as e:
     print(f"Could not load mlp_gen50 model: {e}")
 
@@ -67,26 +67,25 @@ def reset_game(seed=None):
     state = env_pool.get_state(0)
 
 
+def opponent_action(opponent) -> int:
+    """相手方策に1手選ばせます。
+
+    相手方策はすべて Opponent（act(観測, マスク) のバッチ受け取り）で統一されています。
+    以前は heuristic / random だけ act(state) で呼んでおり、選ぶと TypeError で
+    落ちていました（godfield_rl.agents.heuristic_agent という別実装が残っていた名残）。
+    """
+    features_dim = godfield_core.OBSERVATION_FEATURE_SIZE
+    action_dim = godfield_core.ACTION_SPACE_SIZE
+    obs_flat = env_pool.get_observations().reshape(1, -1)
+    obs = obs_flat[:, : features_dim - action_dim]
+    masks = obs_flat[:, features_dim - action_dim : features_dim].astype(bool)
+    return int(opponent.act(obs, masks)[0])
+
+
 async def run_ai_steps():
     # If it is Player 1's turn and AI is enabled, auto-step Player 1
     while not state.is_done and state.current_actor_id == 1 and ai_enabled:
-        opponent = opponents[current_opponent_type]
-        
-        if current_opponent_type in ["heuristic", "random"]:
-            ai_act = opponent.act(state)
-        else:
-            # FrozenOpponent (PPO) expects numpy arrays
-            obs_flat = env_pool.get_observations()
-            obs_flat = obs_flat.reshape(1, -1)
-            features_dim = godfield_core.OBSERVATION_FEATURE_SIZE
-            action_dim = godfield_core.ACTION_SPACE_SIZE
-            
-            obs_tensor = obs_flat[:, :features_dim - action_dim]
-            masks_tensor = obs_flat[:, features_dim - action_dim : features_dim]
-            ai_act = opponent.act(obs_tensor, masks_tensor)[0]
-            
-        if ai_act is None:
-            break
+        ai_act = opponent_action(opponents[current_opponent_type])
         godfield_core.step_game(state, godfield_core.ActionType(ai_act))
         env_pool.set_state(0, state)
         await asyncio.sleep(0)

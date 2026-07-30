@@ -1,15 +1,13 @@
 import argparse
-import os
 
 import torch
 from sb3_contrib import MaskablePPO
-
 from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
 
+from godfield_rl.callbacks import SelfPlayCallback, WinRateCallback
 from godfield_rl.env_wrapper import GodFieldVectorEnv
 from godfield_rl.feature_extractor import GodFieldFeatureExtractor, GodFieldTransformerExtractor
-from godfield_rl.opponents import make_opponent, PoolOpponent, FrozenOpponent
-from godfield_rl.callbacks import WinRateCallback, SelfPlayCallback
+from godfield_rl.opponents import FrozenOpponent, PoolOpponent, make_opponent
 
 
 def main():
@@ -21,7 +19,7 @@ def main():
     parser.add_argument("--total-timesteps", type=int, default=5_000_000, help="Total training timesteps")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--lr", type=float, default=5.845e-05, help="Learning rate (Optuna Best)")
-    
+
     # PPO Hyperparameters optimized for high-throughput vectorized environments
     parser.add_argument("--n-steps", type=int, default=256, help="PPO n_steps (per env)")
     parser.add_argument("--batch-size", type=int, default=16384, help="PPO batch size for gradient updates")
@@ -48,7 +46,7 @@ def main():
     parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
     parser.add_argument("--wandb-project", type=str, default="godfield-rl", help="WandB project name")
     parser.add_argument("--wandb-name", type=str, default=None, help="WandB run name")
-    
+
     args = parser.parse_args()
 
     run = None
@@ -74,17 +72,17 @@ def main():
             initial_opponent = FrozenOpponent(start_model)
         else:
             initial_opponent = make_opponent("heuristic", seed=args.seed)
-            
+
         pool_opponent = PoolOpponent(opponents=[initial_opponent], seed=args.seed)
         vec_env = GodFieldVectorEnv(args.num_envs, opponent=pool_opponent)
-        
+
         # 評価用の環境 (Heuristic相手の絶対的な強さを測るため)
         eval_env = GodFieldVectorEnv(100, opponent=make_opponent("heuristic", seed=args.seed + 1))
         eval_env.seed(args.seed + 1)
     else:
         print(f"Opponent policy: {args.opponent}")
         vec_env = GodFieldVectorEnv(args.num_envs, opponent=make_opponent(args.opponent, seed=args.seed))
-    
+
     vec_env.seed(args.seed)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -127,7 +125,7 @@ def main():
     )
 
     callbacks = [WinRateCallback()]
-    
+
     if args.self_play:
         # Self-Playのプール更新コールバック
         selfplay_cb = SelfPlayCallback(
@@ -138,7 +136,7 @@ def main():
             verbose=1
         )
         callbacks.append(selfplay_cb)
-        
+
         # ベースライン（Heuristic）に対する絶対評価コールバック
         eval_freq = max(1000, 500_000 // args.num_envs)  # 環境数で割ってステップ数に換算
         eval_cb = MaskableEvalCallback(
@@ -158,10 +156,10 @@ def main():
 
     print(f"Starting training for {args.total_timesteps} timesteps...")
     model.learn(total_timesteps=args.total_timesteps, callback=callbacks)
-    
+
     model.save("godfield_agent")
     print("Training complete! Model saved to godfield_agent.zip")
-    
+
     if args.wandb:
         run.finish()
 

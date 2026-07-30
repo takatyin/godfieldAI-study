@@ -1,6 +1,6 @@
-import torch
 import gymnasium as gym
 import numpy as np
+import torch
 
 try:
     import godfield_core
@@ -9,8 +9,9 @@ try:
 except ImportError:
     pass
 
-from godfield_rl.feature_extractor import GodFieldTransformerExtractor
 from godfield_rl.feature_config import TOTAL_OBSERVATION_FEATURE_SIZE_NO_MASK
+from godfield_rl.feature_extractor import GodFieldTransformerExtractor
+
 
 def test_transformer_forward():
     # Create dummy observation space
@@ -18,7 +19,7 @@ def test_transformer_forward():
     observation_space = gym.spaces.Box(
         low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
     )
-    
+
     extractor = GodFieldTransformerExtractor(
         observation_space,
         d_model=64,
@@ -26,14 +27,14 @@ def test_transformer_forward():
         num_layers=1,
         features_dim=128
     )
-    
+
     batch_size = 4
     # Dummy observations (zeros)
     obs = torch.zeros((batch_size, obs_dim), dtype=torch.float32)
-    
+
     # Forward pass
     features = extractor(obs)
-    
+
     assert features.shape == (batch_size, 128)
     print("Transformer forward pass successful! Output shape:", features.shape)
 

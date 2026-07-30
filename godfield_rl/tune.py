@@ -1,5 +1,4 @@
 import argparse
-import os
 
 import optuna
 import torch
@@ -10,6 +9,7 @@ from godfield_rl.env_wrapper import GodFieldVectorEnv
 from godfield_rl.feature_extractor import GodFieldFeatureExtractor
 from godfield_rl.opponents import make_opponent
 
+
 class OptunaPruningCallback(BaseCallback):
     def __init__(self, trial: optuna.Trial, eval_freq: int, verbose: int = 0):
         super().__init__(verbose)
@@ -19,7 +19,7 @@ class OptunaPruningCallback(BaseCallback):
         self.eval_freq = eval_freq
         self.wins = 0
         self.episodes = 0
-        
+
     def _on_step(self) -> bool:
         if "dones" in self.locals and "rewards" in self.locals:
             dones = self.locals["dones"]
@@ -29,7 +29,7 @@ class OptunaPruningCallback(BaseCallback):
                     self.episodes += 1
                     if rewards[i] == 1.0:
                         self.wins += 1
-                        
+
         if self.num_timesteps > 0 and self.num_timesteps % self.eval_freq == 0:
             if self.episodes > 0:
                 win_rate = self.wins / self.episodes
@@ -52,15 +52,15 @@ def objective(trial: optuna.Trial, num_envs: int, total_timesteps: int, seed: in
     ent_coef = trial.suggest_float("ent_coef", 1e-4, 5e-2, log=True)
     clip_range = trial.suggest_categorical("clip_range", [0.1, 0.2, 0.3])
     gamma = trial.suggest_categorical("gamma", [0.99, 0.995, 0.999])
-    
+
     vec_env = GodFieldVectorEnv(num_envs, opponent=make_opponent("heuristic", seed=seed))
     vec_env.seed(seed)
-    
+
     policy_kwargs = dict(
         features_extractor_class=GodFieldFeatureExtractor,
         features_extractor_kwargs=dict(card_embed_dim=16, features_dim=256),
     )
-    
+
     model = MaskablePPO(
         "MlpPolicy",
         vec_env,
@@ -76,20 +76,20 @@ def objective(trial: optuna.Trial, num_envs: int, total_timesteps: int, seed: in
         device="cuda" if torch.cuda.is_available() else "cpu",
         seed=seed,
     )
-    
+
     # 4回の評価期間を設ける（途中経過で勝率が低ければ枝刈り）
     eval_freq = max(total_timesteps // 4, 1)
     callback = OptunaPruningCallback(trial, eval_freq)
-    
+
     try:
         model.learn(total_timesteps=total_timesteps, callback=callback)
     except AssertionError:
         # 不正なパラメータで発散した場合などはPrune
         raise optuna.exceptions.TrialPruned()
-        
+
     if callback.is_pruned:
         raise optuna.exceptions.TrialPruned()
-        
+
     # 最終的な勝率（直近の四半期の勝率）を返す
     win_rate = callback.wins / max(callback.episodes, 1)
     return win_rate
@@ -103,23 +103,23 @@ def main():
     parser.add_argument("--storage", type=str, default="sqlite:///godfield_optuna.db", help="Optuna DB URL")
     parser.add_argument("--study-name", type=str, default="ppo-tuning", help="Optuna Study Name")
     args = parser.parse_args()
-    
+
     print(f"Starting Optuna Study '{args.study_name}' for {args.trials} trials, {args.total_timesteps} steps each...")
     print(f"Using DB: {args.storage}")
-    
+
     study = optuna.create_study(
         study_name=args.study_name,
         storage=args.storage,
         load_if_exists=True,
-        direction="maximize", 
+        direction="maximize",
         pruner=optuna.pruners.MedianPruner(n_warmup_steps=1)
     )
-    
+
     try:
         study.optimize(lambda trial: objective(trial, args.num_envs, args.total_timesteps, args.seed), n_trials=args.trials)
     except KeyboardInterrupt:
         print("Optimization interrupted by user.")
-        
+
     print("\n===============================")
     print("Number of finished trials: ", len(study.trials))
     try:
