@@ -151,6 +151,7 @@ def main():
             save_freq=max(1, args.self_play_save_freq // args.num_envs),
             save_path=args.pool_dir,
             worker_id=args.worker_id,
+            seed=args.seed,
             verbose=1
         )
         callbacks.append(selfplay_cb)

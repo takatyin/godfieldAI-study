@@ -73,7 +73,7 @@ class SelfPlayCallback(BaseCallback):
     一定のステップ数ごとに現在のモデルを共有ディレクトリに保存し、
     同時に共有ディレクトリから他のモデルをランダムに読み込んで対戦プールを更新するコールバック（League Training対応）。
     """
-    def __init__(self, pool: PoolOpponent, save_freq: int, save_path: str, max_pool_size: int = 5, worker_id: int = 0, verbose: int = 0):
+    def __init__(self, pool: PoolOpponent, save_freq: int, save_path: str, max_pool_size: int = 5, worker_id: int = 0, seed: int = 0, verbose: int = 0):
         super().__init__(verbose)
         self.pool = pool
         self.save_freq = save_freq
@@ -81,6 +81,11 @@ class SelfPlayCallback(BaseCallback):
         self.max_pool_size = max_pool_size
         self.worker_id = worker_id
         self.generation = 0
+        # プールの抽選はワーカーごとに独立させつつ、再現できるようにする。
+        # 以前は random モジュールのグローバル状態を使っていたため、実行のたびに
+        # 違う結果になり（＝再現不能）、しかも「ワーカーが分岐する唯一の要因」が
+        # ここだった（seed が全ワーカー共通だったため）。
+        self._rng = random.Random(seed * 1000 + worker_id)
 
         os.makedirs(self.save_path, exist_ok=True)
 
@@ -108,7 +113,7 @@ class SelfPlayCallback(BaseCallback):
 
             # ランダムにサンプリング
             sample_size = min(len(all_models), self.max_pool_size)
-            selected_models = random.sample(all_models, sample_size)
+            selected_models = self._rng.sample(all_models, sample_size)
 
             # Heuristic等の FrozenOpponent ではない相手を退避
             non_frozen = [opp for opp in self.pool.opponents if not isinstance(opp, FrozenOpponent)]
