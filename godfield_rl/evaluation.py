@@ -10,12 +10,13 @@ tools/diagnose_policy.py・tools/compare_opponents.py に3つ別々に書かれ�
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 import numpy as np
 
 import godfield_core
-from godfield_rl.cards import all_cards
+from godfield_rl.cards import PROJECT_ROOT, all_cards
 from godfield_rl.opponents import FrozenOpponent, Opponent, make_opponent
 
 
@@ -78,11 +79,16 @@ def load_policy(
     特徴抽出器の種類やハイパーパラメータは .zip に保存されているので、
     呼び出し側で指定する必要はありません（--use-transformer のような
     「読み込み時に構成を言い直す」引数は不要）。
+
+    相対パスはプロジェクトルート基準で解決します。ツールをどこから起動しても
+    `models/...` と書けるようにするためです。
     """
     from sb3_contrib import MaskablePPO
 
     if device is None:
         device = default_device()
+    if not os.path.isabs(path):
+        path = os.path.join(PROJECT_ROOT, path)
     try:
         model = MaskablePPO.load(path, device=device)
     except RuntimeError as exc:

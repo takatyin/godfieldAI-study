@@ -21,16 +21,10 @@ import glob
 import re
 import time
 
-# diagnose_policy は import 時にカードマスタを読み込む（何度呼んでも安全）
-from diagnose_policy import (
-    BUCKET_SELF,
-    CARD_BY_ID,
-    KIND_BY_CARD_ID,
-    OPPONENT_KINDS,
-    default_device,
-    load_learner,
-    run,
-)
+from godfield_rl.cards import card_id, card_name
+from godfield_rl.diagnostics import BUCKET_SELF, kind_by_card_id, run
+from godfield_rl.evaluation import default_device, load_policy
+from godfield_rl.opponents import OPPONENT_KINDS
 
 # 既定で追う顔ぶれ。効果量の大きいものから小さいものまで入れてあるので、
 # 「効果が小さいカードほど高い確率で釣り合う」のかどうかが読み取れる。
@@ -94,14 +88,13 @@ def main() -> None:
     for path in paths:
         gen, worker = _generation(path)
         labels.append(f"w{worker}g{gen}")
-        learner = load_learner(path, device=device, amp=args.amp)
+        learner = load_policy(path, device=device, amp=args.amp)
         overall.append(
             run(learner, num_envs=args.num_envs, steps=args.steps,
                 seed=args.seed, opponent=args.opponent)
         )
 
-    tracked_ids = [cid for cid, c in CARD_BY_ID.items() if c["name"] in TRACKED]
-    tracked_ids.sort(key=lambda cid: TRACKED.index(CARD_BY_ID[cid]["name"]))
+    tracked_ids = [card_id(name) for name in TRACKED]
 
     header = "".join(f"{label:>10}" for label in labels)
     print(f"\n■ 対象選択で「相手」を選んだ割合の推移\n\n  {'カード':<20}{header}")
@@ -110,15 +103,15 @@ def main() -> None:
         for stats in overall:
             n, opp = stats["per_card"].get(cid, (0, 0))
             cells += f"{f'{opp / n:.1%}' if n else '-':>10}"
-        print(f"  {CARD_BY_ID[cid]['name']:<20}{cells}")
+        print(f"  {card_name(cid):<20}{cells}")
 
-    relevant = [cid for cid in tracked_ids if cid in KIND_BY_CARD_ID]
+    relevant = [cid for cid in tracked_ids if cid in kind_by_card_id()]
     print(f"\n■ うち「自分に効く局面」に限った同じ割合\n\n  {'カード':<20}{header}")
     for cid in relevant:
         cells = "".join(
             f"{_rate(stats['per_bucket'][cid], BUCKET_SELF):>10}" for stats in overall
         )
-        print(f"  {CARD_BY_ID[cid]['name']:<20}{cells}")
+        print(f"  {card_name(cid):<20}{cells}")
 
     win_rates = "".join(
         f"{(stats['results'] > 0).mean():>10.1%}" if stats["results"].size else f"{'-':>10}"

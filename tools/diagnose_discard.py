@@ -22,22 +22,19 @@ import argparse
 import time
 
 import numpy as np
-from diagnose_policy import (
-    ACTION_TARGET_OPP,
-    ACTION_TARGET_SELF,
-    CARDS,
-    OPPONENT_KINDS,
-    PHASE_TARGET_SELECT,
-    default_device,
-    load_learner,
-)
 
 from godfield_rl import feature_config as fc
+from godfield_rl.cards import all_cards, card_id
+from godfield_rl.diagnostics import (
+    ACTION_TARGET_OPP,
+    ACTION_TARGET_SELF,
+    PHASE_TARGET_SELECT,
+)
 from godfield_rl.env_wrapper import GodFieldVectorEnv
-from godfield_rl.opponents import make_opponent
+from godfield_rl.evaluation import default_device, load_policy
+from godfield_rl.opponents import OPPONENT_KINDS, make_opponent
 
-MIRACLE_IDS = {c["id"] for c in CARDS if c.get("type") == "miracle"}
-CARD_ID_BY_NAME = {c["name"]: c["id"] for c in CARDS}
+MIRACLE_IDS = {c["id"] for c in all_cards() if c.get("type") == "miracle"}
 
 # カード名 -> (説明, そのカードが捨てられる枚数を数える関数)
 def _deployed_miracles(state, player: int) -> int:
@@ -74,13 +71,13 @@ def main() -> None:
     args = parser.parse_args()
 
     device = args.device or default_device()
-    learner = load_learner(args.model_path, device=device)
+    learner = load_policy(args.model_path, device=device)
     env = GodFieldVectorEnv(args.num_envs, opponent=make_opponent(args.opponent, seed=args.seed + 1))
     env.seed(args.seed)
     obs = env.reset()
     pool = env.core_env
 
-    watched = {CARD_ID_BY_NAME[name]: name for name in TARGETS}
+    watched = {card_id(name): name for name in TARGETS}
     records: dict[int, list[tuple[int, int, int]]] = {cid: [] for cid in watched}
 
     started = time.perf_counter()
@@ -94,12 +91,12 @@ def main() -> None:
             & masks[:, ACTION_TARGET_OPP]
             & masks[:, ACTION_TARGET_SELF]
         )
-        for card_id, name in watched.items():
+        for cid, name in watched.items():
             count_fn = TARGETS[name][1]
-            for i in np.flatnonzero(selectable & (staged == card_id)):
+            for i in np.flatnonzero(selectable & (staged == cid)):
                 state = pool.get_state(int(i))
                 me = state.current_actor_id
-                records[card_id].append((
+                records[cid].append((
                     count_fn(state, me),
                     count_fn(state, 1 - me),
                     int(actions[i] == ACTION_TARGET_OPP),
@@ -108,8 +105,8 @@ def main() -> None:
         obs, _, _, _ = env.step(actions)
     env.close()
 
-    for card_id, name in watched.items():
-        arr = np.array(records[card_id])
+    for cid, name in watched.items():
+        arr = np.array(records[cid])
         print(f"\n■ {name}（{TARGETS[name][0]}）を撃つ瞬間: {len(arr)} 回")
         if not len(arr):
             print("  遭遇しませんでした")
