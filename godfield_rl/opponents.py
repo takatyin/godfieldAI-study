@@ -142,21 +142,59 @@ class PoolOpponent:
 
     GPUのバッチ効率を保つため、act() が呼ばれるたびに1つのモデルが選ばれ、
     そのモデルがバッチ内の全環境の相手をまとめて担当します。
+
+    【錨（anchor）と分身（snapshot）を分ける理由】
+
+    以前は両方を1つのリストに入れて一様に選んでいました。プールは
+    「人手の戦略1体 + 自分の過去5体」だったので、人手の戦略と当たるのは約17%、
+    残り83%は自分の過去と戦っていたことになります。
+
+    自分の過去は自分と同じ弱点を持つため、その弱点は一度も罰されません。実測でも
+    37M ステップ学習したモデルは、学習相手（人手の戦略の旧版・ヒューリスティック）
+    には 71% / 93% と強い一方、一度も戦っていない相手には 45% しか勝てず、
+    しかも「買う」を選ぶ確率が gen4 から gen36 までほとんど動きませんでした。
+
+    そこで、外部の固定方策を「錨」として分け、当たる割合を直接指定できるように
+    します。閉じた自己対戦から抜け出すための舵です。
     """
 
-    def __init__(self, opponents: list[Opponent] | None = None, seed: int = 0):
-        self.opponents = opponents if opponents is not None else []
+    def __init__(
+        self,
+        anchors: list[Opponent] | None = None,
+        snapshots: list[Opponent] | None = None,
+        seed: int = 0,
+        anchor_ratio: float = 0.5,
+    ):
+        """Args:
+            anchors: 学習を通じて固定の相手（人手の戦略など）。
+            snapshots: 自己対戦のプール。SelfPlayCallback が入れ替えます。
+            anchor_ratio: 錨と当たる確率。分身がまだ1体も無い間は常に錨を使います。
+        """
+        if not 0.0 <= anchor_ratio <= 1.0:
+            raise ValueError(f"anchor_ratio は 0..1 で指定してください: {anchor_ratio}")
+        self.anchors = list(anchors or [])
+        self.snapshots = list(snapshots or [])
+        self.anchor_ratio = anchor_ratio
         self._rng = np.random.default_rng(seed)
 
-    def add_opponent(self, opponent: Opponent):
-        self.opponents.append(opponent)
+    @property
+    def opponents(self) -> list[Opponent]:
+        """錨と分身をまとめた一覧（表示・件数確認用）。"""
+        return self.anchors + self.snapshots
+
+    def select(self) -> Opponent:
+        """この呼び出しで相手を務める方策を1つ選びます。"""
+        if not self.anchors and not self.snapshots:
+            raise RuntimeError("対戦相手のプールが空です。")
+        if not self.snapshots:
+            return self._rng.choice(self.anchors)
+        if not self.anchors:
+            return self._rng.choice(self.snapshots)
+        pool = self.anchors if self._rng.random() < self.anchor_ratio else self.snapshots
+        return self._rng.choice(pool)
 
     def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
-        if not self.opponents:
-            raise RuntimeError("対戦相手のプールが空です。")
-        # プールからランダムに1つの対戦相手を選ぶ
-        opponent = self._rng.choice(self.opponents)
-        return opponent.act(observations, action_masks)
+        return self.select().act(observations, action_masks)
 
 
 OPPONENT_KINDS = ("random", "heuristic", "strategic")

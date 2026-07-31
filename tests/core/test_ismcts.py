@@ -13,9 +13,9 @@
   3. 根では全合法手を必ず1回は見る（方策が0と切り捨てた手を落とさない）
 """
 
-import godfield_core
 import pytest
 
+import godfield_core
 from tests.core.dsl import Game, Side, card_id
 
 MAX_HAND = godfield_core.MAX_HAND_SIZE

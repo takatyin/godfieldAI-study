@@ -184,16 +184,14 @@ class SelfPlayCallback(BaseCallback):
             )
             sample_size = len(selected_models)
 
-            # Heuristic等の FrozenOpponent ではない相手を退避
-            non_frozen = [opp for opp in self.pool.opponents if not isinstance(opp, FrozenOpponent)]
-            new_opponents = list(non_frozen)
-
-            # 抽出したモデルをロードしてプールに追加
+            # 抽出したモデルをロードして分身のプールを作る。
+            # 錨（人手の戦略など）は PoolOpponent.anchors 側にあるので触らない。
+            new_snapshots = []
             failures = []
             for m_path in selected_models:
                 try:
                     frozen_model = MaskablePPO.load(m_path, device=self.model.device)
-                    new_opponents.append(FrozenOpponent(frozen_model))
+                    new_snapshots.append(FrozenOpponent(frozen_model))
                 except Exception as e:
                     failures.append((m_path, e))
 
@@ -210,10 +208,14 @@ class SelfPlayCallback(BaseCallback):
                     f"古いモデルを消してください。\n{head}"
                 )
 
-            # プールを入れ替え
-            self.pool.opponents = new_opponents
+            # 分身だけを入れ替える
+            self.pool.snapshots = new_snapshots
 
             if self.verbose > 0:
-                print(f"[{self.num_timesteps} steps] Worker {self.worker_id} synced League Pool. Pool size: {len(self.pool.opponents)} (loaded {sample_size} models)")
+                print(
+                    f"[{self.num_timesteps} steps] Worker {self.worker_id} synced League Pool. "
+                    f"錨 {len(self.pool.anchors)} 体 (当たる割合 {self.pool.anchor_ratio:.0%}) "
+                    f"/ 分身 {len(self.pool.snapshots)} 体 (loaded {sample_size} models)"
+                )
 
         return True

@@ -85,6 +85,14 @@ class TrainingConfig:
     worker_id: int = 0
     start_opponent_model: str | None = None
 
+    # 自己対戦中、固定の相手（--opponent の方策）と当たる割合。
+    #
+    # 以前は「人手の戦略1体 + 自分の過去5体」を一様に選んでいたため約17%でした。
+    # 自分の過去は自分と同じ弱点を持つので、その弱点が罰されません。実測では
+    # 37M ステップ学習しても「買う」を選ぶ確率が所持金にほとんど反応せず、
+    # gen4 から gen36 まで数値が動きませんでした。
+    anchor_ratio: float = 0.5
+
     # --- 記録 --------------------------------------------------------------
     tensorboard_log: str = "logs/tb"
     save_path: str = "godfield_agent"
@@ -104,6 +112,10 @@ class TrainingConfig:
             )
         if self.opponent not in OPPONENT_KINDS:
             raise ValueError(f"未知の相手方策です: {self.opponent!r}")
+        if not 0.0 <= self.anchor_ratio <= 1.0:
+            raise ValueError(
+                f"anchor_ratio は 0..1 で指定してください: {self.anchor_ratio}"
+            )
 
 
 # 型ごとの argparse への渡し方。dataclass の定義を唯一の情報源にして、
@@ -139,6 +151,7 @@ _HELP = {
     "pool_dir": "リーグのモデルを置く共有ディレクトリ",
     "worker_id": "リーグのワーカー番号",
     "start_opponent_model": "初期対戦相手にする学習済みモデル（.zip）",
+    "anchor_ratio": "自己対戦中に固定の相手（--opponent）と当たる割合",
     "tensorboard_log": "TensorBoardのログ出力先",
     "save_path": "学習後のモデルの保存先（拡張子なし）",
     "wandb": "Weights & Biases に記録する",

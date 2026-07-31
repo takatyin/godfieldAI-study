@@ -61,13 +61,14 @@ def build_opponent(cfg: TrainingConfig, device: str):
     if not cfg.self_play:
         return make_opponent(cfg.opponent, seed=cfg.seed)
 
+    # 錨は学習を通じて固定の相手。自己対戦だけだと自分の過去としか戦わず、
+    # 自分と同じ弱点が一度も罰されない（PoolOpponent の説明を参照）。
+    anchors = [make_opponent(cfg.opponent, seed=cfg.seed)]
     if cfg.start_opponent_model:
         # 相手の推論はロールアウト時間の大半を占めるので、学習者と同じデバイスに載せる
         model = MaskablePPO.load(cfg.start_opponent_model, device=device)
-        initial = FrozenOpponent(model)
-    else:
-        initial = make_opponent(cfg.opponent, seed=cfg.seed)
-    return PoolOpponent(opponents=[initial], seed=cfg.seed)
+        anchors.append(FrozenOpponent(model))
+    return PoolOpponent(anchors=anchors, seed=cfg.seed, anchor_ratio=cfg.anchor_ratio)
 
 
 def build_envs(cfg: TrainingConfig, opponent) -> tuple[GodFieldVectorEnv, GodFieldVectorEnv | None]:

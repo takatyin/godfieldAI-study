@@ -91,13 +91,25 @@ def load_policy(
         path = os.path.join(PROJECT_ROOT, path)
     try:
         model = MaskablePPO.load(path, device=device)
-    except RuntimeError as exc:
-        if "size mismatch" not in str(exc):
+    except (RuntimeError, ValueError) as exc:
+        # 古いモデルを読むと、変更の種類によって別々の例外になる。
+        #   観測を変えた           -> RuntimeError "size mismatch"
+        #   特徴抽出器に層を足した -> RuntimeError "Missing key(s)"
+        # さらに SB3 は strict な読み込みが失敗すると exact_match=False で
+        # 読み直すため、層が増えた場合は最終的に optimizer の
+        # ValueError として表に出る。どれも原因は同じなので同じ案内にする。
+        text = str(exc)
+        if not any(sign in text for sign in (
+            "size mismatch",
+            "Missing key",
+            "parameter group that doesn't match",
+        )):
             raise
         raise RuntimeError(
-            f"{path} は今の観測レイアウトでは読めません。\n"
-            f"  観測を変えると、それ以前に学習したモデルは使えなくなります。\n"
-            f"  直近の変更: 手札枚数と公開状態（相手に見えているか / 展開済みか）を追加。\n"
+            f"{path} は今の観測・特徴抽出器では読めません。\n"
+            f"  観測や特徴抽出器を変えると、それ以前に学習したモデルは使えなくなります。\n"
+            f"  直近の変更: カード属性（値段・攻撃力など）と閾値符号を特徴抽出器に追加。\n"
+            f"  その前: 手札枚数と公開状態（相手に見えているか / 展開済みか）を観測に追加。\n"
             f"  現在の観測は {godfield_core.OBSERVATION_FEATURE_SIZE} 次元"
             f"（うち合法手マスク {godfield_core.ACTION_SPACE_SIZE}、"
             f"履歴 {godfield_core.HISTORY_LENGTH} 件）です。\n"

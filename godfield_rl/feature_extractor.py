@@ -9,6 +9,7 @@ import torch.nn as nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 import godfield_core
+from godfield_rl.card_features import card_attr_dim, card_attribute_table
 from godfield_rl.feature_config import (
     CONTINUOUS_FEATURES_SIZE,
     EVENT_SIZE,
@@ -21,12 +22,33 @@ from godfield_rl.feature_config import (
     NUM_CARD_TYPES,
     OPP_DEPLOYED_START,
     OPP_STAGED_CARDS_START,
+    STAT_START,
 )
 
 # GameEvent の並びは [actor, event_type, card_id, target_id, value]。
 # event_type == NONE(0) は「まだ何も起きていないスロット」を意味する。
 EVENT_TYPE_INDEX = 1
 EVENT_TYPE_NONE = int(godfield_core.EventType.NONE)
+
+# ステータスの温度計符号。
+#
+# 観測の先頭6次元は [自HP, 敵HP, 自MP, 敵MP, 自所持金, 敵所持金] を100で割った値。
+# 人手の戦略は「所持金10円以上なら買う」「HPが低いなら両替」のように閾値で判断
+# しますが、正規化されたスカラーを線形層に通す形だと、閾値は重み・バイアス・
+# 非線形の組み合わせで作ることになります。実測では 37M ステップ学習しても
+# 「買う」の確率が所持金 0〜9円で13.4%、10〜24円で19.1% とほぼ平坦なままでした
+# （人手の戦略は 0.2% → 98.6%）。
+#
+# `値 >= 閾値` を次元として与えれば、閾値の判断は重み1つで表せます。
+# 生の値も従来どおり global_proj に入るので、連続的な大小比較も失われません。
+STAT_SCALE = 100.0
+_HP_EDGES = (5, 10, 15, 20, 25, 30, 35, 40)
+_MP_EDGES = (2, 5, 10, 15, 20, 30)
+_MONEY_EDGES = (1, 5, 10, 15, 20, 30, 50)
+# 観測での並び順（自HP, 敵HP, 自MP, 敵MP, 自金, 敵金）に閾値を割り当てる
+_STAT_EDGE_SETS = (_HP_EDGES, _HP_EDGES, _MP_EDGES, _MP_EDGES,
+                   _MONEY_EDGES, _MONEY_EDGES)
+STAT_THERMOMETER_DIM = sum(len(e) for e in _STAT_EDGE_SETS)
 
 
 class GodFieldFeatureExtractor(BaseFeaturesExtractor):
@@ -137,6 +159,16 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
 
         # 1. Global context token embedding (Continuous features -> d_model)
         self.global_proj = nn.Linear(CONTINUOUS_FEATURES_SIZE, d_model)
+        # 閾値の判断を1次元で表せるようにするための温度計符号（上のコメント参照）
+        self.stat_thermometer_proj = nn.Linear(STAT_THERMOMETER_DIM, d_model)
+        stat_index, stat_edge = [], []
+        for i, edges in enumerate(_STAT_EDGE_SETS):
+            stat_index += [i] * len(edges)
+            stat_edge += [e / STAT_SCALE for e in edges]
+        self.register_buffer("_stat_index", torch.tensor(stat_index, dtype=torch.long),
+                             persistent=False)
+        self.register_buffer("_stat_edge", torch.tensor(stat_edge, dtype=torch.float32),
+                             persistent=False)
 
         # 2. Card Embeddings
         # Card ID embedding (includes +1 shift for CARD_EMPTY mapped to 0)
@@ -145,6 +177,14 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         self.card_type_embedding = nn.Embedding(4, d_model)
         # カードごとの2値属性（相手に見えているか / 展開済みか）をトークンに足すための射影
         self.card_flag_proj = nn.Linear(2, d_model)
+
+        # カードの属性（値段・攻撃力・MPコスト・属性・使用タイミングなど）。
+        # 観測にはカードIDしか入っていないため、これが無いと294枚それぞれの意味を
+        # 報酬だけから再発見することになります（godfield_rl/card_features.py 参照）。
+        # カードマスタから決まる派生データなのでチェックポイントには保存しません。
+        self.register_buffer("card_attrs",
+                             torch.as_tensor(card_attribute_table()), persistent=False)
+        self.card_attr_proj = nn.Linear(card_attr_dim(), d_model)
 
         # 3. History Embeddings
         self.hist_cont_proj = nn.Linear(EVENT_SIZE - 1, d_model)
@@ -213,7 +253,12 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
 
         # 1. Global Token
         cont_features = observations[:, :CONTINUOUS_FEATURES_SIZE]
-        global_tokens = self.global_proj(cont_features).unsqueeze(1)  # [B, 1, d_model]
+        stats = observations[:, STAT_START : STAT_START + len(_STAT_EDGE_SETS)]
+        # 「所持金が10円以上か」のような閾値をそのまま1次元にしたもの
+        stat_therm = (stats[:, self._stat_index] >= self._stat_edge).to(cont_features.dtype)
+        global_tokens = (
+            self.global_proj(cont_features) + self.stat_thermometer_proj(stat_therm)
+        ).unsqueeze(1)  # [B, 1, d_model]
 
         # 2. Card Tokens
         cards_start = HAND_CARDS_START
@@ -245,7 +290,11 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
             :, OPP_DEPLOYED_START : OPP_DEPLOYED_START + MAX_HAND_SIZE
         ]
 
-        card_tokens = card_embs + type_embs + self.card_flag_proj(flags)
+        # カードの属性（値段・攻撃力・MPコストなど）をそのカードのトークンに足す。
+        # ID の埋め込みだけだと、そのカードが何をするのかを報酬から学び直すことになる。
+        card_attr_embs = self.card_attr_proj(self.card_attrs[card_ids])
+
+        card_tokens = card_embs + type_embs + self.card_flag_proj(flags) + card_attr_embs
 
         # 3. History Tokens
         history = observations[:, HISTORY_START:HISTORY_START + HISTORY_LENGTH * EVENT_SIZE]
@@ -263,7 +312,12 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         pos_indices = torch.arange(HISTORY_LENGTH, device=device).unsqueeze(0).expand(batch_size, -1)
         hist_pos_embs = self.history_pos_emb(pos_indices) # [B, L, d_model]
 
-        hist_tokens = hist_cont_embs + hist_card_embs + hist_pos_embs # [B, L, d_model]
+        # 履歴のカードにも同じ属性を足す。「相手が高い防具を出した」「MPの重い奇跡を
+        # 撃った」といった読みは、IDだけでは学べない。
+        hist_attr_embs = self.card_attr_proj(self.card_attrs[hist_card_ids])
+
+        hist_tokens = (hist_cont_embs + hist_card_embs + hist_pos_embs
+                       + hist_attr_embs)  # [B, L, d_model]
 
         # 4. Concatenate Sequence
         # Sequence: [Global Token (1), Card Tokens (MAX_HAND_SIZE*4), Hist Tokens (HISTORY_LENGTH)]

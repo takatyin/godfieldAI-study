@@ -49,11 +49,12 @@ set -euo pipefail
 # どこから起動しても同じになるよう移動しておく。
 cd "$(dirname "$0")/.."
 
-# 観測のレイアウトを変えたら、必ず新しいプールに切り替えること。古いプールを
-# 指すと SelfPlayCallback が読み込みに失敗して落ちる（黙って人手の方策とだけ
-# 戦い続けるより、止まったほうが良いのでそうしてある）。
-# v2 は観測に手札枚数・公開状態を追加する前のもので、もう読めない。
-POOL_DIR="${POOL_DIR:-models/league_v3}"
+# 観測のレイアウトか特徴抽出器を変えたら、必ず新しいプールに切り替えること。
+# 古いプールを指すと SelfPlayCallback が読み込みに失敗して落ちる（黙って人手の
+# 方策とだけ戦い続けるより、止まったほうが良いのでそうしてある）。
+#   v2 … 観測に手札枚数・公開状態を追加する前。もう読めない。
+#   v3 … カード属性と閾値符号を入れる前。層が増えたので、もう読めない。
+POOL_DIR="${POOL_DIR:-models/league_v4}"
 # 学習し終えた最終モデルの置き場。--save-path を渡さないと全ワーカーが既定の
 # godfield_agent.zip に書くため、先に終わったワーカーの結果が後から終わった
 # ワーカーに黙って上書きされる。プールとは別のディレクトリにする
@@ -66,6 +67,14 @@ POOL_DIR="${POOL_DIR:-models/league_v3}"
 FINAL_DIR="${FINAL_DIR:-${POOL_DIR}_final}"
 TIMESTEPS="${TIMESTEPS:-50000000}"
 NUM_ENVS="${NUM_ENVS:-500}"
+
+# 手書き方策と当たる割合。
+#
+# 以前は「手書き方策1体 + 過去の自分5体」を一様に選んでいたため約17%だった。
+# 過去の自分は自分と同じ弱点を持つので、その弱点が一度も罰されない。実測では
+# 37M ステップ学習したモデルが、学習相手には 71%/93% と強いのに、一度も戦って
+# いない相手には 45% しか勝てなかった。
+ANCHOR_RATIO="${ANCHOR_RATIO:-0.5}"
 
 # worker: seed  ent_coef  d_model nhead layers ff    batch  epochs ckpt
 #
@@ -89,6 +98,7 @@ rm -f logs/league_worker_*.log
 echo "リーグ学習を開始します"
 echo "  観測          : $(uv run python -c 'import godfield_core as g; print(g.OBSERVATION_FEATURE_SIZE)') 次元"
 echo "  共有プール    : $POOL_DIR"
+echo "  手書き方策と当たる割合: $ANCHOR_RATIO"
 echo "  最終モデル    : $FINAL_DIR/worker_<i>.zip"
 echo "  評価の最良    : $POOL_DIR/best_worker_<i>/best_model.zip"
 echo "  総ステップ    : $TIMESTEPS / 並列環境 $NUM_ENVS"
@@ -106,6 +116,7 @@ for i in "${!WORKERS[@]}"; do
         --n-epochs "$epochs" \
         --self-play \
         --opponent strategic \
+        --anchor-ratio "$ANCHOR_RATIO" \
         --pool-dir "$POOL_DIR" \
         --save-path "$FINAL_DIR/worker_$i" \
         --worker-id "$i" \
