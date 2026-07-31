@@ -53,7 +53,9 @@ compile_flags.txt
 compile_commands.json
 .clangd/
 
-# Cloned godfield-flash repository for specification analysis
+# 参考用にクローンした別実装（独立した git リポジトリ）。
+# かなり古い時代のゴッドフィールドを粗く再現したもので、仕様の根拠には使えない。
+# ダメージの表現まわりが多少参考になる程度。
 godfield-flash/
 
 # RL Training Outputs
