@@ -1,6 +1,8 @@
 import glob
 import os
 import random
+import re
+from collections import defaultdict
 
 import numpy as np
 from sb3_contrib import MaskablePPO
@@ -72,6 +74,44 @@ class WinRateCallback(BaseCallback):
             self.logger.record("win_rate/total_episodes", self.episodes)
 
 
+def worker_id_of(path: str) -> int:
+    """`worker_3_gen_12.zip` から 3 を取り出します。読めなければ -1。"""
+    m = re.search(r"worker_?(\d+)", os.path.basename(path))
+    return int(m.group(1)) if m else -1
+
+
+def sample_across_workers(paths: list[str], k: int, rng: random.Random) -> list[str]:
+    """ワーカーを均等に巡回しながら k 個選びます。
+
+    一様に選ぶと、速いワーカーがプールを占拠します。保存はステップ基準なので、
+    同じ実時間でも速いワーカーほど多くのモデルを残すためです。実測では
+    d128 の worker 0 が 53 個中 30 個（57%）を占め、まだ 5M の worker 3 が
+    50M まで育った worker 0 とばかり当たって勝率 15% に沈んでいました。
+    ほぼ全敗では行動の良し悪しが差として出ず、学習信号になりません。
+
+    ワーカー単位で均等にすると、モデルの大きさや速度が違っても対戦相手の
+    構成が変わらなくなります。
+    """
+    by_worker: dict[int, list[str]] = defaultdict(list)
+    for path in paths:
+        by_worker[worker_id_of(path)].append(path)
+    for models in by_worker.values():
+        rng.shuffle(models)
+
+    workers = sorted(by_worker)
+    rng.shuffle(workers)
+
+    picked: list[str] = []
+    while len(picked) < k and any(by_worker.values()):
+        for worker in workers:
+            if not by_worker[worker]:
+                continue
+            picked.append(by_worker[worker].pop())
+            if len(picked) == k:
+                break
+    return picked
+
+
 class SelfPlayCallback(BaseCallback):
     """
     一定のステップ数ごとに現在のモデルを共有ディレクトリに保存し、
@@ -115,9 +155,11 @@ class SelfPlayCallback(BaseCallback):
             # 同期処理: 共有ディレクトリから .zip ファイルを全て取得
             all_models = glob.glob(os.path.join(self.save_path, "*.zip"))
 
-            # ランダムにサンプリング
-            sample_size = min(len(all_models), self.max_pool_size)
-            selected_models = self._rng.sample(all_models, sample_size)
+            # ワーカーを均等に巡回して選ぶ（速いワーカーの占拠を防ぐ）
+            selected_models = sample_across_workers(
+                all_models, min(len(all_models), self.max_pool_size), self._rng
+            )
+            sample_size = len(selected_models)
 
             # Heuristic等の FrozenOpponent ではない相手を退避
             non_frozen = [opp for opp in self.pool.opponents if not isinstance(opp, FrozenOpponent)]
