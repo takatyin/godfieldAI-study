@@ -42,6 +42,15 @@ class TrainingConfig:
     #   d256 h8 L6  fp32   768 / bf16 1,536
     batch_size: int = 2048
     n_epochs: int = 10
+    # 1ロールアウトあたりの勾配更新回数は rollout/batch_size * n_epochs で決まる。
+    # batch_size を VRAM だけで決めると、大きいモデルほど更新回数が跳ね上がる:
+    #   batch 8192 -> 16 ミニバッチ x 10 =  160 更新（approx_kl 0.025）
+    #   batch 2048 -> 63 ミニバッチ x 10 =  630 更新（approx_kl 0.42）
+    #   batch 1024 -> 125 ミニバッチ x 10 = 1250 更新（approx_kl 0.35, clip率 0.47）
+    # approx_kl が 0.4 では方策が信頼領域を大きく外れ、重要度比のクリップばかりが
+    # 効いて学習が進まない。target_kl を超えた時点で epoch ループを打ち切ることで、
+    # batch_size をいくつにしても更新量が揃う。0以下で無効。
+    target_kl: float = 0.03
     # エントロピー係数。以前の 0.00258 では方策が早期に尖り、いちど確率が0に
     # なった行動は二度とサンプルされないので勾配が流れなくなっていた
     # （対象選択が「常に相手」で固まった）。
@@ -62,6 +71,11 @@ class TrainingConfig:
     dim_feedforward: int = 768
     features_dim: int = 256
     amp: bool = True
+    # 逆伝播用に保持する層ごとの活性を捨て、必要になった時点で再計算する。
+    # 逆伝播が約1.3倍になる代わりに、大きいモデルでも batch_size を上げられる。
+    # batch_size を VRAM の都合で下げると更新回数が跳ね上がるため（target_kl の
+    # コメント参照）、そちらを避けるための手段。
+    grad_checkpointing: bool = False
 
     # --- 対戦相手 ----------------------------------------------------------
     opponent: str = "strategic"
@@ -102,6 +116,7 @@ _HELP = {
     "n_steps": "1ロールアウトあたりのステップ数（環境ごと）",
     "batch_size": "勾配計算のミニバッチ。VRAMを決めるのはこれ",
     "n_epochs": "1ロールアウトを何周するか",
+    "target_kl": "方策の変化がこれを超えたら更新を打ち切る（0以下で無効）",
     "ent_coef": "エントロピー係数。低すぎると方策が早期に潰れて戻れなくなる",
     "clip_range": "PPOのクリップ幅",
     "gamma": "割引率。報酬シェーピングにも同じ値が使われる",
@@ -117,6 +132,7 @@ _HELP = {
     # ArgumentDefaultsHelpFormatter がヘルプ文字列を % 展開するため、
     # リテラルの % は %% と書く必要がある。
     "amp": "bfloat16の自動混合精度で学習する（VRAM約35%%減・約1.9倍速）",
+    "grad_checkpointing": "活性を保持せず再計算してVRAMを削る（逆伝播が約1.3倍）",
     "opponent": "環境内部で相手の手番を指す方策",
     "self_play": "自己対戦リーグを有効にする",
     "self_play_save_freq": "何ステップごとにモデルをプールへ保存するか",

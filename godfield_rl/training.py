@@ -51,6 +51,7 @@ def build_policy_kwargs(cfg: TrainingConfig) -> dict:
             num_layers=cfg.num_layers,
             dim_feedforward=cfg.dim_feedforward,
             features_dim=cfg.features_dim,
+            grad_checkpointing=cfg.grad_checkpointing,
         ),
     )
 
@@ -100,6 +101,7 @@ def build_model(cfg: TrainingConfig, env: GodFieldVectorEnv, device: str) -> Mas
         n_steps=cfg.n_steps,
         batch_size=cfg.batch_size,
         n_epochs=cfg.n_epochs,
+        target_kl=cfg.target_kl if cfg.target_kl > 0 else None,
         ent_coef=cfg.ent_coef,
         clip_range=cfg.clip_range,
         gamma=cfg.gamma,

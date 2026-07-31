@@ -122,7 +122,8 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
                  num_layers: int = 2,
                  dim_feedforward: int = 256,
                  dropout: float = 0.0,
-                 features_dim: int = 256):
+                 features_dim: int = 256,
+                 grad_checkpointing: bool = False):
         super().__init__(observation_space, features_dim)
 
         if d_model % nhead != 0:
@@ -130,6 +131,7 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
 
         self.d_model = d_model
         self.num_card_slots = MAX_HAND_SIZE * 4
+        self.grad_checkpointing = grad_checkpointing
 
         # 1. Global context token embedding (Continuous features -> d_model)
         self.global_proj = nn.Linear(CONTINUOUS_FEATURES_SIZE, d_model)
@@ -173,6 +175,33 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
             nn.Linear(d_model, features_dim),
             nn.ReLU()
         )
+
+    def _encode(self, seq: torch.Tensor, key_padding_mask: torch.Tensor) -> torch.Tensor:
+        """Transformer を通します。grad_checkpointing なら層ごとに再計算します。
+
+        逆伝播は連鎖律のために順伝播の途中結果を保持しますが、その量は層数と
+        バッチに比例します。勾配チェックポイントは途中結果を捨て、逆伝播の直前に
+        その層だけ順伝播をやり直します。保持するのが実質1層分で済む代わりに、
+        逆伝播が約1.3倍になります。
+
+        注意そのものは PyTorch が既にメモリ効率カーネル（EFFICIENT_ATTENTION）で
+        処理しており、系列長に対して線形です（実測: 系列長2倍でVRAM1.97倍）。
+        ここで削れるのは FFN や射影の活性のほうで、そちらが支配的になっています。
+
+        勾配が要らない場面（ロールアウトの推論）では checkpoint を通さないので、
+        収集の速度は変わりません。
+        """
+        if not (self.grad_checkpointing and torch.is_grad_enabled() and seq.requires_grad):
+            return self.transformer(seq, src_key_padding_mask=key_padding_mask)
+
+        for layer in self.transformer.layers:
+            seq = torch.utils.checkpoint.checkpoint(
+                layer, seq, src_key_padding_mask=key_padding_mask,
+                # 既定(True)は入力の requires_grad を見て挙動が変わるうえ、
+                # autocast の状態を再計算時に引き継がない。
+                use_reentrant=False,
+            )
+        return self.transformer.norm(seq) if self.transformer.norm is not None else seq
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         batch_size = observations.shape[0]
@@ -231,7 +260,7 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         key_padding_mask = torch.cat([global_pad, card_pad, hist_pad], dim=1)
 
         # 6. Transformer Pass
-        out_seq = self.transformer(seq, src_key_padding_mask=key_padding_mask)
+        out_seq = self._encode(seq, key_padding_mask)
 
         # 7. Extract Global Token (Index 0)
         global_out = out_seq[:, 0, :] # [B, d_model]
