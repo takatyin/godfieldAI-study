@@ -124,13 +124,26 @@ class SelfPlayCallback(BaseCallback):
             new_opponents = list(non_frozen)
 
             # 抽出したモデルをロードしてプールに追加
+            failures = []
             for m_path in selected_models:
                 try:
                     frozen_model = MaskablePPO.load(m_path, device=self.model.device)
                     new_opponents.append(FrozenOpponent(frozen_model))
                 except Exception as e:
-                    if self.verbose > 0:
-                        print(f"Failed to load opponent {m_path}: {e}")
+                    failures.append((m_path, e))
+
+            # 読めないモデルが混ざっているのは設定の誤り。黙って捨てると、
+            # 「自己対戦のつもりが初期相手としか戦っていない」状態で何十時間も
+            # 回ることになる。保存は .tmp からのリネームで原子的に行っているので、
+            # 書きかけを掴むことは無い＝失敗したら本当におかしい。
+            if failures:
+                head = "\n".join(f"    {os.path.basename(p)}: {e}" for p, e in failures[:2])
+                raise RuntimeError(
+                    f"プール {self.save_path} の {len(failures)}/{len(selected_models)} 件が"
+                    f"読み込めませんでした。観測のレイアウトを変えた場合、それ以前の"
+                    f"モデルは読めません。新しいプールのディレクトリを指定するか、"
+                    f"古いモデルを消してください。\n{head}"
+                )
 
             # プールを入れ替え
             self.pool.opponents = new_opponents
