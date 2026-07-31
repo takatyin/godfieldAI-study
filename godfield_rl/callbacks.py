@@ -133,6 +133,29 @@ class SelfPlayCallback(BaseCallback):
 
         os.makedirs(self.save_path, exist_ok=True)
 
+    def _on_training_start(self) -> None:
+        """既にあるプールのモデルが読めるかを、学習を始める前に確かめます。
+
+        プールの同期は save_freq ごと（既定で 1M ステップごと）なので、
+        ここで確認しないと「観測を変えたのに古いプールを指していた」ことに
+        気づくのが10分後になります。実際にそれが起きました。
+        起動直後に落ちれば、設定を直してすぐ入れ直せます。
+        """
+        existing = sorted(glob.glob(os.path.join(self.save_path, "*.zip")))
+        if not existing:
+            return  # 新しいプール。他のワーカーが書き始めるのを待てばよい
+
+        try:
+            MaskablePPO.load(existing[0], device=self.model.device)
+        except Exception as exc:
+            raise RuntimeError(
+                f"プール {self.save_path} の既存モデルが読み込めません"
+                f"（{len(existing)} 件中の {os.path.basename(existing[0])} で確認）。\n"
+                f"  観測のレイアウトを変えると、それ以前のモデルは読めません。\n"
+                f"  --pool-dir に新しいディレクトリを指定するか、古いモデルを消してください。\n"
+                f"  元のエラー: {str(exc).splitlines()[0]}"
+            ) from exc
+
     def _on_step(self) -> bool:
         if self.n_calls % self.save_freq == 0:
             self.generation += 1
