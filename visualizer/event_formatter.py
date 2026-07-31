@@ -96,13 +96,19 @@ def _fmt_type_12(ev, actor_name, card_name, target_name):
 def _fmt_type_13(ev, actor_name, card_name, target_name):
     return f"{actor_name} MP {int(ev.value)} 回復"
 
+# 取引の3種（購入・売却・見送り）は、相手が誰かを必ず書く。
+# 「買う」「売る」は対象選択の結果として USE_CARD が発行されないため、
+# ここに相手を出さないと「誰に仕掛けた取引なのか」がログから消える。
+# イベント側には取引相手が target_id として入っている。
 def _fmt_type_14(ev, actor_name, card_name, target_name):
     price_str = f" ({int(ev.value)}円)" if ev.value > 0 else ""
-    return f"{actor_name} 【{card_name}】 を購入した{price_str}"
+    seller = f"{target_name} から " if target_name else ""
+    return f"{actor_name} が {seller}【{card_name}】 を購入した{price_str}"
 
 def _fmt_type_15(ev, actor_name, card_name, target_name):
     price_str = f" (+{int(ev.value)}円)" if ev.value > 0 else ""
-    return f"{actor_name} 【{card_name}】 を売却した{price_str}"
+    buyer = f"{target_name} に " if target_name else ""
+    return f"{actor_name} が {buyer}【{card_name}】 を売却した{price_str}"
 
 def _fmt_type_16(ev, actor_name, card_name, target_name):
     return f"{actor_name} 両替を行った"
@@ -114,7 +120,10 @@ def _fmt_type_18(ev, actor_name, card_name, target_name):
     return f"{actor_name} 【{card_name}】 を捨てた" if ev.card_id > 0 else f"{actor_name} カードを捨てた"
 
 def _fmt_type_19(ev, actor_name, card_name, target_name):
-    return f"{actor_name} 【{card_name}】 を買わなかった" if ev.card_id > 0 else f"{actor_name} 取引を見送った"
+    seller = f"{target_name} の " if target_name else ""
+    if ev.card_id > 0:
+        return f"{actor_name} が {seller}【{card_name}】 を買わなかった"
+    return f"{actor_name} が {target_name} との取引を見送った" if target_name else f"{actor_name} 取引を見送った"
 
 def _fmt_type_20(ev, actor_name, card_name, target_name):
     return f"{actor_name} 【{card_name}】 で阻止した！" if ev.card_id > 0 else f"{actor_name} 阻止した！"

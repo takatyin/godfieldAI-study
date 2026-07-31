@@ -86,3 +86,52 @@ def test_particle_reads_naturally_after_the_name(viewer):
 
 def test_unknown_event_type_is_skipped():
     assert format_event_log(Event(0, actor=0), 0) is None
+
+
+# --- 取引（買う・売る）--------------------------------------------------
+#
+# 「買う」「売る」は対象選択で CONFIRM_ATTACK が発行されない（PHASE_BUY_SELECT_MIRROR
+# へ抜ける経路が push_event より前に return する）ため、取引相手はこれらの行でしか
+# 分からない。イベントには target_id が入っているので、必ず文面に出す。
+BUY_CARD, SELL_CARD, REFUSE_DEAL = 14, 15, 19
+IRON_ARMOR = 60
+
+
+@pytest.mark.parametrize("viewer", [0, 1])
+def test_purchase_names_who_it_was_bought_from(viewer):
+    text = line(Event(BUY_CARD, actor=viewer, target_id=1 - viewer,
+                      card_id=IRON_ARMOR, value=5.0), viewer)
+    assert text.startswith(f"{VIEWER_NAME} が {OPPONENT_NAME} から ")
+    assert "購入した (5円)" in text
+
+
+@pytest.mark.parametrize("viewer", [0, 1])
+def test_sale_names_who_it_was_sold_to(viewer):
+    text = line(Event(SELL_CARD, actor=viewer, target_id=1 - viewer,
+                      card_id=IRON_ARMOR, value=5.0), viewer)
+    assert text.startswith(f"{VIEWER_NAME} が {OPPONENT_NAME} に ")
+    assert "売却した (+5円)" in text
+
+
+@pytest.mark.parametrize("viewer", [0, 1])
+def test_declining_names_whose_card_was_declined(viewer):
+    text = line(Event(REFUSE_DEAL, actor=viewer, target_id=1 - viewer,
+                      card_id=IRON_ARMOR), viewer)
+    assert text.startswith(f"{VIEWER_NAME} が {OPPONENT_NAME} の ")
+    assert text.endswith("を買わなかった")
+
+
+@pytest.mark.parametrize("viewer", [0, 1])
+def test_both_deal_outcomes_are_logged_and_distinguishable(viewer):
+    """買った場合と買わなかった場合が、どちらも出て、別の文言になること。"""
+    bought = line(Event(BUY_CARD, actor=viewer, target_id=1 - viewer,
+                        card_id=IRON_ARMOR, value=5.0), viewer)
+    declined = line(Event(REFUSE_DEAL, actor=viewer, target_id=1 - viewer,
+                          card_id=IRON_ARMOR), viewer)
+    assert bought and declined and bought != declined
+
+
+def test_deal_without_a_counterparty_still_renders():
+    """target_id が無い取引イベントでも文が壊れないこと。"""
+    text = line(Event(REFUSE_DEAL, actor=0, target_id=-1), 0)
+    assert text == f"{VIEWER_NAME} 取引を見送った"
