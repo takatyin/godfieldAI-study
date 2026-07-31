@@ -2,13 +2,11 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-try:
-    import godfield_core
-    # Mock registry so tests can run
-    godfield_core.init_game_logic([{"id": 0, "name": "dummy", "drop_rate": 1}])
-except ImportError:
-    pass
-
+# 以前ここで init_game_logic([{"id": 0, ...}]) を呼んでダミー1枚の登録簿に
+# 差し替えていた。init_game_logic はプロセス全体のグローバルを書き換えるので、
+# import された時点で他のテストのカードマスタまで壊れる（実際、テストを
+# ディレクトリに分けて実行順が変わった途端に 486 件が落ちた）。
+# 登録簿の初期化は conftest の autouse フィクスチャが済ませている。
 from godfield_rl.feature_config import TOTAL_OBSERVATION_FEATURE_SIZE_NO_MASK
 from godfield_rl.feature_extractor import GodFieldTransformerExtractor
 

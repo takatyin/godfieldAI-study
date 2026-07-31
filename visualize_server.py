@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 import godfield_core
 from godfield_rl.evaluation import load_policy, split_observation
 from godfield_rl.opponents import make_opponent
-from visualizer.constants import CARDS, project_root
+from visualizer.constants import project_root
 from visualizer.presenter import serialize_observation
 
 app = FastAPI()
@@ -27,8 +27,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize C++ game logic
-godfield_core.init_game_logic(CARDS)
+# カードマスタの読み込みと C++ 側の登録簿の初期化は visualizer.constants の
+# import 時に godfield_rl.cards が済ませている（何度呼んでも安全）。
 
 # Shared game state
 env_pool = godfield_core.EnvPool(1)

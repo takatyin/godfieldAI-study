@@ -1,5 +1,3 @@
-import json
-import os
 from typing import Any
 
 import numpy as np
@@ -11,6 +9,7 @@ try:
 except ImportError:
     raise ImportError("godfield_core is not built. Please run 'pip install -e .'")
 
+from godfield_rl.cards import all_cards
 from godfield_rl.opponents import HeuristicOpponent, Opponent
 from godfield_rl.shaping import PotentialShaper
 
@@ -58,13 +57,8 @@ class GodFieldVectorEnv(VecEnv):
 
         super().__init__(num_envs, observation_space, action_space)
 
-        # Auto-initialize global C++ card registry if not already done
-        if godfield_core.get_registry_size() == 0:
-            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            json_path = os.path.join(project_root, "assets", "godfield_cards.json")
-            with open(json_path, encoding="utf-8") as f:
-                cards = json.load(f)
-            godfield_core.init_game_logic(cards)
+        # C++ 側の登録簿を初期化する（読み込み済みなら何もしない）
+        all_cards()
 
         self.core_env = godfield_core.EnvPool(num_envs)
         self.seed_val = 42

@@ -1,11 +1,12 @@
-import json
-import os
+from godfield_rl.cards import PROJECT_ROOT, all_cards
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-json_path = os.path.join(project_root, "assets", "godfield_cards.json")
-with open(json_path, encoding="utf-8") as f:
-    CARDS = json.load(f)
+# 可視化サーバーが index_simple.html を探すのに使う
+project_root = PROJECT_ROOT
 
+# カードマスタは godfield_rl.cards が1度だけ読み、C++ 側の登録簿の初期化も
+# 兼ねている。ここで別に読むと、読み込み順によって登録簿が未初期化のまま
+# 進む経路ができてしまう。
+CARDS = all_cards()
 CARDS_BY_ID = {c["id"]: c for c in CARDS}
 
 # Sickness names for observation state
