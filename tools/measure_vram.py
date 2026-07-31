@@ -96,6 +96,8 @@ def main() -> None:
     parser.add_argument("--batch-sizes", type=int, nargs="+", default=[512, 1024, 2048])
     parser.add_argument("--safety", type=float, default=0.8,
                         help="見積もりに掛ける安全率（断片化と推論ぶんの余裕）")
+    parser.add_argument("--grad-checkpointing", action="store_true",
+                        help="勾配チェックポイントを有効にして測る（run_league.sh の既定）")
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
@@ -107,14 +109,19 @@ def main() -> None:
     print(f"HISTORY_LENGTH={godfield_core.HISTORY_LENGTH} / 系列長={seq_len} / 観測={obs_dim}")
     print(f"目標VRAM={args.budget_gb}GB（安全率 {args.safety}）\n")
 
+    ckpt = args.grad_checkpointing
+    suffix = " +ckpt" if ckpt else ""
     configs = [
         ("MLP", False, {}),
-        ("Transformer d128 h4 L2 ff256", True,
-         dict(d_model=128, nhead=4, num_layers=2, dim_feedforward=256, features_dim=256)),
-        ("Transformer d192 h8 L4 ff768", True,
-         dict(d_model=192, nhead=8, num_layers=4, dim_feedforward=768, features_dim=256)),
-        ("Transformer d256 h8 L6 ff1024", True,
-         dict(d_model=256, nhead=8, num_layers=6, dim_feedforward=1024, features_dim=256)),
+        (f"Transformer d128 h4 L2 ff256{suffix}", True,
+         dict(d_model=128, nhead=4, num_layers=2, dim_feedforward=256, features_dim=256,
+              grad_checkpointing=ckpt)),
+        (f"Transformer d192 h8 L4 ff768{suffix}", True,
+         dict(d_model=192, nhead=8, num_layers=4, dim_feedforward=768, features_dim=256,
+              grad_checkpointing=ckpt)),
+        (f"Transformer d256 h8 L6 ff1024{suffix}", True,
+         dict(d_model=256, nhead=8, num_layers=6, dim_feedforward=1024, features_dim=256,
+              grad_checkpointing=ckpt)),
     ]
 
     print(f"{'構成':<30}{'精度':<7}"
