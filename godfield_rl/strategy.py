@@ -53,15 +53,29 @@ STRONG_SELF_MIRACLES = card_ids("＜泉＞", "＜財宝＞")
 # 相手に使う雑貨（これ以外の雑貨は自分に使う）
 OPPONENT_SUNDRIES = card_ids("女神の石けん", "夜空のホウキ")
 
+STRONG_MIRACLES = STRONG_ATTACK_MIRACLES | STRONG_PLUS_MIRACLES | STRONG_SELF_MIRACLES
+
 ID_EXCHANGE = card_id("両替")
 ID_SELL = card_id("売る")
 ID_BUY = card_id("買う")
+ID_SMILE_SHELL = card_id("スマイルの貝がら")
 
 # しきい値
 BUY_MIN_MONEY = 10      # 所持金がこれ以上なら「買う」を優先
 EXCHANGE_HP_THRESHOLD = 20   # HPがこれ未満になったら「両替」を使う
 SELL_MIN_PRICE = 15     # 値段がこれ以上の神器だけ相手に売る
 CHEAP_ARMOR_DEF = 2     # 守がこれ以下の防具は優先的に消費する
+BUY_MAX_PRICE = 10      # 提示されたカードがこの値段以内なら必ず買う
+DISCARD_HAND_SIZE = 17  # 手札がこれを超えたら「捨てる」を選ぶ
+
+# 手札に何枚まで残すか。これを超えたぶんが捨てる候補になる。
+# 両替は2枚、取引カードと安い貝がらは1枚あれば足りる。
+DISCARD_KEEP_LIMITS = {
+    ID_EXCHANGE: 2,
+    ID_BUY: 1,
+    ID_SELL: 1,
+    ID_SMILE_SHELL: 1,
+}
 
 A = godfield_core.ActionType
 ACTION_TARGET_OPP = int(A.ACTION_TARGET_OPP)
@@ -83,6 +97,12 @@ PHASE_DEFENSE = int(P.PHASE_DEFENSE)
 PHASE_MIRACLE_DEFENSE = int(P.PHASE_MIRACLE_DEFENSE)
 PHASE_EXCHANGE_HP = int(P.PHASE_EXCHANGE_HP)
 PHASE_EXCHANGE_MP = int(P.PHASE_EXCHANGE_MP)
+PHASE_BUY = int(P.PHASE_BUY)
+PHASE_SELL_SELECT = int(P.PHASE_SELL_SELECT)
+PHASE_DISCARD = int(P.PHASE_DISCARD)
+
+ACTION_DEAL_YES = int(A.ACTION_DEAL_YES)
+ACTION_DEAL_NO = int(A.ACTION_DEAL_NO)
 
 STAT_SCALE = 100.0  # 観測は HP/MP/お金 を /100 で正規化している
 MAX_STAT = 99       # HP / MP / お金 の上限
@@ -188,6 +208,11 @@ class StrategicOpponent:
         def slots_of(ids) -> list[int]:
             return [i for i in slots if hand[i] in ids]
 
+        # 0. 手札が溢れそうなら捨てる。枚数は観測に無いので手札配列から数える
+        #    （相手の枚数は観測に入らないが、自分の空きスロットは -1 で分かる）。
+        if int(np.sum(hand >= 0)) > DISCARD_HAND_SIZE and mask_row[ACTION_DISCARD]:
+            return ACTION_DISCARD
+
         # 1. HPが低いなら両替
         if hp < EXCHANGE_HP_THRESHOLD:
             picks = [i for i in slots if hand[i] == ID_EXCHANGE]
@@ -237,6 +262,89 @@ class StrategicOpponent:
             for i in range(fc.MAX_HAND_SIZE)
             if hand[i] >= 0 and hand[i] not in (ID_SELL, ID_BUY, ID_EXCHANGE)
         )
+
+    # -- 取引と廃棄 ----------------------------------------------------------
+    #
+    # ここに方針が無いと act() の既定（ランダムな合法手）がそのまま採用される。
+    # 実測では取引と廃棄で判断の 8.9% がランダムに落ちており、無料のカードを
+    # 半々でしか買わない・防具を捨てる、といった手を教えてしまっていた。
+
+    def _act_buy(self, obs_row, mask_row) -> int | None:
+        """提示されたカードを買うか断るか。
+
+        奇跡と防具は必ず買い、それ以外も10円以内なら買う。手札が満杯でも買う
+        （満杯だと自分のカードが1枚ランダムに置き換わるが、相手の手札を1枚
+        減らせるほうが大きい）。
+        """
+        if not (mask_row[ACTION_DEAL_YES] and mask_row[ACTION_DEAL_NO]):
+            return None
+        offered = self._opponent_staged(obs_row)
+        if offered < 0:
+            # 何が提示されたか読めない局面（反射など）。仕様の既定に合わせて断る。
+            return ACTION_DEAL_NO
+        kind = feature(offered, "type")
+        if kind in ("miracle", "defense") or feature(offered, "price") <= BUY_MAX_PRICE:
+            return ACTION_DEAL_YES
+        return ACTION_DEAL_NO
+
+    def _act_sell_select(self, obs_row, mask_row) -> int | None:
+        """何を出品するか。値段の高い神器から出す。"""
+        hand = self._hand(obs_row)
+        slots = self._hand_choices(mask_row, hand)
+        sellable = [
+            i for i in slots
+            if hand[i] not in (ID_SELL, ID_BUY, ID_EXCHANGE)
+            and feature(hand[i], "price") >= SELL_MIN_PRICE
+        ]
+        # 15円以上が無くても出品はしなければならないので、その場合は
+        # 手持ちで一番高いものを出す（None を返すとランダムに落ちる）。
+        candidates = sellable or [i for i in slots if hand[i] not in (ID_SELL, ID_BUY)]
+        if not candidates:
+            return None
+        best = max(feature(hand[i], "price") for i in candidates)
+        return self._pick([i for i in candidates if feature(hand[i], "price") == best])
+
+    def _act_discard(self, obs_row, mask_row) -> int | None:
+        """何を捨てるか。余った取引カードと弱い奇跡から捨てる。
+
+        優先順位は、両替を2枚・買う・売る・スマイルの貝がらを1枚ずつ残して
+        余りを捨て、次に強い奇跡でない奇跡を捨てる。武器と防具は残す。
+        """
+        hand = self._hand(obs_row)
+        slots = self._hand_choices(mask_row, hand)
+        if not slots:
+            return None
+
+        for card, keep in DISCARD_KEEP_LIMITS.items():
+            picks = [i for i in slots if hand[i] == card]
+            if len(picks) > keep:
+                return self._pick(picks)
+
+        weak_miracles = [
+            i for i in slots
+            if feature(hand[i], "type") == "miracle" and hand[i] not in STRONG_MIRACLES
+        ]
+        if weak_miracles:
+            return self._pick(weak_miracles)
+
+        # 上のどれにも当てはまらなくても、手札が溢れている以上どれかは捨てる。
+        # ここで None を返すとランダムな合法手になり、防具まで捨ててしまう。
+        # 防具・武器・強い奇跡は最後に回し、それ以外を値段の安い順に捨てる。
+        # 奇跡は価格が0なので、価格だけで並べると強い奇跡が真っ先に捨てられる。
+        def rank(slot: int) -> tuple[int, int]:
+            card = hand[slot]
+            keep_last = int(
+                feature(card, "type") in ("defense", "weapon") or card in STRONG_MIRACLES
+            )
+            return (keep_last, feature(card, "price"))
+
+        return ACTION_HAND_0 + min(slots, key=rank)
+
+    @staticmethod
+    def _opponent_staged(obs_row: np.ndarray) -> int:
+        """相手が場に出しているカードの先頭。売買で提示されたカードがここに入る。"""
+        start = fc.OPP_STAGED_CARDS_START
+        return int(obs_row[start])
 
     def _act_target_select(self, obs_row, mask_row) -> int | None:
         """対象選択。仮置きしたカードの性質で「自分」「相手」を分ける。
@@ -335,6 +443,12 @@ class StrategicOpponent:
             return self._act_defense(obs_row, mask_row)
         if phase in (PHASE_EXCHANGE_HP, PHASE_EXCHANGE_MP):
             return self._act_exchange(obs_row, mask_row, phase)
+        if phase == PHASE_BUY:
+            return self._act_buy(obs_row, mask_row)
+        if phase == PHASE_SELL_SELECT:
+            return self._act_sell_select(obs_row, mask_row)
+        if phase == PHASE_DISCARD:
+            return self._act_discard(obs_row, mask_row)
         return None
 
     def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
