@@ -8,6 +8,7 @@
 #include "env_pool.h"
 #include "game_logic.h"
 #include "game_logic_internal.h"
+#include "ismcts.h"
 #include "rng.h"
 #include "types.h"
 
@@ -763,4 +764,60 @@ PYBIND11_MODULE(godfield_core, m) {
         .def("get_dones", &EnvPool::get_dones)
         .def("get_state", &EnvPool::get_state, py::arg("env_id"))
         .def("set_state", &EnvPool::set_state, py::arg("env_id"), py::arg("state"));
+
+    // ------------------------------------------------------------------
+    // ISMCTS
+    // ------------------------------------------------------------------
+    py::class_<ismcts::Config>(m, "IsmctsConfig")
+        .def(py::init<>())
+        .def_readwrite("num_simulations", &ismcts::Config::num_simulations)
+        .def_readwrite("c_puct", &ismcts::Config::c_puct)
+        .def_readwrite("prior_floor", &ismcts::Config::prior_floor)
+        .def_readwrite("fpu_reduction", &ismcts::Config::fpu_reduction)
+        .def_readwrite("expand_root_fully", &ismcts::Config::expand_root_fully)
+        .def_readwrite("root_noise_frac", &ismcts::Config::root_noise_frac)
+        .def_readwrite("root_noise_alpha", &ismcts::Config::root_noise_alpha)
+        .def_readwrite("rollout_max_steps", &ismcts::Config::rollout_max_steps)
+        .def_readwrite("seed", &ismcts::Config::seed);
+
+    py::class_<ismcts::Result>(m, "IsmctsResult")
+        .def_readonly("best_action", &ismcts::Result::best_action)
+        .def_readonly("simulations", &ismcts::Result::simulations)
+        .def_readonly("actions", &ismcts::Result::actions)
+        .def_readonly("visits", &ismcts::Result::visits)
+        .def_readonly("values", &ismcts::Result::values)
+        .def_readonly("priors", &ismcts::Result::priors);
+
+    py::class_<ismcts::Stats>(m, "IsmctsStats")
+        .def_readonly("nodes", &ismcts::Stats::nodes)
+        .def_readonly("edges", &ismcts::Stats::edges)
+        .def_readonly("simulations", &ismcts::Stats::simulations)
+        .def_readonly("game_steps", &ismcts::Stats::game_steps)
+        .def_readonly("evaluations", &ismcts::Stats::evaluations)
+        .def_readonly("max_depth", &ismcts::Stats::max_depth)
+        .def_readonly("edge_relocations", &ismcts::Stats::edge_relocations);
+
+    m.def(
+        "ismcts_search",
+        [](const InternalState& state, int searching_player, const ismcts::Config& config) {
+            // 探索はC++に閉じているのでGILを離す。可視化サーバーが探索中も
+            // 応答できるようにするため。
+            py::gil_scoped_release release;
+            return ismcts::search(state, searching_player, config, nullptr);
+        },
+        py::arg("state"), py::arg("searching_player"), py::arg("config"),
+        "情報集合ごとに1本の木でISMCTSを行い、各合法手の訪問回数と価値を返します。");
+
+    m.def("ismcts_last_stats", &ismcts::last_search_stats,
+          "直前の探索の統計（ノード数・step_game呼び出し回数など）。");
+
+    m.def(
+        "ismcts_determinize",
+        [](InternalState& state, int searching_player, uint32_t seed) {
+            Xoshiro128PP rng;
+            rng.seed(seed);
+            ismcts::determinize(state, searching_player, rng);
+        },
+        py::arg("state"), py::arg("searching_player"), py::arg("seed"),
+        "隠れ情報（相手の手札・夢で未確定の自分の手札）をサンプリングし直します。");
 }
