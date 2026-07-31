@@ -45,13 +45,21 @@
 #
 set -euo pipefail
 
-POOL_DIR="${POOL_DIR:-models/league_v2}"
+# 観測のレイアウトを変えたら、必ず新しいプールに切り替えること。古いプールを
+# 指すと SelfPlayCallback が読み込みに失敗して落ちる（黙って人手の方策とだけ
+# 戦い続けるより、止まったほうが良いのでそうしてある）。
+# v2 は観測に手札枚数・公開状態を追加する前のもので、もう読めない。
+POOL_DIR="${POOL_DIR:-models/league_v3}"
 # 学習し終えた最終モデルの置き場。--save-path を渡さないと全ワーカーが既定の
 # godfield_agent.zip に書くため、先に終わったワーカーの結果が後から終わった
 # ワーカーに黙って上書きされる。プールとは別のディレクトリにする
 # （プールは *.zip をグロブして対戦相手に読み込むので、混ぜると最終モデルまで
 # 対戦相手として拾われる）。
-FINAL_DIR="${FINAL_DIR:-models/league_v2_final}"
+#
+# 既定は POOL_DIR から導く。固定値にすると POOL_DIR だけ切り替えたときに
+# 最終モデルが前回の場所へ書かれ、観測レイアウトの違うモデルが同じ名前で
+# 上書きされてしまう（どちらのものか判別できなくなる）。
+FINAL_DIR="${FINAL_DIR:-${POOL_DIR}_final}"
 TIMESTEPS="${TIMESTEPS:-50000000}"
 NUM_ENVS="${NUM_ENVS:-500}"
 
@@ -73,7 +81,14 @@ WORKERS=(
 mkdir -p logs "$POOL_DIR" "$FINAL_DIR"
 rm -f logs/league_worker_*.log
 
-echo "リーグ学習を開始します（プール: $POOL_DIR）"
+# 実際に使うパスは、環境変数を変えたときに取り違えやすいので必ず出す
+echo "リーグ学習を開始します"
+echo "  観測          : $(uv run python -c 'import godfield_core as g; print(g.OBSERVATION_FEATURE_SIZE)') 次元"
+echo "  共有プール    : $POOL_DIR"
+echo "  最終モデル    : $FINAL_DIR/worker_<i>.zip"
+echo "  評価の最良    : $POOL_DIR/best_worker_<i>/best_model.zip"
+echo "  総ステップ    : $TIMESTEPS / 並列環境 $NUM_ENVS"
+echo
 for i in "${!WORKERS[@]}"; do
     read -r seed ent d_model nhead layers ff batch epochs ckpt <<< "${WORKERS[$i]}"
     ckpt_flag=()
@@ -104,12 +119,9 @@ for i in "${!WORKERS[@]}"; do
 done
 
 echo
-echo "4ワーカーを起動しました。共有プール: $POOL_DIR"
+echo "4ワーカーを起動しました。"
 echo "  ログ:       tail -f logs/league_worker_0.log"
 echo "  進捗:       tensorboard --logdir logs/league_tb"
+echo "  更新量:     grep approx_kl logs/league_worker_3.log | tail -1   （0.03前後なら健全）"
 echo "  方策の診断: uv run python tools/diagnose_policy.py $POOL_DIR/best_worker_0/best_model.zip"
-echo
-echo "保存先:"
-echo "  評価で最良だったモデル: $POOL_DIR/best_worker_<i>/best_model.zip"
-echo "  学習し終えた最終モデル: $FINAL_DIR/worker_<i>.zip"
 wait

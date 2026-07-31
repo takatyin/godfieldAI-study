@@ -19,7 +19,7 @@ from godfield_rl.opponents import OPPONENT_KINDS
 # リーグの共有プール。observation のレイアウトを変えたら過去のモデルは読めなく
 # なるので、そのたびに新しいディレクトリへ移すこと（古いプールに書き足すと、
 # 読めないモデルが混ざったまま気付きにくい）。run_league.sh の既定と揃えてある。
-DEFAULT_POOL_DIR = "models/league_v2"
+DEFAULT_POOL_DIR = "models/league_v3"
 
 
 @dataclass(frozen=True)
