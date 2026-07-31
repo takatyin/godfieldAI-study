@@ -116,12 +116,47 @@ for i in "${!WORKERS[@]}"; do
         --total-timesteps "$TIMESTEPS" \
         --tensorboard-log "logs/league_tb" \
         > "logs/league_worker_$i.log" 2>&1 &
+    PIDS[$i]=$!
 done
 
+# 起動直後の失敗（VRAM不足、設定の誤り、プールが読めない）は、数十時間たって
+# から気づいても手遅れになる。ここで一度だけ生存を確認する。
+echo "起動を確認しています..."
+sleep "${STARTUP_CHECK_SEC:-150}"
+dead=()
+for i in "${!PIDS[@]}"; do
+    kill -0 "${PIDS[$i]}" 2>/dev/null || dead+=("$i")
+done
+if [ ${#dead[@]} -gt 0 ]; then
+    echo
+    echo "起動に失敗したワーカーがあります: ${dead[*]}"
+    for i in "${dead[@]}"; do
+        echo "--- worker $i の最後の20行 ---"
+        tail -20 "logs/league_worker_$i.log"
+    done
+    echo
+    echo "残りのワーカーも停止します。"
+    for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
+    exit 1
+fi
+echo "4ワーカーとも起動しました。"
+
 echo
-echo "4ワーカーを起動しました。"
 echo "  ログ:       tail -f logs/league_worker_0.log"
 echo "  進捗:       tensorboard --logdir logs/league_tb"
 echo "  更新量:     grep approx_kl logs/league_worker_3.log | tail -1   （0.03前後なら健全）"
 echo "  方策の診断: uv run python tools/diagnose_policy.py $POOL_DIR/best_worker_0/best_model.zip"
-wait
+echo
+
+# 引数なしの wait は、ワーカーが異常終了しても 0 を返す。それでは途中で死んだ
+# ワーカーに気づけないので、PID ごとに待って結果を出す。
+status=0
+for i in "${!PIDS[@]}"; do
+    if wait "${PIDS[$i]}"; then
+        echo "worker $i: 完了"
+    else
+        echo "worker $i: 異常終了（exit $?）— logs/league_worker_$i.log を確認してください"
+        status=1
+    fi
+done
+exit $status
