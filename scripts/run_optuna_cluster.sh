@@ -1,7 +1,8 @@
 #!/bin/bash
 # 4つのGPUそれぞれに独立したOptunaワーカーを割り当てて並列探索を行うスクリプト
 
-cd /home/otani/GodFieldAI
+# 特定のマシンのパスを直書きしていたので、リポジトリからの相対に直す
+cd "$(dirname "$0")/.."
 
 # 以前のDBがあればバックアップするかそのまま使うか（今回はそのまま追記）
 echo "Starting Optuna distributed tuning across 4 GPUs..."
