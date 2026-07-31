@@ -56,7 +56,23 @@ def split_observation(raw: np.ndarray, num_envs: int) -> tuple[np.ndarray, np.nd
     return flat[:, : fdim - adim], flat[:, fdim - adim : fdim].astype(bool)
 
 
-def load_policy(path: str, device: str = "cpu", deterministic: bool = True) -> Opponent:
+def default_device() -> str:
+    """GPU があれば使います。
+
+    評価も診断も推論だけで数十万ステップまわすので、CPU だと方策の順伝播が
+    支配的になります（環境の 1 ステップは C++ で 1μs 未満）。
+    """
+    import torch
+
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def load_policy(
+    path: str,
+    device: str | None = None,
+    deterministic: bool = True,
+    amp: bool = False,
+) -> Opponent:
     """学習済みモデルを対戦相手として読み込みます。
 
     特徴抽出器の種類やハイパーパラメータは .zip に保存されているので、
@@ -65,6 +81,8 @@ def load_policy(path: str, device: str = "cpu", deterministic: bool = True) -> O
     """
     from sb3_contrib import MaskablePPO
 
+    if device is None:
+        device = default_device()
     try:
         model = MaskablePPO.load(path, device=device)
     except RuntimeError as exc:
@@ -78,13 +96,15 @@ def load_policy(path: str, device: str = "cpu", deterministic: bool = True) -> O
             f"  学習し直したモデルを使ってください。\n"
             f"  元のエラー: {exc}"
         ) from exc
-    return FrozenOpponent(model, deterministic=deterministic)
+    return FrozenOpponent(model, deterministic=deterministic, amp=amp)
 
 
-def resolve_policy(spec: str, seed: int = 0, device: str = "cpu") -> Opponent:
+def resolve_policy(
+    spec: str, seed: int = 0, device: str | None = None, amp: bool = False
+) -> Opponent:
     """名前（random/heuristic/strategic）か .zip のパスから方策を作ります。"""
     if spec.endswith(".zip"):
-        return load_policy(spec, device=device)
+        return load_policy(spec, device=device, amp=amp)
     return make_opponent(spec, seed=seed)
 
 
@@ -93,7 +113,7 @@ def play_match(
     seat1: Opponent,
     *,
     games: int,
-    num_envs: int = 64,
+    num_envs: int = 512,
     seed: int = 0,
     max_steps_per_game: int = 2000,
 ) -> MatchResult:

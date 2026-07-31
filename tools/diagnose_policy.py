@@ -4,16 +4,17 @@
 gen50 の Transformer / MLP はどちらも対象選択フェイズで **100%「相手」を選ぶ**まで
 潰れており、回復系の雑貨を相手に使っていました（勝率は 85% 出ていた）。
 
-使い方::
+使い方（GPUがあれば既定で使い、環境は512並列でまとめて推論します）::
 
-    uv run python tools/diagnose_policy.py assets/models/best_transformer_gen50.zip
-    uv run python tools/diagnose_policy.py MODEL --steps 6000 --num-envs 64
+    uv run python tools/diagnose_policy.py models/league_v2/best_worker_0/best_model.zip
+    uv run python tools/diagnose_policy.py MODEL --steps 2000 --amp
 
 出力は3つ。
 
 1. 対象選択フェイズで「相手」を選んだ割合（カード別）
-2. 自分に使うべきカードを相手に使う間違いが、勝率をどれだけ損なっているか
-   （行動を上書きして比較する。学習し直さずに「直す価値」を測れる）
+2. 対象を間違える手が、勝率をどれだけ損なっているか。自分向き・相手向きの
+   両方向で、間違えた行動を正しい側へ上書きして比較する
+   （学習し直さずに「直す価値」を測れる）
 3. 1エピソードあたりの意思決定回数と、その長さでの割引率
    （終端報酬がどれだけ薄まっているか＝信用割当が問題かどうかの判断材料）
 """
@@ -23,10 +24,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from collections import defaultdict
 
 import numpy as np
-import torch
 
 import godfield_core
 
@@ -39,7 +40,7 @@ if godfield_core.get_registry_size() == 0:
 
 from godfield_rl import feature_config as fc  # noqa: E402
 from godfield_rl.env_wrapper import GodFieldVectorEnv  # noqa: E402
-from godfield_rl.evaluation import load_policy  # noqa: E402
+from godfield_rl.evaluation import default_device, load_policy  # noqa: E402
 from godfield_rl.opponents import make_opponent  # noqa: E402
 
 CARD_BY_ID = {c["id"]: c for c in CARDS}
@@ -47,8 +48,12 @@ ACTION_TARGET_OPP = int(godfield_core.ActionType.ACTION_TARGET_OPP)
 ACTION_TARGET_SELF = int(godfield_core.ActionType.ACTION_TARGET_SELF)
 PHASE_TARGET_SELECT = int(godfield_core.GamePhase.PHASE_MAIN_TARGET_SELECT)
 
-# 相手に使うと相手を利するカード。カードデータからは機械的に判別できないので名指しする
+# 対象を間違えると損をするカード。カードデータからは機械的に判別できないので名指しする
 # （説明文に「HP」を含むだけでは攻撃カードも拾ってしまう）。
+#
+# 自分向き。相手に使うと相手を利する。
+# 貝がらは回復ではなく災いを払うカードなので、こちらに災いが無い局面では
+# どちらを選んでも何も起きない。確率が 0.5 付近に留まりやすいのはそのため。
 SELF_ONLY_CARD_NAMES = (
     "スマイルのしずく", "ハートのしずく", "ロマンスウォーター", "天の川のおいしい水",
     "スマイルの花", "ハートの花", "ロマンスの香木",
@@ -56,18 +61,23 @@ SELF_ONLY_CARD_NAMES = (
     "守護封印のつぼ",
 )
 
+# 相手向き。自分に使うと自分の奇跡・神器を捨てたり、取引を相手に渡さない分だけ損をする。
+OPPONENT_ONLY_CARD_NAMES = (
+    "女神の石けん", "夜空のホウキ", "売る", "買う",
+)
 
-def self_only_card_ids() -> set[int]:
-    ids = {c["id"] for c in CARDS if c["name"] in SELF_ONLY_CARD_NAMES}
-    missing = set(SELF_ONLY_CARD_NAMES) - {CARD_BY_ID[i]["name"] for i in ids}
+
+def _card_ids(names: tuple[str, ...]) -> set[int]:
+    ids = {c["id"] for c in CARDS if c["name"] in names}
+    missing = set(names) - {CARD_BY_ID[i]["name"] for i in ids}
     if missing:
         raise KeyError(f"カード名がカードデータに見つかりません: {sorted(missing)}")
     return ids
 
 
-def load_model(path: str, device: str = "cpu"):
+def load_learner(path: str, device: str | None = None, amp: bool = False):
     """特徴抽出器の種類は保存済みモデルから復元されるので、指定は不要です。"""
-    return load_policy(os.path.join(PROJECT_ROOT, path), device=device).model
+    return load_policy(os.path.join(PROJECT_ROOT, path), device=device, amp=amp)
 
 
 def _target_select_mask(obs: np.ndarray, masks: np.ndarray) -> np.ndarray:
@@ -77,9 +87,17 @@ def _target_select_mask(obs: np.ndarray, masks: np.ndarray) -> np.ndarray:
     return np.flatnonzero(in_phase & both)
 
 
-def run(model, *, num_envs: int, steps: int, seed: int, override_self_only: bool):
-    """1回まわして、対象選択の統計・エピソード長・勝敗を集めます。"""
-    self_only = self_only_card_ids()
+def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None):
+    """1回まわして、対象選択の統計・エピソード長・勝敗を集めます。
+
+    override に "self" / "opp" を渡すと、そのカード群で対象を間違えた行動を
+    正しい側へ上書きします。学習し直さずに「直す価値」を測るための実験です。
+    """
+    forced_ids, right_action, wrong_action = {
+        None: (set(), 0, 0),
+        "self": (_card_ids(SELF_ONLY_CARD_NAMES), ACTION_TARGET_SELF, ACTION_TARGET_OPP),
+        "opp": (_card_ids(OPPONENT_ONLY_CARD_NAMES), ACTION_TARGET_OPP, ACTION_TARGET_SELF),
+    }[override]
     env = GodFieldVectorEnv(num_envs, opponent=make_opponent("heuristic", seed=seed + 1))
     env.seed(seed)
     obs = env.reset()
@@ -94,33 +112,32 @@ def run(model, *, num_envs: int, steps: int, seed: int, override_self_only: bool
     for _ in range(steps):
         masks = env.action_masks()
         idx = _target_select_mask(obs, masks)
-        actions, _ = model.predict(obs, action_masks=masks, deterministic=True)
+
+        # 行動と確率は同じ分布から取れるので、順伝播は1回で済ませる（以前は
+        # predict と get_distribution で2回まわしていた）。deterministic な行動は
+        # 確率の argmax と同じもの。
+        probs = learner.action_probs(obs, masks)
+        actions = probs.argmax(axis=1).astype(np.int32)
 
         if idx.size:
-            with torch.no_grad():
-                dist = model.policy.get_distribution(
-                    torch.as_tensor(obs[idx], dtype=torch.float32),
-                    action_masks=torch.as_tensor(masks[idx]),
-                )
-                probs = dist.distribution.probs.numpy()[:, ACTION_TARGET_OPP]
             staged = obs[idx, fc.STAGED_CARDS_START].astype(int)
             chose_opp = actions[idx] == ACTION_TARGET_OPP
-            for card_id, opp, p in zip(staged, chose_opp, probs):
+            for card_id, opp, p in zip(staged, chose_opp, probs[idx, ACTION_TARGET_OPP]):
                 per_card[int(card_id)][0] += 1
                 per_card[int(card_id)][1] += int(opp)
                 prob_to_opp[int(card_id)].append(float(p))
 
-        if override_self_only:
+        if forced_ids:
             staged_all = obs[:, fc.STAGED_CARDS_START].astype(int)
             in_phase = obs[:, fc.PHASE_START + PHASE_TARGET_SELECT] > 0.5
             bad = (
                 in_phase
-                & np.isin(staged_all, list(self_only))
-                & masks[:, ACTION_TARGET_SELF]
-                & (actions == ACTION_TARGET_OPP)
+                & np.isin(staged_all, list(forced_ids))
+                & masks[:, right_action]
+                & (actions == wrong_action)
             )
             overridden += int(bad.sum())
-            actions = np.where(bad, ACTION_TARGET_SELF, actions)
+            actions = np.where(bad, right_action, actions)
 
         obs, rewards, dones, _ = env.step(actions)
         ep_steps += 1
@@ -152,7 +169,12 @@ def _print_target_select(stats, top: int = 20) -> None:
     for card_id, (n, o) in sorted(per_card.items(), key=lambda kv: -kv[1][0])[:top]:
         card = CARD_BY_ID.get(card_id, {})
         name = card.get("name", f"id{card_id}")
-        kind = "自分向き" if name in SELF_ONLY_CARD_NAMES else card.get("type", "?")
+        if name in SELF_ONLY_CARD_NAMES:
+            kind = "自分向き"
+        elif name in OPPONENT_ONLY_CARD_NAMES:
+            kind = "相手向き"
+        else:
+            kind = card.get("type", "?")
         mean_p = float(np.mean(stats["prob_to_opp"][card_id]))
         print(f"  {name:<20}{kind:<8}{n:>7}{o / n:>11.1%}{mean_p:>10.3f}")
 
@@ -173,26 +195,41 @@ def _print_episodes(stats, gammas=(0.99, 0.995, 0.999)) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("model_path", help="学習済みモデル（.zip）へのパス")
-    parser.add_argument("--num-envs", type=int, default=64)
-    parser.add_argument("--steps", type=int, default=4000, help="環境を進めるステップ数")
+    parser.add_argument("--num-envs", type=int, default=512,
+                        help="並列環境数。方策の推論をまとめる単位なので、大きいほど速い")
+    parser.add_argument("--steps", type=int, default=1000, help="環境を進めるステップ数")
     parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default=None, help="既定はGPUがあればcuda")
+    parser.add_argument("--amp", action="store_true",
+                        help="推論をbfloat16で行う（CUDAのみ・さらに高速）")
     args = parser.parse_args()
 
-    model = load_model(args.model_path, device=args.device)
+    device = args.device or default_device()
+    learner = load_learner(args.model_path, device=device, amp=args.amp)
     common = dict(num_envs=args.num_envs, steps=args.steps, seed=args.seed)
 
-    base = run(model, override_self_only=False, **common)
+    started = time.perf_counter()
+    base = run(learner, override=None, **common)
     _print_target_select(base)
     _print_episodes(base)
 
-    fixed = run(model, override_self_only=True, **common)
-    base_wr = (base["results"] > 0).mean() if base["results"].size else float("nan")
-    fixed_wr = (fixed["results"] > 0).mean() if fixed["results"].size else float("nan")
-    print("\n■ 「自分に使うべきカードを相手に使う」間違いを上書きした場合")
-    print(f"  対象: {'、'.join(SELF_ONLY_CARD_NAMES)}")
-    print(f"  上書き回数: {fixed['overridden']}")
-    print(f"  勝率 {base_wr:.1%} -> {fixed_wr:.1%}  （差 {fixed_wr - base_wr:+.1%}）")
+    def win_rate(stats) -> float:
+        return (stats["results"] > 0).mean() if stats["results"].size else float("nan")
+
+    base_wr = win_rate(base)
+    for override, title, names in (
+        ("self", "自分に使うべきカードを相手に使う", SELF_ONLY_CARD_NAMES),
+        ("opp", "相手に使うべきカードを自分に使う", OPPONENT_ONLY_CARD_NAMES),
+    ):
+        fixed = run(learner, override=override, **common)
+        fixed_wr = win_rate(fixed)
+        print(f"\n■ 「{title}」間違いを上書きした場合")
+        print(f"  対象: {'、'.join(names)}")
+        print(f"  上書き回数: {fixed['overridden']}")
+        print(f"  勝率 {base_wr:.1%} -> {fixed_wr:.1%}  （差 {fixed_wr - base_wr:+.1%}）")
+
+    print(f"\n（{device} / {args.num_envs}環境 x {args.steps}ステップ x 3回"
+          f"{' / bf16' if args.amp else ''} / {time.perf_counter() - started:.1f}秒）")
 
 
 if __name__ == "__main__":

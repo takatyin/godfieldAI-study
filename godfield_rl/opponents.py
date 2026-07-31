@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Protocol
 
 import numpy as np
+import torch
 
 import godfield_core
 from godfield_rl import feature_config as fc
@@ -98,18 +99,42 @@ class FrozenOpponent:
       多様性が生まれ、同じ局面ばかりを学習するのを避けられます。
     - 人間と対戦させる相手（可視化サーバー）: `True`。探索のためのブレは不要で、
       方策が最も良いと考える手だけを指させたい。
+
+    推論は `MaskablePPO.predict` ではなく `policy.get_distribution` を直に呼びます。
+    predict は観測の形をその都度調べ直す（ベクトル環境かどうかの判定、転置の要否）
+    ぶんだけ Python 側が重く、こちらは形の分かったバッチしか渡さないので不要です。
+    分布を1つ作れば行動も確率も取れるため、両方要る診断ツールで順伝播が1回で済みます。
     """
 
-    def __init__(self, model, deterministic: bool = False):
+    def __init__(self, model, deterministic: bool = False, amp: bool = False):
         self.model = model
         self.deterministic = deterministic
+        self.device = model.policy.device
+        # bf16 は CUDA でしか意味がない。学習と違い推論は勾配を持たないので、
+        # 既定は fp32 のまま（自己対戦の相手の手が精度で変わらないように）。
+        self._amp = amp and self.device.type == "cuda"
+        model.policy.set_training_mode(False)
+
+    def _autocast(self):
+        return torch.autocast("cuda", dtype=torch.bfloat16, enabled=self._amp)
+
+    def _distribution(self, observations: np.ndarray, action_masks: np.ndarray):
+        obs = torch.as_tensor(observations, dtype=torch.float32, device=self.device)
+        masks = torch.as_tensor(np.asarray(action_masks), dtype=torch.bool, device=self.device)
+        return self.model.policy.get_distribution(obs, action_masks=masks)
 
     def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
-        # MaskablePPO の predict は action_masks を受け取る
-        actions, _ = self.model.predict(
-            observations, action_masks=action_masks, deterministic=self.deterministic
-        )
-        return actions.astype(np.int32)
+        with torch.inference_mode(), self._autocast():
+            dist = self._distribution(observations, action_masks)
+            actions = dist.get_actions(deterministic=self.deterministic)
+        return actions.cpu().numpy().astype(np.int32)
+
+    def action_probs(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
+        """(N, 行動数) の行動確率。マスク済みなので合法手だけに質量が乗ります。"""
+        with torch.inference_mode(), self._autocast():
+            dist = self._distribution(observations, action_masks)
+            probs = dist.distribution.probs
+        return probs.float().cpu().numpy()
 
 
 class PoolOpponent:
