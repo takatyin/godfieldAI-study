@@ -23,14 +23,25 @@
 # 大きいモデルほど弱くなった（対 strategic で d128:68.6% / d192:50〜54% / d256:31.4%）。
 #
 # 勾配チェックポイント（--grad-checkpointing）で層ごとの活性を捨てて再計算すると、
-# 逆伝播が約1.24倍になる代わりにVRAMが大きく減り、batch を上げられる。実測:
+# 逆伝播が約1.24倍になる代わりにVRAMが減り、batch を上げられる。
 #
-#   構成               ckpt無しの上限   ckpt有りの上限
-#   d128 h4 L2 ff256        9,728         17,920
-#   d192 h8 L4 ff768        3,072          8,192
-#   d256 h8 L6 ff1024       1,536          5,376
+# ただし batch だけでは更新回数を揃えきれない。RTX3090(23.6GB) での実測
+# （bf16 + ckpt、Adam の状態と方策ヘッドを含む、プロセスを分けて測定）:
 #
-# これで全ワーカーの更新回数を worker 0 相当（160回前後）に揃える。
+#   構成                batch   予約VRAM   占有率
+#   d128 h4 L2 ff256     8192    13.20G     56%
+#   d192 h8 L4 ff768     8192      OOM       -
+#   d192 h8 L4 ff768     5120    18.16G     77%
+#   d192 h8 L4 ff768     4096    14.54G     62%
+#   d256 h8 L6 ff1024    4096    20.31G     86%   ← 相手モデルぶんの余裕がない
+#   d256 h8 L6 ff1024    3200    15.92G     68%
+#
+# OOM の判定は「確保」ではなく「予約」で見ること。PyTorch のアロケータは
+# 確保量の 1.4〜1.5倍を予約する。さらに自己対戦では相手モデルの推論も
+# 同じGPUに載るので、8割を超える設定は避ける。
+#
+# 届かないぶんは n_epochs で調整し、全ワーカーの更新回数を160回に揃える。
+#   更新回数 = ceil(rollout / batch) * n_epochs
 #
 set -euo pipefail
 
@@ -44,16 +55,17 @@ FINAL_DIR="${FINAL_DIR:-models/league_v2_final}"
 TIMESTEPS="${TIMESTEPS:-50000000}"
 NUM_ENVS="${NUM_ENVS:-500}"
 
-# worker: seed  ent_coef  d_model nhead layers ff    batch  ckpt
+# worker: seed  ent_coef  d_model nhead layers ff    batch  epochs ckpt
 #
-# batch は「rollout(500x256=128,000) ÷ batch × n_epochs(10)」が160前後になるよう選ぶ。
-# d256 だけは ckpt を入れても 8192 に届かない（上限5,376）ので 4096 とし、
-# 更新回数は310回になる。ここは target_kl(既定0.03) の打ち切りに任せる。
+# rollout = NUM_ENVS(500) x n_steps(256) = 128,000 サンプル。
+#   d128 @ 8192 x 10周 =  16 x 10 = 160更新
+#   d192 @ 4096 x  5周 =  32 x  5 = 160更新
+#   d256 @ 3200 x  4周 =  40 x  4 = 160更新
 WORKERS=(
-  "42  0.003  128  4  2   256  8192  0"
-  "43  0.010  192  8  4   768  8192  1"
-  "44  0.010  192  8  4   768  8192  1"
-  "45  0.030  256  8  6  1024  4096  1"
+  "42  0.003  128  4  2   256  8192  10  0"
+  "43  0.010  192  8  4   768  4096   5  1"
+  "44  0.010  192  8  4   768  4096   5  1"
+  "45  0.030  256  8  6  1024  3200   4  1"
 )
 
 # FINAL_DIR は SB3 の save が自動で作るが、保存は数十時間後なので先に作っておく
@@ -63,14 +75,16 @@ rm -f logs/league_worker_*.log
 
 echo "リーグ学習を開始します（プール: $POOL_DIR）"
 for i in "${!WORKERS[@]}"; do
-    read -r seed ent d_model nhead layers ff batch ckpt <<< "${WORKERS[$i]}"
+    read -r seed ent d_model nhead layers ff batch epochs ckpt <<< "${WORKERS[$i]}"
     ckpt_flag=()
     [ "$ckpt" = "1" ] && ckpt_flag=(--grad-checkpointing)
     echo "  worker $i (GPU $i): seed=$seed ent=$ent d${d_model} h${nhead} L${layers}" \
-         "ff${ff} batch=${batch} 更新$((NUM_ENVS * 256 / batch * 10))回/rollout" \
+         "ff${ff} batch=${batch} x${epochs}周" \
+         "更新$(( (NUM_ENVS * 256 + batch - 1) / batch * epochs ))回/rollout" \
          "$([ "$ckpt" = "1" ] && echo "ckpt")"
     CUDA_VISIBLE_DEVICES=$i uv run python train.py \
         "${ckpt_flag[@]}" \
+        --n-epochs "$epochs" \
         --self-play \
         --opponent strategic \
         --pool-dir "$POOL_DIR" \
