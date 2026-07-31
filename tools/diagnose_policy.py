@@ -357,15 +357,19 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--opponent", choices=list(OPPONENT_KINDS), default="strategic",
                         help="対戦相手。heuristic は弱すぎて勝率が飽和し指標にならない")
+    parser.add_argument("--only", nargs="*", choices=list(FOCUS), default=None,
+                        help="上書き実験を絞る。1件に絞れば --steps を大きく取れて、"
+                             "出番の少ないカードでも標準誤差を詰められる")
     parser.add_argument("--device", default=None, help="既定はGPUがあればcuda")
     parser.add_argument("--amp", action="store_true",
                         help="推論をbfloat16で行う（CUDAのみ・さらに高速）")
     args = parser.parse_args()
 
+    focus = {k: v for k, v in FOCUS.items() if args.only is None or k in args.only}
     device = args.device or default_device()
     learner = load_learner(args.model_path, device=device, amp=args.amp)
     common = dict(num_envs=args.num_envs, steps=args.steps, seed=args.seed,
-                  opponent=args.opponent, focus=FOCUS)
+                  opponent=args.opponent, focus=focus)
 
     started = time.perf_counter()
     base = run(learner, apply=None, **common)
@@ -389,7 +393,7 @@ def main() -> None:
     print(f"\n  {'直した対象':<20}{'回数':>7}{'全局の差':>14}"
           f"{'該当局':>8}{'該当局の勝率':>15}{'差':>15}")
 
-    for label, spec in FOCUS.items():
+    for label in focus:
         fixed = run(learner, apply=label, **common)
         fixed_wr, fixed_n = rate(fixed["results"])
         # 該当局＝そのカードで対象を間違えた局。上書きの有無で選び方が変わらない
@@ -404,7 +408,7 @@ def main() -> None:
 
     print(f"\n  上書きなしの全局勝率: {base_wr:.1%}（{base_n} 局）")
     print(f"\n（対 {args.opponent} / {device} / {args.num_envs}環境 x {args.steps}ステップ"
-          f" x {len(FOCUS) + 1}回{' / bf16' if args.amp else ''}"
+          f" x {len(focus) + 1}回{' / bf16' if args.amp else ''}"
           f" / {time.perf_counter() - started:.1f}秒）")
 
 
