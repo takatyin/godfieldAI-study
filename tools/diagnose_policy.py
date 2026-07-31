@@ -66,6 +66,62 @@ OPPONENT_ONLY_CARD_NAMES = (
     "女神の石けん", "夜空のホウキ", "売る", "買う",
 )
 
+# 「そのカードが効く局面か」の判定に使う観測の位置。
+SICKNESS_COLD, SICKNESS_FEVER = 1, 2          # 0 は「病なし」
+CURSE_FOG, CURSE_FLASH = 0, 1                 # 霧, 閃光（multi-hot）
+
+# カードごとに、効く条件が違う。全体の平均だけを見ると
+# 「どちらに使っても何も起きない局面」に薄められて、肝心の
+# 「効く局面でどちらを選んでいるか」が見えなくなる。
+#
+# 夜空のホウキ（神器を捨てる）と女神の石けん（習得済み奇跡を捨てる）は、
+# 神器の展開状況も習得済み奇跡も観測に入っていないため判定できない（types.h の
+# Observation を参照）。ここに載せられないこと自体が結果の読み方に効く。
+RELEVANCE_KIND_BY_CARD = {
+    "スマイルの貝がら": "smile_shell",   # 風邪・熱病・霧・閃光を払う
+    "ハートの貝がら": "heart_shell",     # 全ての災いを払う
+    "スマイルのしずく": "hp", "ハートのしずく": "hp",
+    "ロマンスウォーター": "hp", "天の川のおいしい水": "hp",
+    "スマイルの花": "mp", "ハートの花": "mp", "ロマンスの香木": "mp",
+}
+
+# 効く局面かどうかで分けたときの内訳。相手側は霧だと観測が 0 埋めされるので、
+# 判定できない分を別に数えて、勝手に「効かない」に混ぜないようにする。
+BUCKET_SELF, BUCKET_OPP_ONLY, BUCKET_NEITHER, BUCKET_FOGGED, BUCKET_UNKNOWN = 0, 1, 2, 3, 4
+BUCKET_LABELS = ("自分に効く", "相手だけに効く", "どちらにも効かない")
+
+
+def _relevance(obs: np.ndarray) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """種類ごとに (自分に効くか, 相手に効くか) の真偽値を作ります。"""
+    ns, nc = fc.NUM_SICKNESS_TYPES, fc.NUM_CURSE_TYPES
+    s, c = fc.SICKNESS_START, fc.CURSES_START
+    sick = (obs[:, s : s + ns], obs[:, s + ns : s + 2 * ns])
+    curse = (obs[:, c : c + nc], obs[:, c + nc : c + 2 * nc])
+    stat = obs[:, fc.STAT_START : fc.STAT_START + fc.STAT_LEN]
+
+    def smile_shell(i):
+        return (sick[i][:, [SICKNESS_COLD, SICKNESS_FEVER]].max(axis=1) > 0.5) | (
+            curse[i][:, [CURSE_FOG, CURSE_FLASH]].max(axis=1) > 0.5
+        )
+
+    def heart_shell(i):
+        return (sick[i][:, 1:].max(axis=1) > 0.5) | (curse[i].max(axis=1) > 0.5)
+
+    # 上限に張り付いていなければ回復・補充の余地がある
+    return {
+        "smile_shell": (smile_shell(0), smile_shell(1)),
+        "heart_shell": (heart_shell(0), heart_shell(1)),
+        "hp": (stat[:, 0] < 1.0, stat[:, 1] < 1.0),
+        "mp": (stat[:, 2] < 1.0, stat[:, 3] < 1.0),
+    }
+
+
+KIND_BY_CARD_ID = {
+    c["id"]: RELEVANCE_KIND_BY_CARD[c["name"]]
+    for c in CARDS
+    if c["name"] in RELEVANCE_KIND_BY_CARD
+}
+
 
 def _card_ids(names: tuple[str, ...]) -> set[int]:
     ids = {c["id"] for c in CARDS if c["name"] in names}
@@ -104,6 +160,8 @@ def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None):
 
     per_card: dict[int, list[int]] = defaultdict(lambda: [0, 0])  # id -> [遭遇, 相手を選んだ]
     prob_to_opp: dict[int, list[float]] = defaultdict(list)
+    # id -> 局面の種類ごとの [遭遇, 相手を選んだ]
+    per_bucket: dict[int, list[list[int]]] = defaultdict(lambda: [[0, 0] for _ in range(5)])
     ep_steps = np.zeros(num_envs, dtype=np.int64)
     lengths: list[int] = []
     results: list[float] = []
@@ -122,10 +180,28 @@ def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None):
         if idx.size:
             staged = obs[idx, fc.STAGED_CARDS_START].astype(int)
             chose_opp = actions[idx] == ACTION_TARGET_OPP
-            for card_id, opp, p in zip(staged, chose_opp, probs[idx, ACTION_TARGET_OPP]):
-                per_card[int(card_id)][0] += 1
-                per_card[int(card_id)][1] += int(opp)
-                prob_to_opp[int(card_id)].append(float(p))
+            relevance = _relevance(obs[idx])
+            fogged = obs[idx, fc.CURSES_START + CURSE_FOG] > 0.5
+            for j, (card_id, opp, p) in enumerate(
+                zip(staged, chose_opp, probs[idx, ACTION_TARGET_OPP])
+            ):
+                card_id = int(card_id)
+                per_card[card_id][0] += 1
+                per_card[card_id][1] += int(opp)
+                prob_to_opp[card_id].append(float(p))
+
+                kind = KIND_BY_CARD_ID.get(card_id)
+                if kind is None:
+                    bucket = BUCKET_UNKNOWN
+                elif relevance[kind][0][j]:
+                    bucket = BUCKET_SELF
+                elif fogged[j]:
+                    # 霧だと相手の状態が観測に入らないので、効くかどうか判定できない
+                    bucket = BUCKET_FOGGED
+                else:
+                    bucket = BUCKET_OPP_ONLY if relevance[kind][1][j] else BUCKET_NEITHER
+                per_bucket[card_id][bucket][0] += 1
+                per_bucket[card_id][bucket][1] += int(opp)
 
         if forced_ids:
             staged_all = obs[:, fc.STAGED_CARDS_START].astype(int)
@@ -149,6 +225,7 @@ def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None):
     env.close()
     return {
         "per_card": per_card,
+        "per_bucket": per_bucket,
         "prob_to_opp": prob_to_opp,
         "lengths": np.array(lengths),
         "results": np.array(results),
@@ -177,6 +254,39 @@ def _print_target_select(stats, top: int = 20) -> None:
             kind = card.get("type", "?")
         mean_p = float(np.mean(stats["prob_to_opp"][card_id]))
         print(f"  {name:<20}{kind:<8}{n:>7}{o / n:>11.1%}{mean_p:>10.3f}")
+
+
+def _print_by_relevance(stats) -> None:
+    """効く局面かどうかで分けて、対象選択を見ます。
+
+    全体の平均だけでは「どちらに使っても何も起きない局面」に薄められてしまい、
+    肝心の「効く局面で自分を選べているか」が判定できません。
+    """
+    per_bucket = stats["per_bucket"]
+    print("\n■ そのカードが効く局面かどうかで分けた「相手を選んだ」割合")
+    print("  （災いを払う貝がらは自分に災いが無ければ、どちらに使っても何も起きない）")
+    header = "".join(f"{label:>18}" for label in BUCKET_LABELS)
+    print(f"\n  {'カード':<20}{header}")
+
+    fogged_total = 0
+    for card_id, buckets in sorted(per_bucket.items(), key=lambda kv: -sum(b[0] for b in kv[1])):
+        if card_id not in KIND_BY_CARD_ID:
+            continue
+        fogged_total += buckets[BUCKET_FOGGED][0]
+        cells = ""
+        for bucket in (BUCKET_SELF, BUCKET_OPP_ONLY, BUCKET_NEITHER):
+            n, opp = buckets[bucket]
+            cells += f"{f'{opp / n:.1%} ({n})':>18}" if n else f"{'-':>18}"
+        print(f"  {CARD_BY_ID[card_id]['name']:<20}{cells}")
+
+    if fogged_total:
+        print(f"\n  ＊ 自分が霧のため相手の状態を判定できず除外: {fogged_total} 回")
+    unknown = sorted(
+        (CARD_BY_ID[cid]["name"] for cid, b in per_bucket.items()
+         if cid not in KIND_BY_CARD_ID and b[BUCKET_UNKNOWN][0] >= 100),
+    )
+    if unknown:
+        print(f"  ＊ 効く条件が観測に無く判定できないカード: {'、'.join(unknown)}")
 
 
 def _print_episodes(stats, gammas=(0.99, 0.995, 0.999)) -> None:
@@ -211,6 +321,7 @@ def main() -> None:
     started = time.perf_counter()
     base = run(learner, override=None, **common)
     _print_target_select(base)
+    _print_by_relevance(base)
     _print_episodes(base)
 
     def win_rate(stats) -> float:
