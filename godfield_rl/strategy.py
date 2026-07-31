@@ -312,8 +312,6 @@ class StrategicOpponent:
         """
         hand = self._hand(obs_row)
         slots = self._hand_choices(mask_row, hand)
-        if not slots:
-            return None
 
         for card, keep in DISCARD_KEEP_LIMITS.items():
             picks = [i for i in slots if hand[i] == card]
@@ -327,9 +325,14 @@ class StrategicOpponent:
         if weak_miracles:
             return self._pick(weak_miracles)
 
-        # 上のどれにも当てはまらなくても、手札が溢れている以上どれかは捨てる。
-        # ここで None を返すとランダムな合法手になり、防具まで捨ててしまう。
-        # 防具・武器・強い奇跡は最後に回し、それ以外を値段の安い順に捨てる。
+        # 候補が尽きたら確定する。ここで確定しないと、選べるスロットが無くなるまで
+        # 仮置きし続けて手札を全部捨てることになる（このフェイズは
+        # ACTION_CONFIRM で初めて廃棄が実行される仕様）。
+        if self._staged(obs_row).size > 0 or not slots:
+            return ACTION_CONFIRM if mask_row[ACTION_CONFIRM] else None
+
+        # まだ1枚も仮置きしていないのに候補が無い場合。捨てるを選んだ以上
+        # 1枚は捨てるので、防具・武器・強い奇跡を最後に回して一番安いものにする。
         # 奇跡は価格が0なので、価格だけで並べると強い奇跡が真っ先に捨てられる。
         def rank(slot: int) -> tuple[int, int]:
             card = hand[slot]
@@ -451,18 +454,30 @@ class StrategicOpponent:
             return self._act_discard(obs_row, mask_row)
         return None
 
+    def _random_hand_card(self, mask_row: np.ndarray) -> int | None:
+        """合法な手札スロットからランダムに1つ。無ければ None。"""
+        picks = [i for i in range(fc.MAX_HAND_SIZE) if mask_row[ACTION_HAND_0 + i]]
+        return ACTION_HAND_0 + int(self._rng.choice(picks)) if picks else None
+
     def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
         masks = action_masks.astype(bool)
         actions = self._random_legal(masks)          # 既定はランダムな合法手
         explore = self._rng.random(len(actions)) < self.explore_rate
 
         for i in range(len(actions)):
-            if explore[i]:
-                continue                              # 20%はルールを外す
             chosen = self._act_row(observations[i], masks[i])
             # 合法でない答えが返ったら既定（ランダム）のままにする。方策の想定と
             # 合法手がずれても学習を止めないため。
             if chosen is not None and masks[i][chosen]:
                 actions[i] = chosen
+
+            # 多様性は「どのカードを出すか」だけで出す。以前は行動そのものを
+            # ランダムにしていたため、対象選択や確定まで乱れていた。実測で
+            # 武器の対象の 10.9% が自分に向き、捨てるフェイズの判断が11倍に
+            # 膨らんでいた（探索を切ると自分に向けるのは 0%）。
+            if explore[i]:
+                alt = self._random_hand_card(masks[i])
+                if alt is not None:
+                    actions[i] = alt
 
         return actions.astype(np.int32)

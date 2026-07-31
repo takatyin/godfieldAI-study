@@ -23,7 +23,9 @@ from godfield_rl.strategy import (
 
 ACTION_TARGET_OPP = int(godfield_core.ActionType.ACTION_TARGET_OPP)
 ACTION_TARGET_SELF = int(godfield_core.ActionType.ACTION_TARGET_SELF)
+ACTION_HAND_0 = int(godfield_core.ActionType.ACTION_SELECT_HAND_0)
 PHASE_TARGET_SELECT = int(godfield_core.GamePhase.PHASE_MAIN_TARGET_SELECT)
+OBS_SIZE = godfield_core.OBSERVATION_FEATURE_SIZE - godfield_core.ACTION_SPACE_SIZE
 
 
 def test_named_cards_all_exist_in_the_card_data():
@@ -122,23 +124,41 @@ def test_target_selection_matches_the_card_purpose(card, expect_opp):
     )
 
 
-def test_explore_rate_makes_the_policy_deviate():
-    """explore_rate の分だけルールを外すことを検証します。
+def test_explore_rate_does_not_touch_target_selection():
+    """探索は対象選択を乱さないこと。
 
-    完全に決定的だと、学習者が1つの相手に過適合します。
+    以前は行動そのものをランダムにしていたため、対象選択まで乱れて
+    「回復を相手に使う」「武器を自分に向ける」が混ざっていた（実測で
+    武器の対象の 10.9%）。多様性は「どのカードを出すか」で出す。
     """
     obs = np.repeat(_target_select_obs(card_id("ハートのしずく"))[None, :], 400, axis=0)
     masks = np.zeros((400, godfield_core.ACTION_SPACE_SIZE), dtype=bool)
     masks[:, ACTION_TARGET_OPP] = True
     masks[:, ACTION_TARGET_SELF] = True
 
-    strict = StrategicOpponent(seed=0, explore_rate=0.0).act(obs, masks)
-    assert (strict == ACTION_TARGET_SELF).all(), "explore_rate=0 なら必ずルールどおり"
+    for rate in (0.0, 1.0):
+        actions = StrategicOpponent(seed=0, explore_rate=rate).act(obs, masks)
+        assert (actions == ACTION_TARGET_SELF).all(), (
+            f"explore_rate={rate} で回復カードの対象がずれました"
+        )
 
-    loose = StrategicOpponent(seed=0, explore_rate=1.0).act(obs, masks)
-    assert (loose == ACTION_TARGET_OPP).mean() > 0.2, (
-        "explore_rate=1 ならルールを外してランダムに選ぶはず"
-    )
+
+def test_explore_rate_still_varies_the_card_choice():
+    """多様性そのものは残っていること。完全に決定的だと相手に過適合する。"""
+    obs = np.zeros((400, OBS_SIZE), dtype=np.float32)
+    obs[:, fc.PHASE_START + int(godfield_core.GamePhase.PHASE_MAIN)] = 1.0
+    for block in (fc.HAND_CARDS_START, fc.STAGED_CARDS_START,
+                  fc.OPP_HAND_CARDS_START, fc.OPP_STAGED_CARDS_START):
+        obs[:, block : block + fc.MAX_HAND_SIZE] = -1
+    for slot, name in enumerate(("パンチ", "アイアンアーマー", "スマイルのしずく")):
+        obs[:, fc.HAND_CARDS_START + slot] = card_id(name)
+
+    masks = np.zeros((400, godfield_core.ACTION_SPACE_SIZE), dtype=bool)
+    masks[:, ACTION_HAND_0 : ACTION_HAND_0 + 3] = True
+
+    strict = set(StrategicOpponent(seed=0, explore_rate=0.0).act(obs, masks))
+    loose = set(StrategicOpponent(seed=0, explore_rate=1.0).act(obs, masks))
+    assert len(loose) > len(strict), "探索してもカードの選択が広がっていません"
 
 
 def test_strategic_opponent_beats_the_old_heuristic():
