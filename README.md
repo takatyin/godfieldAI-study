@@ -182,7 +182,7 @@ C++ 側でゴッドフィールドの複雑なルール、例外、フェイズ�
 
 データと学習:
 - [`docs/card_schema.md`](./docs/card_schema.md): カード定義YAML/JSONのデータスキーマ仕様。
-- [`docs/ai-policy.md`](./docs/ai-policy.md): 強化学習エージェントの方針と状態表現設計。
+- [`docs/rl_architecture.md`](./docs/rl_architecture.md): 観測・行動・リーグ学習・診断の構成。
 
 ### アセット (`assets/`)
 - [`assets/cards/`](./assets/cards/): 全カードのプロパティや効果を定義したマスターYAMLファイル群。
@@ -265,30 +265,57 @@ ssh istanbul02
 サーバー上でのリポジトリの clone や pull などの Git 操作は、ローカルマシンの SSH 鍵を転送する **SSH Agent Forwarding** を利用して行います。
 これにより、サーバー上に直接秘密鍵を配置することなく安全に GitHub へアクセス可能です。
 
-### 学習
-まずはtmuxでセッションを永続化
-```
-tmux new -s train
-```
-次に学習を実行
-```
-./run_transformer_cluster.sh
-```
-そしてtmuxの画面でCtrl+b -> " で上下分割。Ctrl+b -> % で左右分割する。
-Ctrl+oで移動。
-Ctrl+b -> d でデタッチ。
-```
-tmux attach -t train
-```
-でアタッチできる。
+### 学習の起動
 
-### 学習を止めるには
+**ヘッダ（`.h`）を変更した場合は必ずクリーンビルドしてください。** 増分ビルドでは
+再コンパイルされず、エラーも出ないまま古いバイナリで動き続けます（観測レイアウトを
+変えたのに古い次元のまま数十時間学習する、という事故が起きます）。
+
+```bash
+cd ~/GodFieldAI && git pull
+uv run python setup.py clean --all && uv run python setup.py build_ext --inplace
+uv run python -c "import godfield_core as g; print(g.OBSERVATION_FEATURE_SIZE)"
 ```
-pkill -f train.py
-ps aux | grep train.py
+
+最後の1行で、期待した観測次元になっているかを必ず確認してください。
+
+tmux でセッションを永続化してから起動します（スクリプトは全ワーカーの終了まで
+制御を返しません）。
+
+```bash
+tmux new -s league ./scripts/run_league.sh
 ```
-途中結果を消すには
+
+`Ctrl+b` → `d` でデタッチ、`tmux attach -t league` で復帰します。
+
+起動時に観測の次元・プールの場所・ワーカーごとの更新回数が表示されるので、
+**意図した設定になっているかここで確認してください**。150秒後に生存確認が入り、
+起動に失敗したワーカーがあればログを出して全体を停止します。
+
+### 進行の確認
+
+```bash
+tail -f logs/league_worker_0.log            # ログ
+tensorboard --logdir logs/league_tb         # 学習曲線
+grep approx_kl logs/league_worker_3.log | tail -1   # 更新量（0.03前後なら健全）
 ```
-# プールに残っている過去のモデルをすべて削除
-rm -f models/league_pool_transformer/*.zip
+
+`approx_kl` は最初に見るべき指標です。0.1 を大きく超えている場合、1回の更新で
+方策が変わりすぎていて学習が進みません（`scripts/run_league.sh` の worker 表を参照）。
+
+### 学習を止める
+
+```bash
+pkill -f run_league.sh; pkill -f "train.py"
+```
+
+親スクリプトを先に止めないと `wait` が残ります。
+
+### やり直す
+
+観測のレイアウトを変えた場合、**過去のモデルは読めません**。新しいプールを
+指定してください（古いプールを指すと起動時に落ちます）。
+
+```bash
+POOL_DIR=models/league_v4 ./scripts/run_league.sh
 ```

@@ -120,9 +120,60 @@ int pending_initiator;  // この解決を仕掛けた側（-1 は該当なし�
 `is_known_to_opp` / `is_deployed` が立っているカードだけが相手から見えます。
 仮置きは確定（`TARGET_*` / `CONFIRM`）した時点で公開されます。
 
+観測の各区間の内訳と、学習側がそれをどう使うかは `rl_architecture.md` を参照。
+
 ---
 
-## 4. ターン終了処理はステートマシン
+## 4. EnvPool（並列実行）
+
+`step_all` のループに `#pragma omp parallel for` を掛けて、複数スレッドで各環境を
+進めます。`InternalState` と `Observation` は事前に一括確保し、False Sharing を
+避けるため `alignas(64)` を付けています。
+
+乱数は環境ごとの `InternalState::rng` に持たせてあり、完全にスレッドローカルです。
+山札の抽選も**重みを展開したフラットテーブルからの一様抽選**なので、共有状態を
+書き換えません（以前は `std::discrete_distribution` を使っており、`operator()` が
+内部状態を書き換えるため mutex で排他していました。フラットテーブル化で排他が
+不要になり、同時に 42.33 ns/draw → 5.12 ns/draw になっています）。
+
+### シードの衝突回避
+
+初期シードは `seed_ + env_id`。自動リセット時は
+`seed_ + num_envs_ * (1 + reset_counts_[env_id]++) + env_id` を使います。
+リセット回数や環境IDが違えば同じシードにならないので、並列実行のどこかで
+同じゲーム展開が重複することがありません。
+
+### 終端観測のキャッシュ
+
+`EnvPool` は決着した環境をそのステップ内で自動リセットします。何もしないと
+「リセット後の初期状態」しか返らず、価値関数のブートストラップに必要な
+**終端時点の観測が消えます**。
+
+`step_env` は `is_done` を検出したら `reset_env` を呼ぶ**直前**に
+`make_observation` を実行し、`terminal_obs_buffers_[2]` に保存します。
+
+**プレイヤーごとに1本ずつ持つ点が重要です。** 決着は学習者の手番だけでなく
+相手の手番でも起こるため、行動者視点の終端観測をそのまま使うと、相手の攻撃で
+負けたときに「相手視点の盤面」でブートストラップしてしまいます。報酬も同じ理由で
+`get_rewards_for(player_id)` を使います（行動者視点の `get_rewards()` は
+相手が勝ったときに符号が逆になります）。
+
+### ターン数による打ち切りはしない
+
+上級者同士では膠着して150ターンの「終末の時」に入ることがあり、その展開も
+学習させたいので、**人為的なエピソード打ち切りは行いません**。決着は
+`run_death_check` だけが決めます。
+
+打ち切りを安全弁に使えない以上、**進行不能な状態を作らないこと自体が要件**です。
+合法手が0件になる状態は `tests/rl/test_rl_pipeline.py` が検出します。
+
+なお `TURN_PROGRESS_SCALE_TURNS`（300）は観測 `turn_progress` の正規化基準で、
+打ち切りには使いません。`current_turn` はこの値を超えうるので、`turn_progress`
+側で 1.0 に飽和させています。
+
+---
+
+## 5. ターン終了処理はステートマシン
 
 `resolve_turn_end_steps` は `TurnEndSubstep` で状態を持ちます。途中で防御フェイズが
 立ち上がる（昇天弓の発射、守護神の攻撃）とプレイヤーの入力が必要になるため、
@@ -141,7 +192,7 @@ DEATH_CHECK_START → SICKNESS_WORSEN → SICKNESS_DAMAGE → FINAL_DEATH_CHECK
 
 ---
 
-## 5. 触るときの注意
+## 6. 触るときの注意
 
 - **カードマスタを直接編集しない**。`assets/cards/*.yaml` を編集して
   `tools/build_cards.py` で再生成します（`assets/godfield_cards.json` は生成物）
