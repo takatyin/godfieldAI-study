@@ -386,6 +386,14 @@ void step_phase_main_target_select(InternalState &state, ActionType action, int 
             confirm_all_staged_cards(state, me);
 
             int card_id = staged_card_id(state, me, 0);
+            if (card_id == ID_SELL || card_id == ID_BUY) {
+                // 取引を誰に仕掛けたのかを記録する。他のカードは対象選択の時点で
+                // CONFIRM_ATTACK を出すが、売る・買うだけは以前ここより手前で
+                // return しており、対象が履歴に残らなかった。とくに「買うを
+                // 自分に使う」経路（下）はイベントを1件も出さないため、手札が
+                // 1枚公開されるのにログが空という状態になっていた。
+                push_event(state, me, EventType::CONFIRM_ATTACK, card_id, target, 0.0f);
+            }
             if (card_id == ID_SELL) {
                 state.attacker_id = me;
                 state.defender_id = target;
@@ -394,7 +402,7 @@ void step_phase_main_target_select(InternalState &state, ActionType action, int 
                     execute_sell_resolution(state, me, me);
                 } else {
                     state.current_phase = GamePhase::PHASE_SELL_SELECT_MIRROR;
-                    state.current_actor_id = target; 
+                    state.current_actor_id = target;
                 }
                 return;
             } else if (card_id == ID_BUY) {
