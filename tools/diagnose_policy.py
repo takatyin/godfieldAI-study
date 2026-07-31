@@ -61,9 +61,14 @@ SELF_ONLY_CARD_NAMES = (
     "守護封印のつぼ",
 )
 
-# 相手向き。自分に使うと自分の奇跡・神器を捨てたり、取引を相手に渡さない分だけ損をする。
+# 相手向き。自分に使うと、自分の展開済み奇跡や手札を捨てることになる。
+# 買うは相手から買うと相手の手札を1枚削れるぶん有利。
+#
+# 「売る」はここに入れない。何を売るかで正解が変わるため（自分に不要で高価な
+# ものを相手に売れば有利だが、自分にも重要なものや安いものを売るのは明確な損）。
+# 一律に「相手が正解」として測ると、正しい手まで誤りに数えてしまう。
 OPPONENT_ONLY_CARD_NAMES = (
-    "女神の石けん", "夜空のホウキ", "売る", "買う",
+    "女神の石けん", "夜空のホウキ", "買う",
 )
 
 # 「そのカードが効く局面か」の判定に使う観測の位置。
@@ -123,6 +128,17 @@ KIND_BY_CARD_ID = {
 }
 
 
+# 上書き実験の一覧。まとめて上書きすると遭遇数の多いカードに埋もれて個々の効果が
+# 打ち消し合うので、カード単位でも測る（実際、相手向きをまとめると +0.3% だが、
+# 女神の石けん単独では +1.6% だった）。
+FOCUS: dict[str, tuple[tuple[str, ...], str]] = {
+    "自分向き まとめて": (SELF_ONLY_CARD_NAMES, "self"),
+    "相手向き まとめて": (OPPONENT_ONLY_CARD_NAMES, "opp"),
+    **{name: ((name,), "opp") for name in OPPONENT_ONLY_CARD_NAMES},
+    **{name: ((name,), "self") for name in ("スマイルの貝がら", "ハートの貝がら", "スマイルの花")},
+}
+
+
 def _card_ids(names: tuple[str, ...]) -> set[int]:
     ids = {c["id"] for c in CARDS if c["name"] in names}
     missing = set(names) - {CARD_BY_ID[i]["name"] for i in ids}
@@ -143,22 +159,35 @@ def _target_select_mask(obs: np.ndarray, masks: np.ndarray) -> np.ndarray:
     return np.flatnonzero(in_phase & both)
 
 
-def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None,
-        opponent: str = "strategic"):
+def _focus_spec(names: tuple[str, ...], direction: str):
+    right, wrong = (
+        (ACTION_TARGET_SELF, ACTION_TARGET_OPP) if direction == "self"
+        else (ACTION_TARGET_OPP, ACTION_TARGET_SELF)
+    )
+    return _card_ids(names), right, wrong
+
+
+def run(learner, *, num_envs: int, steps: int, seed: int, opponent: str = "strategic",
+        focus: dict[str, tuple[tuple[str, ...], str]] | None = None,
+        apply: str | None = None):
     """1回まわして、対象選択の統計・エピソード長・勝敗を集めます。
 
-    override に "self" / "opp" を渡すと、そのカード群で対象を間違えた行動を
-    正しい側へ上書きします。学習し直さずに「直す価値」を測るための実験です。
+    focus には「対象を間違えたら数えたいカード群」を名前つきで渡します。渡した
+    ぶんだけ、間違いが起きた局を別に記録します。apply にその名前を渡すと、
+    数えるだけでなく実際に正しい側へ上書きします。学習し直さずに「直す価値」を
+    測るための実験です。
+
+    全局の勝率差だけを見ると、出番の少ないカードほど効果が薄まって測定限界に
+    埋もれます（夜空のホウキは全体の 2.6% の局にしか出ない）。間違いが起きた局
+    だけを取り出して比べれば、そこは薄まりません。上書きの有無で局の選び方が
+    変わらないよう、apply しない実行でも同じ条件で局を拾っています。
 
     相手は既定で strategic。heuristic は対象選択が常に「相手」で固定という
     強い偏りがあり、勝率が9割を超えてしまって指標にならない（上振れも下振れも
     飽和して見えない）。上書き実験の差もそこで潰れる。
     """
-    forced_ids, right_action, wrong_action = {
-        None: (set(), 0, 0),
-        "self": (_card_ids(SELF_ONLY_CARD_NAMES), ACTION_TARGET_SELF, ACTION_TARGET_OPP),
-        "opp": (_card_ids(OPPONENT_ONLY_CARD_NAMES), ACTION_TARGET_OPP, ACTION_TARGET_SELF),
-    }[override]
+    focus = focus or {}
+    specs = {label: _focus_spec(*args) for label, args in focus.items()}
     env = GodFieldVectorEnv(num_envs, opponent=make_opponent(opponent, seed=seed + 1))
     env.seed(seed)
     obs = env.reset()
@@ -170,7 +199,11 @@ def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None,
     ep_steps = np.zeros(num_envs, dtype=np.int64)
     lengths: list[int] = []
     results: list[float] = []
-    overridden = 0
+    # 間違いが起きた局かどうかを focus ごとに追う。効果はその局にしか出ない以上、
+    # 全局の勝率差は出番の少なさで薄まる。該当局だけを取り出せば薄まらない。
+    flagged = {label: np.zeros(num_envs, dtype=bool) for label in specs}
+    hits = dict.fromkeys(specs, 0)
+    flagged_results: dict[str, list[float]] = {label: [] for label in specs}
 
     for _ in range(steps):
         masks = env.action_masks()
@@ -208,17 +241,20 @@ def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None,
                 per_bucket[card_id][bucket][0] += 1
                 per_bucket[card_id][bucket][1] += int(opp)
 
-        if forced_ids:
+        if specs:
             staged_all = obs[:, fc.STAGED_CARDS_START].astype(int)
             in_phase = obs[:, fc.PHASE_START + PHASE_TARGET_SELECT] > 0.5
-            bad = (
-                in_phase
-                & np.isin(staged_all, list(forced_ids))
-                & masks[:, right_action]
-                & (actions == wrong_action)
-            )
-            overridden += int(bad.sum())
-            actions = np.where(bad, right_action, actions)
+            for label, (card_ids, right, wrong) in specs.items():
+                bad = (
+                    in_phase
+                    & np.isin(staged_all, list(card_ids))
+                    & masks[:, right]
+                    & (actions == wrong)
+                )
+                hits[label] += int(bad.sum())
+                flagged[label] |= bad
+                if label == apply:
+                    actions = np.where(bad, right, actions)
 
         obs, rewards, dones, _ = env.step(actions)
         ep_steps += 1
@@ -226,6 +262,10 @@ def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None,
             lengths.append(int(ep_steps[i]))
             results.append(float(rewards[i]))
             ep_steps[i] = 0
+            for label in specs:
+                if flagged[label][i]:
+                    flagged_results[label].append(float(rewards[i]))
+                    flagged[label][i] = False
 
     env.close()
     return {
@@ -234,7 +274,8 @@ def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None,
         "prob_to_opp": prob_to_opp,
         "lengths": np.array(lengths),
         "results": np.array(results),
-        "overridden": overridden,
+        "hits": hits,
+        "flagged_results": {k: np.array(v) for k, v in flagged_results.items()},
     }
 
 
@@ -324,31 +365,47 @@ def main() -> None:
     device = args.device or default_device()
     learner = load_learner(args.model_path, device=device, amp=args.amp)
     common = dict(num_envs=args.num_envs, steps=args.steps, seed=args.seed,
-                  opponent=args.opponent)
+                  opponent=args.opponent, focus=FOCUS)
 
     started = time.perf_counter()
-    base = run(learner, override=None, **common)
+    base = run(learner, apply=None, **common)
     _print_target_select(base)
     _print_by_relevance(base)
     _print_episodes(base)
 
-    def win_rate(stats) -> float:
-        return (stats["results"] > 0).mean() if stats["results"].size else float("nan")
+    def rate(results) -> tuple[float, int]:
+        return ((results > 0).mean(), results.size) if results.size else (float("nan"), 0)
 
-    base_wr = win_rate(base)
-    for override, title, names in (
-        ("self", "自分に使うべきカードを相手に使う", SELF_ONLY_CARD_NAMES),
-        ("opp", "相手に使うべきカードを自分に使う", OPPONENT_ONLY_CARD_NAMES),
-    ):
-        fixed = run(learner, override=override, **common)
-        fixed_wr = win_rate(fixed)
-        print(f"\n■ 「{title}」間違いを上書きした場合")
-        print(f"  対象: {'、'.join(names)}")
-        print(f"  上書き回数: {fixed['overridden']}")
-        print(f"  勝率 {base_wr:.1%} -> {fixed_wr:.1%}  （差 {fixed_wr - base_wr:+.1%}）")
+    def se(p1, n1, p2, n2) -> float:
+        return float(np.sqrt(p1 * (1 - p1) / max(n1, 1) + p2 * (1 - p2) / max(n2, 1)))
 
-    print(f"\n（対 {args.opponent} / {device} / {args.num_envs}環境 x {args.steps}ステップ x 3回"
-          f"{' / bf16' if args.amp else ''} / {time.perf_counter() - started:.1f}秒）")
+    base_wr, base_n = rate(base["results"])
+
+    print("\n■ 対象の間違いを直したときの勝率の変化")
+    print("  ＊ ±は標準誤差。差がこれに埋もれているときは「効果が無い」のではなく")
+    print("     「この試行数では測れていない」。")
+    print("  ＊ 全局の差は出番の少なさで薄まる。夜空のホウキは全体の数%の局にしか")
+    print("     出ないので、間違いが起きた局だけを取り出した右側のほうが感度が高い。")
+    print(f"\n  {'直した対象':<20}{'回数':>7}{'全局の差':>14}"
+          f"{'該当局':>8}{'該当局の勝率':>15}{'差':>15}")
+
+    for label, spec in FOCUS.items():
+        fixed = run(learner, apply=label, **common)
+        fixed_wr, fixed_n = rate(fixed["results"])
+        # 該当局＝そのカードで対象を間違えた局。上書きの有無で選び方が変わらない
+        before, before_n = rate(base["flagged_results"][label])
+        after, after_n = rate(fixed["flagged_results"][label])
+        print(
+            f"  {label:<20}{fixed['hits'][label]:>7}"
+            f"{f'{fixed_wr - base_wr:+.1%} ± {se(base_wr, base_n, fixed_wr, fixed_n):.1%}':>14}"
+            f"{before_n:>8}{f'{before:.1%} -> {after:.1%}':>15}"
+            f"{f'{after - before:+.1%} ± {se(before, before_n, after, after_n):.1%}':>15}"
+        )
+
+    print(f"\n  上書きなしの全局勝率: {base_wr:.1%}（{base_n} 局）")
+    print(f"\n（対 {args.opponent} / {device} / {args.num_envs}環境 x {args.steps}ステップ"
+          f" x {len(FOCUS) + 1}回{' / bf16' if args.amp else ''}"
+          f" / {time.perf_counter() - started:.1f}秒）")
 
 
 if __name__ == "__main__":

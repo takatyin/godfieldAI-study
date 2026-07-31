@@ -97,7 +97,7 @@ def main() -> None:
         learner = load_learner(path, device=device, amp=args.amp)
         overall.append(
             run(learner, num_envs=args.num_envs, steps=args.steps,
-                seed=args.seed, override=None, opponent=args.opponent)
+                seed=args.seed, opponent=args.opponent)
         )
 
     tracked_ids = [cid for cid, c in CARD_BY_ID.items() if c["name"] in TRACKED]
