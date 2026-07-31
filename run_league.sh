@@ -22,6 +22,12 @@
 set -euo pipefail
 
 POOL_DIR="${POOL_DIR:-models/league_v2}"
+# 学習し終えた最終モデルの置き場。--save-path を渡さないと全ワーカーが既定の
+# godfield_agent.zip に書くため、先に終わったワーカーの結果が後から終わった
+# ワーカーに黙って上書きされる。プールとは別のディレクトリにする
+# （プールは *.zip をグロブして対戦相手に読み込むので、混ぜると最終モデルまで
+# 対戦相手として拾われる）。
+FINAL_DIR="${FINAL_DIR:-models/league_v2_final}"
 TIMESTEPS="${TIMESTEPS:-50000000}"
 NUM_ENVS="${NUM_ENVS:-500}"
 
@@ -33,7 +39,9 @@ WORKERS=(
   "45  0.030  256  8  6  1024  1024"
 )
 
-mkdir -p logs "$POOL_DIR"
+# FINAL_DIR は SB3 の save が自動で作るが、保存は数十時間後なので先に作っておく
+# （起動直後に置き場所を確認できるようにする）
+mkdir -p logs "$POOL_DIR" "$FINAL_DIR"
 rm -f logs/league_worker_*.log
 
 echo "リーグ学習を開始します（プール: $POOL_DIR）"
@@ -44,6 +52,7 @@ for i in "${!WORKERS[@]}"; do
         --self-play \
         --opponent strategic \
         --pool-dir "$POOL_DIR" \
+        --save-path "$FINAL_DIR/worker_$i" \
         --worker-id "$i" \
         --seed "$seed" \
         --ent-coef "$ent" \
@@ -63,4 +72,8 @@ echo "4ワーカーを起動しました。共有プール: $POOL_DIR"
 echo "  ログ:       tail -f logs/league_worker_0.log"
 echo "  進捗:       tensorboard --logdir logs/league_tb"
 echo "  方策の診断: uv run python tools/diagnose_policy.py $POOL_DIR/best_worker_0/best_model.zip"
+echo
+echo "保存先:"
+echo "  評価で最良だったモデル: $POOL_DIR/best_worker_<i>/best_model.zip"
+echo "  学習し終えた最終モデル: $FINAL_DIR/worker_<i>.zip"
 wait
