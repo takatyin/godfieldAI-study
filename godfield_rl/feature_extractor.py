@@ -13,11 +13,13 @@ from godfield_rl.feature_config import (
     CONTINUOUS_FEATURES_SIZE,
     EVENT_SIZE,
     HAND_CARDS_START,
+    HAND_KNOWN_TO_OPP_START,
     HISTORY_HEAD_START,
     HISTORY_LENGTH,
     HISTORY_START,
     MAX_HAND_SIZE,
     NUM_CARD_TYPES,
+    OPP_DEPLOYED_START,
     OPP_STAGED_CARDS_START,
 )
 
@@ -141,6 +143,8 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         self.card_embedding = nn.Embedding(NUM_CARD_TYPES + 1, d_model, padding_idx=0)
         # Type embedding: 0=My Hand, 1=My Staged, 2=Opp Hand, 3=Opp Staged
         self.card_type_embedding = nn.Embedding(4, d_model)
+        # カードごとの2値属性（相手に見えているか / 展開済みか）をトークンに足すための射影
+        self.card_flag_proj = nn.Linear(2, d_model)
 
         # 3. History Embeddings
         self.hist_cont_proj = nn.Linear(EVENT_SIZE - 1, d_model)
@@ -227,7 +231,21 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         ).unsqueeze(0).expand(batch_size, -1)
         type_embs = self.card_type_embedding(type_indices) # [B, 36, d_model]
 
-        card_tokens = card_embs + type_embs # [B, 36, d_model]
+        # カードごとの属性を、そのカードのトークンに足す。グローバルトークン側に
+        # まとめて流すとどのカードの属性なのかが失われるので、ここで対応づける。
+        #   ch0 … 自分のカードが相手に見えているか（自分の手札ブロックだけ）
+        #   ch1 … 相手のカードが展開済みか（相手の手札ブロックだけ）
+        # 仮置きの2ブロックには対応する属性が無いので0のまま。
+        flags = torch.zeros(batch_size, self.num_card_slots, 2,
+                            device=device, dtype=card_embs.dtype)
+        flags[:, :MAX_HAND_SIZE, 0] = observations[
+            :, HAND_KNOWN_TO_OPP_START : HAND_KNOWN_TO_OPP_START + MAX_HAND_SIZE
+        ]
+        flags[:, 2 * MAX_HAND_SIZE : 3 * MAX_HAND_SIZE, 1] = observations[
+            :, OPP_DEPLOYED_START : OPP_DEPLOYED_START + MAX_HAND_SIZE
+        ]
+
+        card_tokens = card_embs + type_embs + self.card_flag_proj(flags)
 
         # 3. History Tokens
         history = observations[:, HISTORY_START:HISTORY_START + HISTORY_LENGTH * EVENT_SIZE]

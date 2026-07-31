@@ -54,7 +54,21 @@ def test_card_id_blocks_are_contiguous():
     assert fc.STAGED_CARDS_START == fc.HAND_CARDS_START + fc.MAX_HAND_SIZE
     assert fc.OPP_HAND_CARDS_START == fc.STAGED_CARDS_START + fc.MAX_HAND_SIZE
     assert fc.OPP_STAGED_CARDS_START == fc.OPP_HAND_CARDS_START + fc.MAX_HAND_SIZE
-    assert fc.HISTORY_START == fc.OPP_STAGED_CARDS_START + fc.MAX_HAND_SIZE
+    # カードIDの4ブロックの直後に、カードごとの属性が同じ長さで並ぶ
+    assert fc.HAND_KNOWN_TO_OPP_START == fc.OPP_STAGED_CARDS_START + fc.MAX_HAND_SIZE
+    assert fc.OPP_DEPLOYED_START == fc.HAND_KNOWN_TO_OPP_START + fc.MAX_HAND_SIZE
+    assert fc.HISTORY_START == fc.OPP_DEPLOYED_START + fc.MAX_HAND_SIZE
+
+
+def test_per_card_flags_line_up_with_their_card_id_block():
+    """カードごとのフラグが、対応するカードIDブロックと同じ長さであること。
+
+    フラグは添字で対応させるので、長さがずれると別のカードの属性を読みます。
+    例外は出ず、静かに間違った特徴を学ぶだけになります。
+    """
+    assert fc.OPP_DEPLOYED_START - fc.HAND_KNOWN_TO_OPP_START == fc.MAX_HAND_SIZE
+    assert fc.HISTORY_START - fc.OPP_DEPLOYED_START == fc.MAX_HAND_SIZE
+    assert fc.HAND_COUNT_LEN == 2
 
 
 def test_embedding_table_covers_every_card_in_the_registry():

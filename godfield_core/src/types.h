@@ -265,6 +265,16 @@ struct alignas(64) Observation {
     float turn_progress;          // current_turn / TURN_PROGRESS_SCALE_TURNS (0.0 ~ 1.0 で飽和)
     float turns_to_apocalypse;    // max(0, APOCALYPSE_TURN - current_turn) / APOCALYPSE_TURN (1.0 ~ 0.0)
 
+    // 手札の枚数（/ MAX_HAND_SIZE で正規化）。
+    //
+    // カードIDの配列からは枚数を読み取れない。相手側は非公開の手札と空きスロットが
+    // どちらも CARD_EMPTY になるため区別がつかず、自分側も Transformer が空きスロットを
+    // 注意から除外する（key_padding_mask）ため枚数の情報が残らない。
+    // カード優位が見えないことが「無料のカードを買わない」「防具を捨てる」といった
+    // 手の原因になっていた。相手の枚数は霧でも隠さない（枚数は場から数えられる）。
+    float hand_count_me;
+    float hand_count_opp;
+
     // フェイズ情報
     float phase_one_hot[NUM_PHASES]; // 現在のフェイズ (State1 ~ State6, StateM)
 
@@ -273,6 +283,16 @@ struct alignas(64) Observation {
     float staged_cards[MAX_HAND_SIZE];          // 現在の仮置き場
     float opponent_hand_cards[MAX_HAND_SIZE];   // 相手の手札（非公開=0, 既知のカード・使用済み奇跡=実ID）
     float opponent_staged_cards[MAX_HAND_SIZE]; // 相手が場に出しているカードID（攻撃順など）
+
+    // カードごとの属性。上のカードID配列と同じ並び・同じ長さで対応する。
+    //
+    // hand_known_to_opp … 自分の手札のうち、相手に見えているもの。これが無いと
+    //   「買うを自分に使うと自分のカードが1枚公開される」という損が観測に現れない。
+    // opponent_deployed … 相手のカードのうち展開済み（＝場に出ている神器・奇跡）のもの。
+    //   opponent_hand_cards は展開済みと公開済みを同じ配列に左詰めで混ぜて入れるため、
+    //   このフラグが無いと女神の石けんが狙える対象があるかを判定できない。
+    float hand_known_to_opp[MAX_HAND_SIZE];
+    float opponent_deployed[MAX_HAND_SIZE];
 
     // イベント履歴（リングバッファ: 64 * 5 = 320 float + 1 float head = 321 float）
     GameEvent history[HISTORY_LENGTH];

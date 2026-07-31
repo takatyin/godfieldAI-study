@@ -517,9 +517,25 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
     }
 
     // Hand cards
+    //
+    // hand_known_to_opp はスロット順で hand_cards と1対1に対応する。相手側と違い
+    // 自分の手札は並べ替えないので、そのまま添字を合わせればよい。
+    int hand_count_me = 0;
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         obs.hand_cards[i] = static_cast<float>(state.apparent_hand[me][i]);
+        bool filled = state.true_hand[me][i] != CARD_EMPTY;
+        hand_count_me += filled ? 1 : 0;
+        obs.hand_known_to_opp[i] = (filled && state.is_known_to_opp[me][i]) ? 1.0f : 0.0f;
     }
+    obs.hand_count_me = static_cast<float>(hand_count_me) / static_cast<float>(MAX_HAND_SIZE);
+
+    // 相手の手札枚数は霧でも隠さない。カードの中身は見えなくても、場に出ている
+    // 枚数は数えられるため（隠すのは中身であって数ではない）。
+    int hand_count_opp = 0;
+    for (int i = 0; i < MAX_HAND_SIZE; ++i) {
+        hand_count_opp += (state.true_hand[opp][i] != CARD_EMPTY) ? 1 : 0;
+    }
+    obs.hand_count_opp = static_cast<float>(hand_count_opp) / static_cast<float>(MAX_HAND_SIZE);
 
     // Staged cards
     // カードを解決できないエントリは飛ばし、opponent_hand_cards と同じく左詰めで格納する。
@@ -547,8 +563,12 @@ void make_observation(const InternalState& state, int player_id, Observation& ob
     int known_count = 0;
     std::fill(std::begin(obs.opponent_hand_cards), std::end(obs.opponent_hand_cards),
               static_cast<float>(CARD_EMPTY));
+    std::fill(std::begin(obs.opponent_deployed), std::end(obs.opponent_deployed), 0.0f);
     for (int i = 0; i < MAX_HAND_SIZE; ++i) {
         if (state.is_deployed[opp][i] || (state.is_known_to_opp[opp][i] && !is_me_fog)) {
+            // 展開済みかどうかは、詰め直した後の位置に合わせて記録する。
+            // ここを元のスロット番号で持つと、左詰めにした意味（位置のリーク防止）が失われる。
+            obs.opponent_deployed[known_count] = state.is_deployed[opp][i] ? 1.0f : 0.0f;
             obs.opponent_hand_cards[known_count++] = static_cast<float>(state.true_hand[opp][i]);
         }
     }

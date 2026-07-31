@@ -60,6 +60,14 @@ MISC_START = offset
 MISC_LEN = 5  # incoming_damage, current_staged_defense, is_apocalypse, turn_progress, turns_to_apocalypse
 offset += MISC_LEN
 
+# 手札の枚数（自分, 相手）。MAX_HAND_SIZE で正規化済み。
+# カードID配列からは枚数を読み取れないため独立した次元にしている
+# （相手は非公開手札と空きスロットが同じ値、自分は key_padding_mask で
+# 空きスロットが注意から外れるため）。
+HAND_COUNT_START = offset
+HAND_COUNT_LEN = 2
+offset += HAND_COUNT_LEN
+
 # Phases (One-hot, 18)
 PHASE_START = offset
 PHASE_LEN = NUM_PHASES
@@ -76,6 +84,13 @@ offset += MAX_HAND_SIZE
 OPP_HAND_CARDS_START = offset
 offset += MAX_HAND_SIZE
 OPP_STAGED_CARDS_START = offset
+offset += MAX_HAND_SIZE
+
+# カードごとの属性。上のカードID配列と同じ並びで対応する。
+# HAND_KNOWN_TO_OPP は HAND_CARDS と、OPP_DEPLOYED は OPP_HAND_CARDS と対応する。
+HAND_KNOWN_TO_OPP_START = offset
+offset += MAX_HAND_SIZE
+OPP_DEPLOYED_START = offset
 offset += MAX_HAND_SIZE
 
 # History Events (mixed, card IDs are at index 2 of each 5-float event)

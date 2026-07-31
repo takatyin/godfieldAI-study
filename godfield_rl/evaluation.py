@@ -90,10 +90,13 @@ def load_policy(
             raise
         raise RuntimeError(
             f"{path} は今の観測レイアウトでは読めません。\n"
-            f"  観測が変わると学習済みモデルは使えなくなります。直近では"
-            f" HISTORY_LENGTH を 64 から {godfield_core.HISTORY_LENGTH} に変えており、"
-            f"それ以前のモデルは対象外です。\n"
-            f"  学習し直したモデルを使ってください。\n"
+            f"  観測を変えると、それ以前に学習したモデルは使えなくなります。\n"
+            f"  直近の変更: 手札枚数と公開状態（相手に見えているか / 展開済みか）を追加。\n"
+            f"  現在の観測は {godfield_core.OBSERVATION_FEATURE_SIZE} 次元"
+            f"（うち合法手マスク {godfield_core.ACTION_SPACE_SIZE}、"
+            f"履歴 {godfield_core.HISTORY_LENGTH} 件）です。\n"
+            f"  学習し直したモデルを使ってください。変更前のモデルで遊びたい場合は、\n"
+            f"  git のタグ obs-v1-final をチェックアウトして再ビルドしてください。\n"
             f"  元のエラー: {exc}"
         ) from exc
     return FrozenOpponent(model, deterministic=deterministic, amp=amp)

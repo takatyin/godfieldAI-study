@@ -1090,7 +1090,11 @@ class Observation:
         ...
     def get_hand_cards(self) -> list:
         ...
+    def get_hand_known_to_opp(self) -> list:
+        ...
     def get_history(self) -> list:
+        ...
+    def get_opponent_deployed(self) -> list:
         ...
     def get_opponent_hand_cards(self) -> list:
         ...
@@ -1111,6 +1115,18 @@ class Observation:
         ...
     @current_staged_defense.setter
     def current_staged_defense(self, arg0: typing.SupportsFloat | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def hand_count_me(self) -> float:
+        ...
+    @hand_count_me.setter
+    def hand_count_me(self, arg0: typing.SupportsFloat | typing.SupportsIndex) -> None:
+        ...
+    @property
+    def hand_count_opp(self) -> float:
+        ...
+    @hand_count_opp.setter
+    def hand_count_opp(self, arg0: typing.SupportsFloat | typing.SupportsIndex) -> None:
         ...
     @property
     def history_head(self) -> float:
@@ -1801,9 +1817,9 @@ GUARDIAN_ENTER: EventType  # value = <EventType.GUARDIAN_ENTER: 25>
 GUARDIAN_LEAVE: EventType  # value = <EventType.GUARDIAN_LEAVE: 26>
 HEAL_HP: EventType  # value = <EventType.HEAL_HP: 12>
 HEAL_MP: EventType  # value = <EventType.HEAL_MP: 13>
-HISTORY_LENGTH: int = 64
+HISTORY_LENGTH: int = 128
 INSTANT_DEATH: EventType  # value = <EventType.INSTANT_DEATH: 28>
-INTERNAL_STATE_SIZE: int = 2432
+INTERNAL_STATE_SIZE: int = 3712
 JUPITER: GuardianType  # value = <GuardianType.JUPITER: 3>
 MAGNETIC_STORM: PhenomenonType  # value = <PhenomenonType.MAGNETIC_STORM: 8>
 MARS: GuardianType  # value = <GuardianType.MARS: 1>
@@ -1817,8 +1833,8 @@ NUM_CURSE_TYPES: int = 4
 NUM_GUARDIAN_TYPES: int = 11
 NUM_PHASES: int = 18
 NUM_SICKNESS_TYPES: int = 5
-OBSERVATION_FEATURE_SIZE: int = 584
-OBSERVATION_SIZE: int = 592
+OBSERVATION_FEATURE_SIZE: int = 942
+OBSERVATION_SIZE: int = 944
 PASS_DEFENSE: EventType  # value = <EventType.PASS_DEFENSE: 5>
 PHASE_ATTACK_PLUS: GamePhase  # value = <GamePhase.PHASE_ATTACK_PLUS: 3>
 PHASE_BUY: GamePhase  # value = <GamePhase.PHASE_BUY: 11>

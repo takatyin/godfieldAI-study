@@ -717,6 +717,8 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("is_apocalypse", &Observation::is_apocalypse)
         .def_readwrite("turn_progress", &Observation::turn_progress)
         .def_readwrite("turns_to_apocalypse", &Observation::turns_to_apocalypse)
+        .def_readwrite("hand_count_me", &Observation::hand_count_me)
+        .def_readwrite("hand_count_opp", &Observation::hand_count_opp)
         .def_readwrite("history_head", &Observation::history_head)
         .def("get_history", [](const Observation& obs) { return get_array_as_list(obs.history); })
         .def("get_sickness_me", [](const Observation& obs) { return get_array_as_list(obs.sickness_me); })
@@ -730,6 +732,8 @@ PYBIND11_MODULE(godfield_core, m) {
         .def("get_staged_cards", [](const Observation& obs) { return get_array_as_list(obs.staged_cards); })
         .def("get_opponent_hand_cards", [](const Observation& obs) { return get_array_as_list(obs.opponent_hand_cards); })
         .def("get_opponent_staged_cards", [](const Observation& obs) { return get_array_as_list(obs.opponent_staged_cards); })
+        .def("get_hand_known_to_opp", [](const Observation& obs) { return get_array_as_list(obs.hand_known_to_opp); })
+        .def("get_opponent_deployed", [](const Observation& obs) { return get_array_as_list(obs.opponent_deployed); })
         .def("get_action_mask", [](const Observation& obs) { return get_array_as_list(obs.action_mask); })
         .def("to_numpy", [](const Observation& obs) {
             size_t total_floats = sizeof(Observation) / sizeof(float);
