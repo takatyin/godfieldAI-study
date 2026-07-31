@@ -41,7 +41,7 @@ if godfield_core.get_registry_size() == 0:
 from godfield_rl import feature_config as fc  # noqa: E402
 from godfield_rl.env_wrapper import GodFieldVectorEnv  # noqa: E402
 from godfield_rl.evaluation import default_device, load_policy  # noqa: E402
-from godfield_rl.opponents import make_opponent  # noqa: E402
+from godfield_rl.opponents import OPPONENT_KINDS, make_opponent  # noqa: E402
 
 CARD_BY_ID = {c["id"]: c for c in CARDS}
 ACTION_TARGET_OPP = int(godfield_core.ActionType.ACTION_TARGET_OPP)
@@ -143,18 +143,23 @@ def _target_select_mask(obs: np.ndarray, masks: np.ndarray) -> np.ndarray:
     return np.flatnonzero(in_phase & both)
 
 
-def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None):
+def run(learner, *, num_envs: int, steps: int, seed: int, override: str | None,
+        opponent: str = "strategic"):
     """1回まわして、対象選択の統計・エピソード長・勝敗を集めます。
 
     override に "self" / "opp" を渡すと、そのカード群で対象を間違えた行動を
     正しい側へ上書きします。学習し直さずに「直す価値」を測るための実験です。
+
+    相手は既定で strategic。heuristic は対象選択が常に「相手」で固定という
+    強い偏りがあり、勝率が9割を超えてしまって指標にならない（上振れも下振れも
+    飽和して見えない）。上書き実験の差もそこで潰れる。
     """
     forced_ids, right_action, wrong_action = {
         None: (set(), 0, 0),
         "self": (_card_ids(SELF_ONLY_CARD_NAMES), ACTION_TARGET_SELF, ACTION_TARGET_OPP),
         "opp": (_card_ids(OPPONENT_ONLY_CARD_NAMES), ACTION_TARGET_OPP, ACTION_TARGET_SELF),
     }[override]
-    env = GodFieldVectorEnv(num_envs, opponent=make_opponent("heuristic", seed=seed + 1))
+    env = GodFieldVectorEnv(num_envs, opponent=make_opponent(opponent, seed=seed + 1))
     env.seed(seed)
     obs = env.reset()
 
@@ -309,6 +314,8 @@ def main() -> None:
                         help="並列環境数。方策の推論をまとめる単位なので、大きいほど速い")
     parser.add_argument("--steps", type=int, default=1000, help="環境を進めるステップ数")
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--opponent", choices=list(OPPONENT_KINDS), default="strategic",
+                        help="対戦相手。heuristic は弱すぎて勝率が飽和し指標にならない")
     parser.add_argument("--device", default=None, help="既定はGPUがあればcuda")
     parser.add_argument("--amp", action="store_true",
                         help="推論をbfloat16で行う（CUDAのみ・さらに高速）")
@@ -316,7 +323,8 @@ def main() -> None:
 
     device = args.device or default_device()
     learner = load_learner(args.model_path, device=device, amp=args.amp)
-    common = dict(num_envs=args.num_envs, steps=args.steps, seed=args.seed)
+    common = dict(num_envs=args.num_envs, steps=args.steps, seed=args.seed,
+                  opponent=args.opponent)
 
     started = time.perf_counter()
     base = run(learner, override=None, **common)
@@ -339,7 +347,7 @@ def main() -> None:
         print(f"  上書き回数: {fixed['overridden']}")
         print(f"  勝率 {base_wr:.1%} -> {fixed_wr:.1%}  （差 {fixed_wr - base_wr:+.1%}）")
 
-    print(f"\n（{device} / {args.num_envs}環境 x {args.steps}ステップ x 3回"
+    print(f"\n（対 {args.opponent} / {device} / {args.num_envs}環境 x {args.steps}ステップ x 3回"
           f"{' / bf16' if args.amp else ''} / {time.perf_counter() - started:.1f}秒）")
 
 

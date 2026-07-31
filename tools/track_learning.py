@@ -26,6 +26,7 @@ from diagnose_policy import (
     BUCKET_SELF,
     CARD_BY_ID,
     KIND_BY_CARD_ID,
+    OPPONENT_KINDS,
     default_device,
     load_learner,
     run,
@@ -75,6 +76,8 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=400,
                         help="1モデルあたりのステップ数。推移を見るだけなので少なくてよい")
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--opponent", choices=list(OPPONENT_KINDS), default="strategic",
+                        help="対戦相手。heuristic は弱すぎて勝率が飽和し指標にならない")
     parser.add_argument("--device", default=None, help="既定はGPUがあればcuda")
     parser.add_argument("--amp", action="store_true", help="推論をbfloat16で行う")
     args = parser.parse_args()
@@ -94,7 +97,7 @@ def main() -> None:
         learner = load_learner(path, device=device, amp=args.amp)
         overall.append(
             run(learner, num_envs=args.num_envs, steps=args.steps,
-                seed=args.seed, override=None)
+                seed=args.seed, override=None, opponent=args.opponent)
         )
 
     tracked_ids = [cid for cid, c in CARD_BY_ID.items() if c["name"] in TRACKED]
@@ -121,7 +124,7 @@ def main() -> None:
         f"{(stats['results'] > 0).mean():>10.1%}" if stats["results"].size else f"{'-':>10}"
         for stats in overall
     )
-    print(f"\n■ 対ヒューリスティック勝率\n\n  {'':<20}{win_rates}")
+    print(f"\n■ 対 {args.opponent} 勝率\n\n  {'':<20}{win_rates}")
 
     print(f"\n（{device} / {args.num_envs}環境 x {args.steps}ステップ x {len(paths)}モデル"
           f"{' / bf16' if args.amp else ''} / {time.perf_counter() - started:.1f}秒）")
