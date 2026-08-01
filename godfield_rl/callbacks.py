@@ -117,13 +117,17 @@ class SelfPlayCallback(BaseCallback):
     一定のステップ数ごとに現在のモデルを共有ディレクトリに保存し、
     同時に共有ディレクトリから他のモデルをランダムに読み込んで対戦プールを更新するコールバック（League Training対応）。
     """
-    def __init__(self, pool: PoolOpponent, save_freq: int, save_path: str, max_pool_size: int = 5, worker_id: int = 0, seed: int = 0, verbose: int = 0):
+    def __init__(self, pool: PoolOpponent, save_freq: int, save_path: str, max_pool_size: int = 5, worker_id: int = 0, seed: int = 0, total_timesteps: int = 0, verbose: int = 0):
         super().__init__(verbose)
         self.pool = pool
         self.save_freq = save_freq
         self.save_path = save_path
         self.max_pool_size = max_pool_size
         self.worker_id = worker_id
+        # 錨の配分を進み具合で動かすために使う。SB3 の内部属性
+        # （_total_timesteps / _current_progress_remaining）に頼ると
+        # バージョンで壊れるので、設定から受け取る。
+        self.total_timesteps = total_timesteps
         self.generation = 0
         # プールの抽選はワーカーごとに独立させつつ、再現できるようにする。
         # 以前は random モジュールのグローバル状態を使っていたため、実行のたびに
@@ -157,6 +161,10 @@ class SelfPlayCallback(BaseCallback):
             ) from exc
 
     def _on_step(self) -> bool:
+        # 錨の配分は学習の進み具合で決まるので、毎ステップ伝えておく。
+        if self.total_timesteps > 0:
+            self.pool.progress = min(1.0, self.num_timesteps / self.total_timesteps)
+
         if self.n_calls % self.save_freq == 0:
             self.generation += 1
 
@@ -214,7 +222,8 @@ class SelfPlayCallback(BaseCallback):
             if self.verbose > 0:
                 print(
                     f"[{self.num_timesteps} steps] Worker {self.worker_id} synced League Pool. "
-                    f"錨 {len(self.pool.anchors)} 体 (当たる割合 {self.pool.anchor_ratio:.0%}) "
+                    f"錨 {len(self.pool.anchors)} 体 (当たる割合 {self.pool.anchor_ratio:.0%}, "
+                    f"配分 {self.pool.describe_anchors()}) "
                     f"/ 分身 {len(self.pool.snapshots)} 体 (loaded {sample_size} models)"
                 )
 

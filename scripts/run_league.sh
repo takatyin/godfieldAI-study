@@ -68,13 +68,25 @@ FINAL_DIR="${FINAL_DIR:-${POOL_DIR}_final}"
 TIMESTEPS="${TIMESTEPS:-50000000}"
 NUM_ENVS="${NUM_ENVS:-500}"
 
-# 手書き方策と当たる割合。
+# 固定の相手（錨）と当たる割合。
 #
 # 以前は「手書き方策1体 + 過去の自分5体」を一様に選んでいたため約17%だった。
 # 過去の自分は自分と同じ弱点を持つので、その弱点が一度も罰されない。実測では
 # 37M ステップ学習したモデルが、学習相手には 71%/93% と強いのに、一度も戦って
 # いない相手には 45% しか勝てなかった。
 ANCHOR_RATIO="${ANCHOR_RATIO:-0.5}"
+
+# 固定の相手を弱い順に並べたもの。最後は --opponent と同じにすること。
+#
+# 初期化直後のネットの勝率は 対 random 49.4% / 対 heuristic 26.0% /
+# 対 strategic 3.3%。手書き方策だけで始めると1,000局中33勝しかできず、
+# 勝敗がほぼ定数になって行動の良し悪しが差として出ない。しかも過去の自分が
+# 現れるのは最初の保存（1Mステップ）以降なので、それまでは錨が100%を占める。
+ANCHOR_KINDS="${ANCHOR_KINDS:-heuristic,strategic}"
+
+# 学習の何割の時点で、錨が手書き方策だけ（比率1）になるか。
+# この課題の学習は 10M ステップまでに大半が終わるので、50M なら 0.3(=15M)。
+ANCHOR_CURRICULUM_END="${ANCHOR_CURRICULUM_END:-0.3}"
 
 # worker: seed  ent_coef  d_model nhead layers ff    batch  epochs ckpt
 #
@@ -98,7 +110,8 @@ rm -f logs/league_worker_*.log
 echo "リーグ学習を開始します"
 echo "  観測          : $(uv run python -c 'import godfield_core as g; print(g.OBSERVATION_FEATURE_SIZE)') 次元"
 echo "  共有プール    : $POOL_DIR"
-echo "  手書き方策と当たる割合: $ANCHOR_RATIO"
+echo "  固定の相手    : $ANCHOR_KINDS（弱い順）"
+echo "  当たる割合    : $ANCHOR_RATIO / 学習の $ANCHOR_CURRICULUM_END の時点で最強のみ"
 echo "  最終モデル    : $FINAL_DIR/worker_<i>.zip"
 echo "  評価の最良    : $POOL_DIR/best_worker_<i>/best_model.zip"
 echo "  総ステップ    : $TIMESTEPS / 並列環境 $NUM_ENVS"
@@ -117,6 +130,8 @@ for i in "${!WORKERS[@]}"; do
         --self-play \
         --opponent strategic \
         --anchor-ratio "$ANCHOR_RATIO" \
+        --anchor-kinds "$ANCHOR_KINDS" \
+        --anchor-curriculum-end "$ANCHOR_CURRICULUM_END" \
         --pool-dir "$POOL_DIR" \
         --save-path "$FINAL_DIR/worker_$i" \
         --worker-id "$i" \

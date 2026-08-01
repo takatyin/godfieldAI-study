@@ -80,3 +80,88 @@ def test_replacing_snapshots_keeps_the_anchor():
     pool.snapshots = [Tag("新しい分身")]
     assert pool.anchors == [anchor]
     assert [o.name for o in pool.opponents] == ["錨", "新しい分身"]
+
+
+# ============================================================================
+# 錨の梯子（弱い相手から強い相手へ）
+#
+# 初期化直後のネットの勝率は 対 random 49.4% / 対 heuristic 26.0% /
+# 対 strategic 3.3%。最強の相手だけで始めると勝敗がほぼ定数になり、
+# 行動の良し悪しが差として出ない。
+# ============================================================================
+
+
+def ladder(progress: float, n: int = 2, end: float = 0.3) -> PoolOpponent:
+    pool = PoolOpponent(
+        anchors=[Tag(f"錨{i}") for i in range(n)], seed=0, curriculum_end=end
+    )
+    pool.progress = progress
+    return pool
+
+
+def test_training_starts_against_the_weakest_anchor():
+    weights = ladder(progress=0.0).anchor_weights()
+    assert weights[0] == 1.0
+    assert weights[-1] == 0.0
+
+
+def test_the_strongest_anchor_takes_over_completely_at_the_end():
+    """「比率を1にしていく」— curriculum_end 以降は最強の錨だけになる。"""
+    for progress in (0.3, 0.5, 1.0):
+        weights = ladder(progress=progress, end=0.3).anchor_weights()
+        assert weights[-1] == 1.0, f"進み具合 {progress} で最強の錨だけになっていません"
+        assert weights[:-1].sum() == 0.0
+
+
+def test_the_mix_moves_gradually():
+    halfway = ladder(progress=0.15, end=0.3).anchor_weights()
+    assert halfway == pytest.approx([0.5, 0.5])
+
+    quarter = ladder(progress=0.075, end=0.3).anchor_weights()
+    assert quarter == pytest.approx([0.75, 0.25])
+
+
+def test_weights_always_form_a_distribution():
+    for n in (1, 2, 3, 4):
+        for progress in (0.0, 0.1, 0.2, 0.29, 0.3, 0.7, 1.0):
+            weights = ladder(progress, n=n).anchor_weights()
+            assert weights.sum() == pytest.approx(1.0)
+            assert (weights >= 0).all()
+
+
+def test_three_anchors_climb_one_rung_at_a_time():
+    """3体なら、中間の錨を経由して最強へ移る（隣り合う2体にだけ質量が乗る）。"""
+    assert ladder(0.0, n=3).anchor_weights() == pytest.approx([1.0, 0.0, 0.0])
+    assert ladder(0.15, n=3).anchor_weights() == pytest.approx([0.0, 1.0, 0.0])
+    assert ladder(0.3, n=3).anchor_weights() == pytest.approx([0.0, 0.0, 1.0])
+
+
+def test_curriculum_can_be_switched_off():
+    """0 にすると最初から最強の錨だけを使う。"""
+    assert ladder(0.0, end=0.0).anchor_weights() == pytest.approx([0.0, 1.0])
+
+
+def test_selection_follows_the_weights():
+    pool = ladder(progress=0.15, end=0.3)
+    tally = counts(pool, 4000)
+    assert abs(tally.get("錨0", 0) / 4000 - 0.5) < 0.03
+
+
+def test_the_curriculum_only_reweights_the_anchors():
+    """錨と分身の比は anchor_ratio のまま。梯子は錨の内側の配分だけを変える。"""
+    pool = PoolOpponent(
+        anchors=[Tag("弱"), Tag("強")],
+        snapshots=[Tag("分身")],
+        seed=0,
+        anchor_ratio=0.5,
+        curriculum_end=0.3,
+    )
+    pool.progress = 1.0
+    tally = counts(pool, 6000)
+    assert abs(tally.get("分身", 0) / 6000 - 0.5) < 0.03
+    assert tally.get("弱", 0) == 0, "移行後も弱い錨が選ばれています"
+
+
+def test_curriculum_end_outside_zero_to_one_is_rejected():
+    with pytest.raises(ValueError, match="curriculum_end"):
+        PoolOpponent(anchors=[Tag("錨")], curriculum_end=1.5)

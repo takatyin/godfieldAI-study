@@ -156,6 +156,20 @@ class PoolOpponent:
 
     そこで、外部の固定方策を「錨」として分け、当たる割合を直接指定できるように
     します。閉じた自己対戦から抜け出すための舵です。
+
+    【錨を弱い順に並べて、少しずつ強い方へ移す】
+
+    強い錨だけで最初から学習すると、勝敗がほぼ定数になって行動の良し悪しが差として
+    出ません。実測では、初期化直後のネットの勝率は
+
+        対 random 49.4% / 対 heuristic 26.0% / 対 strategic 3.3%
+
+    で、人手の戦略が相手だと1,000局中33勝しかできません。しかも分身が現れるのは
+    最初の保存（既定で1Mステップ）以降なので、それまでは錨が100%を占めます。
+
+    そこで錨は**弱い順に並べたリスト**として持ち、学習の進み具合に応じて重みを
+    梯子の上へ移します。`curriculum_end` に達した時点で最強の錨だけになります
+    （そこから先は比率1）。進み具合は SelfPlayCallback が更新します。
     """
 
     def __init__(
@@ -164,17 +178,25 @@ class PoolOpponent:
         snapshots: list[Opponent] | None = None,
         seed: int = 0,
         anchor_ratio: float = 0.5,
+        curriculum_end: float = 0.3,
     ):
         """Args:
-            anchors: 学習を通じて固定の相手（人手の戦略など）。
+            anchors: 学習を通じて固定の相手。**弱い順に並べる**こと。
             snapshots: 自己対戦のプール。SelfPlayCallback が入れ替えます。
             anchor_ratio: 錨と当たる確率。分身がまだ1体も無い間は常に錨を使います。
+            curriculum_end: 学習の何割の時点で最強の錨だけになるか。
+                0 にすると最初から最強の錨だけを使います。
         """
         if not 0.0 <= anchor_ratio <= 1.0:
             raise ValueError(f"anchor_ratio は 0..1 で指定してください: {anchor_ratio}")
+        if not 0.0 <= curriculum_end <= 1.0:
+            raise ValueError(f"curriculum_end は 0..1 で指定してください: {curriculum_end}")
         self.anchors = list(anchors or [])
         self.snapshots = list(snapshots or [])
         self.anchor_ratio = anchor_ratio
+        self.curriculum_end = curriculum_end
+        # 学習の進み具合 0..1。SelfPlayCallback が毎ステップ更新する。
+        self.progress = 0.0
         self._rng = np.random.default_rng(seed)
 
     @property
@@ -182,16 +204,47 @@ class PoolOpponent:
         """錨と分身をまとめた一覧（表示・件数確認用）。"""
         return self.anchors + self.snapshots
 
+    def anchor_weights(self) -> np.ndarray:
+        """今の進み具合での、錨ごとの選ばれる確率。
+
+        梯子の上を連続に動く点として扱い、隣り合う2体だけに質量を置きます。
+        段階的に切り替えるより、相手が急に変わって方策が崩れることが少なくて済みます。
+        """
+        n = len(self.anchors)
+        weights = np.zeros(n)
+        if n == 0:
+            return weights
+        if n == 1:
+            weights[0] = 1.0
+            return weights
+
+        t = 1.0 if self.curriculum_end <= 0.0 else min(1.0, self.progress / self.curriculum_end)
+        position = t * (n - 1)
+        low = int(np.floor(position))
+        if low >= n - 1:
+            weights[-1] = 1.0
+            return weights
+        frac = position - low
+        weights[low] = 1.0 - frac
+        weights[low + 1] = frac
+        return weights
+
     def select(self) -> Opponent:
         """この呼び出しで相手を務める方策を1つ選びます。"""
         if not self.anchors and not self.snapshots:
             raise RuntimeError("対戦相手のプールが空です。")
-        if not self.snapshots:
-            return self._rng.choice(self.anchors)
         if not self.anchors:
             return self._rng.choice(self.snapshots)
-        pool = self.anchors if self._rng.random() < self.anchor_ratio else self.snapshots
-        return self._rng.choice(pool)
+        if self.snapshots and self._rng.random() >= self.anchor_ratio:
+            return self._rng.choice(self.snapshots)
+        return self.anchors[self._rng.choice(len(self.anchors), p=self.anchor_weights())]
+
+    def describe_anchors(self) -> str:
+        """今の錨の配分を1行で表します（ログ用）。"""
+        return " / ".join(
+            f"{type(a).__name__}:{w:.0%}"
+            for a, w in zip(self.anchors, self.anchor_weights())
+        )
 
     def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
         return self.select().act(observations, action_masks)

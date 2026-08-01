@@ -93,6 +93,19 @@ class TrainingConfig:
     # gen4 から gen36 まで数値が動きませんでした。
     anchor_ratio: float = 0.5
 
+    # 固定の相手を弱い順に並べたもの（カンマ区切り）。最後は opponent と揃えること。
+    #
+    # 初期化直後のネットの勝率は 対 random 49.4% / 対 heuristic 26.0% /
+    # 対 strategic 3.3% で、最強の相手だけで始めると勝敗がほぼ定数になり、
+    # 行動の良し悪しが差として出ません。しかも分身が現れるのは最初の保存
+    # （self_play_save_freq）以降なので、それまでは錨が100%を占めます。
+    anchor_kinds: str = "heuristic,strategic"
+
+    # 学習の何割の時点で、錨が最強のものだけ（比率1）になるか。
+    # 実測ではこの課題の学習は 10M ステップまでに大半が終わるので、
+    # 50M なら 0.3（=15M）で移行を終える。
+    anchor_curriculum_end: float = 0.3
+
     # --- 記録 --------------------------------------------------------------
     tensorboard_log: str = "logs/tb"
     save_path: str = "godfield_agent"
@@ -115,6 +128,11 @@ class TrainingConfig:
         if not 0.0 <= self.anchor_ratio <= 1.0:
             raise ValueError(
                 f"anchor_ratio は 0..1 で指定してください: {self.anchor_ratio}"
+            )
+        if not 0.0 <= self.anchor_curriculum_end <= 1.0:
+            raise ValueError(
+                "anchor_curriculum_end は 0..1 で指定してください: "
+                f"{self.anchor_curriculum_end}"
             )
 
 
@@ -151,7 +169,9 @@ _HELP = {
     "pool_dir": "リーグのモデルを置く共有ディレクトリ",
     "worker_id": "リーグのワーカー番号",
     "start_opponent_model": "初期対戦相手にする学習済みモデル（.zip）",
-    "anchor_ratio": "自己対戦中に固定の相手（--opponent）と当たる割合",
+    "anchor_ratio": "自己対戦中に固定の相手と当たる割合",
+    "anchor_kinds": "固定の相手を弱い順に並べたもの（カンマ区切り。最後は --opponent と同じに）",
+    "anchor_curriculum_end": "学習の何割の時点で最強の固定相手だけになるか（0で最初から最強のみ）",
     "tensorboard_log": "TensorBoardのログ出力先",
     "save_path": "学習後のモデルの保存先（拡張子なし）",
     "wandb": "Weights & Biases に記録する",
