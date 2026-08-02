@@ -183,6 +183,7 @@ C++ 側でゴッドフィールドの複雑なルール、例外、フェイズ�
 データと学習:
 - [`docs/card_schema.md`](./docs/card_schema.md): カード定義YAML/JSONのデータスキーマ仕様。
 - [`docs/rl_architecture.md`](./docs/rl_architecture.md): 観測・行動・リーグ学習・診断の構成。
+- [`docs/rl_history.md`](./docs/rl_history.md): 何を試して何が起きたかの記録。MLPからTransformerへ、リーグ学習で踏んだ罠、失敗した実験とその原因。
 
 ### アセット (`assets/`)
 - [`assets/cards/`](./assets/cards/): 全カードのプロパティや効果を定義したマスターYAMLファイル群。
