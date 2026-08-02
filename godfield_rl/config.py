@@ -16,10 +16,14 @@ from dataclasses import dataclass, fields
 
 from godfield_rl.opponents import OPPONENT_KINDS
 
-# リーグの共有プール。observation のレイアウトを変えたら過去のモデルは読めなく
-# なるので、そのたびに新しいディレクトリへ移すこと（古いプールに書き足すと、
-# 読めないモデルが混ざったまま気付きにくい）。run_league.sh の既定と揃えてある。
-DEFAULT_POOL_DIR = "models/league_v3"
+# リーグの共有プール。観測のレイアウトか特徴抽出器を変えたら過去のモデルは
+# 読めなくなるので、そのたびに新しいディレクトリへ移すこと（古いプールに書き足すと、
+# 読めないモデルが混ざったまま気付きにくい）。
+#
+# **run_league.sh の POOL_DIR と必ず揃えること。** 片方だけ更新すると、
+# スクリプト経由と train.py 直叩きで別のプールを使うことになる。
+# 各版で何が変わったかは docs/rl_history.md にある。
+DEFAULT_POOL_DIR = "models/league_v5"
 
 
 @dataclass(frozen=True)
