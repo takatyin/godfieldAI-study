@@ -1,62 +1,36 @@
+"""学習の実行入口。
+
+設定は `godfield_rl/config.py`、組み立てと実行は `godfield_rl/training.py` に
+あります。このファイルはコマンドラインを読んで渡すだけです。
+
+以前はこのファイルの main() が引数定義・環境構築・モデル構築・コールバック設定を
+すべて抱えて200行を超えており、設定を1つ足すたびに伸びていました。
+
+例::
+
+    uv run python train.py --total-timesteps 5000000
+    uv run python train.py --self-play --worker-id 0 --seed 42 --pool-dir models/league_v2
+    uv run python train.py --no-use-transformer --no-amp    # MLP・fp32 で回す
+"""
+
 import argparse
 
 import torch
-from sb3_contrib import MaskablePPO
 
-from godfield_rl.env_wrapper import GodFieldVectorEnv
-from godfield_rl.feature_extractor import GodFieldFeatureExtractor
-from godfield_rl.opponents import make_opponent
+from godfield_rl.config import add_arguments, from_args
+from godfield_rl.training import run
 
 
-def main():
-    # Limit PyTorch CPU threads to avoid resource contention with C++ OpenMP threads
+def main() -> None:
+    # C++ 側の OpenMP と CPU を取り合わないよう、torch のスレッドを絞る
     torch.set_num_threads(2)
 
-    parser = argparse.ArgumentParser(description="Train GodField RL Agent")
-    parser.add_argument("--num-envs", type=int, default=1000, help="Number of parallel environments")
-    parser.add_argument("--total-timesteps", type=int, default=1_000_000, help="Total training timesteps")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
-    parser.add_argument(
-        "--opponent",
-        choices=["heuristic", "random"],
-        default="heuristic",
-        help="環境内部で相手の手番を指す方策。学習者の勝率がそのまま強さの指標になる",
+    parser = argparse.ArgumentParser(
+        description="GodField の強化学習エージェントを学習する",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    args = parser.parse_args()
-
-    print(f"Initializing {args.num_envs} GodField parallel environments in C++...")
-    print(f"Opponent policy: {args.opponent}")
-    # 相手の手番は環境の内部で消化され、SB3 には学習者の意思決定点だけが見える。
-    # これにより PPO のロールアウトが単一エージェントのものになる（GAE の符号問題を回避）。
-    vec_env = GodFieldVectorEnv(args.num_envs, opponent=make_opponent(args.opponent, seed=args.seed))
-    vec_env.seed(args.seed)
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Setting up MaskablePPO model on {device}...")
-
-    policy_kwargs = dict(
-        features_extractor_class=GodFieldFeatureExtractor,
-        features_extractor_kwargs=dict(
-            card_embed_dim=16,
-            features_dim=256,
-        ),
-    )
-
-    model = MaskablePPO(
-        "MlpPolicy",
-        vec_env,
-        policy_kwargs=policy_kwargs,
-        learning_rate=args.lr,
-        verbose=1,
-        device=device,
-        seed=args.seed,
-    )
-
-    print(f"Starting training for {args.total_timesteps} timesteps...")
-    model.learn(total_timesteps=args.total_timesteps)
-    model.save("godfield_agent")
-    print("Training complete! Model saved to godfield_agent.zip")
+    add_arguments(parser)
+    run(from_args(parser.parse_args()))
 
 
 if __name__ == "__main__":

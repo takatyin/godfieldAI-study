@@ -1,11 +1,12 @@
-import json
-import os
+from godfield_rl.cards import PROJECT_ROOT, all_cards
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-json_path = os.path.join(project_root, "assets", "godfield_cards.json")
-with open(json_path, encoding="utf-8") as f:
-    CARDS = json.load(f)
+# 可視化サーバーが index_simple.html を探すのに使う
+project_root = PROJECT_ROOT
 
+# カードマスタは godfield_rl.cards が1度だけ読み、C++ 側の登録簿の初期化も
+# 兼ねている。ここで別に読むと、読み込み順によって登録簿が未初期化のまま
+# 進む経路ができてしまう。
+CARDS = all_cards()
 CARDS_BY_ID = {c["id"]: c for c in CARDS}
 
 # Sickness names for observation state
@@ -13,23 +14,20 @@ SICKNESS_NAMES = ["なし", "風邪", "熱病", "地獄病", "天国病"]
 SICKNESS_DICT = {1: "風邪", 2: "熱病", 3: "地獄病", 4: "天国病"}
 
 # Guardian names for observation state
-GUARDIAN_NAMES = [
-    "なし",
-    "火星神",
-    "水星神",
-    "木星神",
-    "金星神",
-    "土星神",
-    "天王星神",
-    "海王星神",
-    "冥王星神",
-    "月神",
-    "地殻神",
-]
+# 守護神の名前。並びは C++ の GuardianType と一対一で対応させること。
+#
+# 以前は同じものを表す配列と辞書が別々にあり、配列のほうが4番以降ずれていた。
+# 表示は配列、ログは辞書を使っていたため、画面に「冥王星神」と出ているのに
+# 実際は金星神が小銭ばらまきを使う、という食い違いが起きていた
+# （配列の8番が冥王星神、C++ の 8 は VENUS）。
 GUARDIAN_DICT = {
+    0: "なし",
     1: "火星神", 2: "水星神", 3: "木星神", 4: "土星神", 5: "天王神",
-    6: "冥王神", 7: "海王神", 8: "金星神", 9: "地球神", 10: "月神"
+    6: "冥王神", 7: "海王神", 8: "金星神", 9: "地球神", 10: "月神",
 }
+
+# 添字で引きたい場所のための派生。辞書を唯一の定義とし、二重管理しない。
+GUARDIAN_NAMES = [GUARDIAN_DICT[i] for i in range(len(GUARDIAN_DICT))]
 
 # Curse names for observation state
 CURSE_NAMES = ["霧", "閃光", "暗雲", "夢"]

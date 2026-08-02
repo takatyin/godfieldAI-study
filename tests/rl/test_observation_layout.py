@@ -54,7 +54,21 @@ def test_card_id_blocks_are_contiguous():
     assert fc.STAGED_CARDS_START == fc.HAND_CARDS_START + fc.MAX_HAND_SIZE
     assert fc.OPP_HAND_CARDS_START == fc.STAGED_CARDS_START + fc.MAX_HAND_SIZE
     assert fc.OPP_STAGED_CARDS_START == fc.OPP_HAND_CARDS_START + fc.MAX_HAND_SIZE
-    assert fc.HISTORY_START == fc.OPP_STAGED_CARDS_START + fc.MAX_HAND_SIZE
+    # カードIDの4ブロックの直後に、カードごとの属性が同じ長さで並ぶ
+    assert fc.HAND_KNOWN_TO_OPP_START == fc.OPP_STAGED_CARDS_START + fc.MAX_HAND_SIZE
+    assert fc.OPP_DEPLOYED_START == fc.HAND_KNOWN_TO_OPP_START + fc.MAX_HAND_SIZE
+    assert fc.HISTORY_START == fc.OPP_DEPLOYED_START + fc.MAX_HAND_SIZE
+
+
+def test_per_card_flags_line_up_with_their_card_id_block():
+    """カードごとのフラグが、対応するカードIDブロックと同じ長さであること。
+
+    フラグは添字で対応させるので、長さがずれると別のカードの属性を読みます。
+    例外は出ず、静かに間違った特徴を学ぶだけになります。
+    """
+    assert fc.OPP_DEPLOYED_START - fc.HAND_KNOWN_TO_OPP_START == fc.MAX_HAND_SIZE
+    assert fc.HISTORY_START - fc.OPP_DEPLOYED_START == fc.MAX_HAND_SIZE
+    assert fc.HAND_COUNT_LEN == 2
 
 
 def test_embedding_table_covers_every_card_in_the_registry():
@@ -79,8 +93,12 @@ def test_internal_state_stays_small():
 
     上限は「現状から少し余裕を持たせた値」です。超えたら、増やす価値があるか
     考えたうえで上限を更新してください（機械的に緩めないこと）。
+
+    【更新履歴】HISTORY_LENGTH を 64 -> 128 にしたぶん、履歴が 1280 バイト増えて
+    3712 バイトになったので上限を 3072 -> 4096 に引き上げた。1024環境で 3.6MB。
+    履歴が短いと1局の序盤が押し出され、「相手が何を使い切ったか」を遡れない。
     """
-    limit = 3072
+    limit = 4096
     size = godfield_core.INTERNAL_STATE_SIZE
     assert size <= limit, (
         f"InternalState が {size} バイトに増えています（上限 {limit}）。"

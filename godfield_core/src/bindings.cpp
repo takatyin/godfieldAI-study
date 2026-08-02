@@ -8,6 +8,7 @@
 #include "env_pool.h"
 #include "game_logic.h"
 #include "game_logic_internal.h"
+#include "ismcts.h"
 #include "rng.h"
 #include "types.h"
 
@@ -717,6 +718,8 @@ PYBIND11_MODULE(godfield_core, m) {
         .def_readwrite("is_apocalypse", &Observation::is_apocalypse)
         .def_readwrite("turn_progress", &Observation::turn_progress)
         .def_readwrite("turns_to_apocalypse", &Observation::turns_to_apocalypse)
+        .def_readwrite("hand_count_me", &Observation::hand_count_me)
+        .def_readwrite("hand_count_opp", &Observation::hand_count_opp)
         .def_readwrite("history_head", &Observation::history_head)
         .def("get_history", [](const Observation& obs) { return get_array_as_list(obs.history); })
         .def("get_sickness_me", [](const Observation& obs) { return get_array_as_list(obs.sickness_me); })
@@ -730,6 +733,8 @@ PYBIND11_MODULE(godfield_core, m) {
         .def("get_staged_cards", [](const Observation& obs) { return get_array_as_list(obs.staged_cards); })
         .def("get_opponent_hand_cards", [](const Observation& obs) { return get_array_as_list(obs.opponent_hand_cards); })
         .def("get_opponent_staged_cards", [](const Observation& obs) { return get_array_as_list(obs.opponent_staged_cards); })
+        .def("get_hand_known_to_opp", [](const Observation& obs) { return get_array_as_list(obs.hand_known_to_opp); })
+        .def("get_opponent_deployed", [](const Observation& obs) { return get_array_as_list(obs.opponent_deployed); })
         .def("get_action_mask", [](const Observation& obs) { return get_array_as_list(obs.action_mask); })
         .def("to_numpy", [](const Observation& obs) {
             size_t total_floats = sizeof(Observation) / sizeof(float);
@@ -748,10 +753,71 @@ PYBIND11_MODULE(godfield_core, m) {
         .def("get_observations", &EnvPool::get_observations)
         .def("step_subset", &EnvPool::step_subset, py::arg("env_ids"), py::arg("actions"))
         .def("get_current_actors", &EnvPool::get_current_actors)
+        .def("get_player_stats", &EnvPool::get_player_stats,
+             "全環境の HP / MP / お金を真の値で返します。形は (環境数, 6) で、"
+             "並びは [p0_hp, p0_mp, p0_money, p1_hp, p1_mp, p1_money]。"
+             "観測は霧がかかると相手の値が0に潰れるため、報酬シェーピングには"
+             "こちらを使ってください。")
         .def("get_rewards_for", &EnvPool::get_rewards_for, py::arg("player_id"))
         .def("get_terminal_observations_for", &EnvPool::get_terminal_observations_for, py::arg("player_id"))
         .def("get_rewards", &EnvPool::get_rewards)
         .def("get_dones", &EnvPool::get_dones)
         .def("get_state", &EnvPool::get_state, py::arg("env_id"))
         .def("set_state", &EnvPool::set_state, py::arg("env_id"), py::arg("state"));
+
+    // ------------------------------------------------------------------
+    // ISMCTS
+    // ------------------------------------------------------------------
+    py::class_<ismcts::Config>(m, "IsmctsConfig")
+        .def(py::init<>())
+        .def_readwrite("num_simulations", &ismcts::Config::num_simulations)
+        .def_readwrite("c_puct", &ismcts::Config::c_puct)
+        .def_readwrite("prior_floor", &ismcts::Config::prior_floor)
+        .def_readwrite("fpu_reduction", &ismcts::Config::fpu_reduction)
+        .def_readwrite("expand_root_fully", &ismcts::Config::expand_root_fully)
+        .def_readwrite("root_noise_frac", &ismcts::Config::root_noise_frac)
+        .def_readwrite("root_noise_alpha", &ismcts::Config::root_noise_alpha)
+        .def_readwrite("rollout_max_steps", &ismcts::Config::rollout_max_steps)
+        .def_readwrite("seed", &ismcts::Config::seed);
+
+    py::class_<ismcts::Result>(m, "IsmctsResult")
+        .def_readonly("best_action", &ismcts::Result::best_action)
+        .def_readonly("simulations", &ismcts::Result::simulations)
+        .def_readonly("actions", &ismcts::Result::actions)
+        .def_readonly("visits", &ismcts::Result::visits)
+        .def_readonly("values", &ismcts::Result::values)
+        .def_readonly("priors", &ismcts::Result::priors);
+
+    py::class_<ismcts::Stats>(m, "IsmctsStats")
+        .def_readonly("nodes", &ismcts::Stats::nodes)
+        .def_readonly("edges", &ismcts::Stats::edges)
+        .def_readonly("simulations", &ismcts::Stats::simulations)
+        .def_readonly("game_steps", &ismcts::Stats::game_steps)
+        .def_readonly("evaluations", &ismcts::Stats::evaluations)
+        .def_readonly("max_depth", &ismcts::Stats::max_depth)
+        .def_readonly("edge_relocations", &ismcts::Stats::edge_relocations);
+
+    m.def(
+        "ismcts_search",
+        [](const InternalState& state, int searching_player, const ismcts::Config& config) {
+            // 探索はC++に閉じているのでGILを離す。可視化サーバーが探索中も
+            // 応答できるようにするため。
+            py::gil_scoped_release release;
+            return ismcts::search(state, searching_player, config, nullptr);
+        },
+        py::arg("state"), py::arg("searching_player"), py::arg("config"),
+        "情報集合ごとに1本の木でISMCTSを行い、各合法手の訪問回数と価値を返します。");
+
+    m.def("ismcts_last_stats", &ismcts::last_search_stats,
+          "直前の探索の統計（ノード数・step_game呼び出し回数など）。");
+
+    m.def(
+        "ismcts_determinize",
+        [](InternalState& state, int searching_player, uint32_t seed) {
+            Xoshiro128PP rng;
+            rng.seed(seed);
+            ismcts::determinize(state, searching_player, rng);
+        },
+        py::arg("state"), py::arg("searching_player"), py::arg("seed"),
+        "隠れ情報（相手の手札・夢で未確定の自分の手札）をサンプリングし直します。");
 }

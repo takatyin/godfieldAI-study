@@ -68,10 +68,19 @@ When modifying or adding cards, you MUST follow this workflow:
 When exploring the codebase or looking for specific game mechanics, refer to these directories and documents:
 
 ### `docs/` (System Documentation)
-- [`docs/rules.md`](../docs/rules.md): Contains the core rules of GodField. Reference this when implementing game logic.
-- [`docs/game_flow.md`](../docs/game_flow.md): Outlines the turn sequence and phases. Reference this when managing game states and timing.
-- [`docs/card_schema.md`](../docs/card_schema.md): Explains the technical JSON/YAML structure for card definitions.
-- [`docs/ai-policy.md`](../docs/ai-policy.md): Outlines the goals and structure for the RL agent.
+
+Game rules (the basis for the implementation):
+- [`docs/rules.md`](../docs/rules.md): Core rules of GodField. Reference this when implementing game logic.
+- [`docs/phase_specifications.md`](../docs/phase_specifications.md): Phase transitions, self-targeting, and turn-end resolution.
+- [`docs/special_cards.md`](../docs/special_cards.md): Cards whose behaviour needs special handling.
+- [`docs/dream_curse.md`](../docs/dream_curse.md): The dream state and its card groupings.
+
+How the code is built:
+- [`docs/core_architecture.md`](../docs/core_architecture.md): `InternalState`, `Observation`, `EnvPool`, and why they look the way they do.
+- [`docs/rl_architecture.md`](../docs/rl_architecture.md): Observation and action layout, league training, and the diagnostic tools.
+- [`docs/event_log_spec.md`](../docs/event_log_spec.md): Event history entries and when they are emitted.
+- [`docs/testing_guide.md`](../docs/testing_guide.md): The declarative test DSL and RNG injection.
+- [`docs/card_schema.md`](../docs/card_schema.md): The YAML/JSON structure for card definitions.
 
 ### `assets/` (Game Data)
 - [`assets/cards/`](../assets/cards/): Contains the master YAML definitions for all game cards.

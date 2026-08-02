@@ -1,5 +1,3 @@
-import json
-import os
 from typing import Any
 
 import numpy as np
@@ -11,7 +9,9 @@ try:
 except ImportError:
     raise ImportError("godfield_core is not built. Please run 'pip install -e .'")
 
+from godfield_rl.cards import all_cards
 from godfield_rl.opponents import HeuristicOpponent, Opponent
+from godfield_rl.shaping import PotentialShaper
 
 # C++ 側の constants.h を唯一の定義元とする（値をコピーすると観測レイアウトが黙ってズレる）
 ACTION_SPACE_SIZE = godfield_core.ACTION_SPACE_SIZE
@@ -28,10 +28,20 @@ class GodFieldVectorEnv(VecEnv):
     凍結した自分のコピーを渡します（強さは維持したまま、データの並びだけを単一化する）。
     """
 
-    def __init__(self, num_envs: int, opponent: Opponent | None = None, learner_seat: int = 0):
+    def __init__(
+        self,
+        num_envs: int,
+        opponent: Opponent | None = None,
+        learner_seat: int = 0,
+        shaper: PotentialShaper | None = None,
+    ):
         self.num_envs = num_envs
         self.learner_seat = learner_seat
         self.opponent = opponent if opponent is not None else HeuristicOpponent()
+        # ポテンシャルベースの報酬シェーピング（None なら終端の勝敗だけ）。
+        # 詳細と、なぜこの形でないと最適方策が変わるのかは godfield_rl/shaping.py を参照。
+        self.shaper = shaper
+        self._prev_potential = np.zeros(num_envs, dtype=np.float32)
         # 相手の手番が終わらない場合に無限ループへ落ちないための上限。
         # 1手番は仮置き→確定など複数ステップになるため、環境数に依らず十分な回数を取る。
         self._max_opponent_steps = 256
@@ -47,13 +57,8 @@ class GodFieldVectorEnv(VecEnv):
 
         super().__init__(num_envs, observation_space, action_space)
 
-        # Auto-initialize global C++ card registry if not already done
-        if godfield_core.get_registry_size() == 0:
-            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            json_path = os.path.join(project_root, "assets", "godfield_cards.json")
-            with open(json_path, encoding="utf-8") as f:
-                cards = json.load(f)
-            godfield_core.init_game_logic(cards)
+        # C++ 側の登録簿を初期化する（読み込み済みなら何もしない）
+        all_cards()
 
         self.core_env = godfield_core.EnvPool(num_envs)
         self.seed_val = 42
@@ -80,11 +85,22 @@ class GodFieldVectorEnv(VecEnv):
             self.seed_val = seed
         return [seed] * self.num_envs
 
+    def _potential(self) -> np.ndarray:
+        """現在の Φ(s)。シェーピングを使わない場合は 0。
+
+        観測ではなく真の状態から作ります。観測は霧がかかると相手の HP/MP/お金が
+        0 に潰れるため、そこから作ると霧の付与・解除だけで偽の報酬が出ます。
+        """
+        if self.shaper is None:
+            return self._prev_potential  # 使われないので確保済みのゼロ配列を返す
+        return self.shaper.potential(self.core_env.get_player_stats(), self.learner_seat)
+
     def reset(self) -> np.ndarray:
         self.core_env.reset(self.seed_val)
         # 開始直後に相手の手番から始まる環境があるため、学習者の手番まで進めてから返す
         self._advance_opponent_turns()
         obs, self._current_masks = self._get_obs_and_masks()
+        self._prev_potential = self._potential()
         return obs
 
     def step_async(self, actions: np.ndarray) -> None:
@@ -141,10 +157,26 @@ class GodFieldVectorEnv(VecEnv):
 
         obs, self._current_masks = self._get_obs_and_masks()
 
+        # シェーピングを足す前の勝敗（+1 / -1 / 0）。シェーピングを入れると報酬が
+        # ちょうど ±1 でなくなるため、勝率の集計はこちらを見る必要がある。
+        outcomes = rewards.copy()
+
+        # ポテンシャルベースのシェーピング。相手の手番まで消化し終えた「次に学習者が
+        # 選ぶ局面」で Φ(s') を取る（学習者の遷移は s -> s' なので、その間の相手の
+        # 手番も含めて1つの遷移とみなす）。
+        if self.shaper is not None:
+            next_potential = self._potential()
+            rewards = rewards + self.shaper.shape(
+                self._prev_potential, next_potential, terminated
+            )
+            # 終端の環境は自動リセット済みなので、次の局の Φ を起点にする
+            self._prev_potential = next_potential
+
         infos: list[dict[str, Any]] = [{} for _ in range(self.num_envs)]
         for i in np.flatnonzero(terminated):
             infos[i]["terminal_observation"] = terminal_obs[i].copy()
             infos[i]["TimeLimit.truncated"] = False
+            infos[i]["game_outcome"] = float(outcomes[i])
 
         return obs, rewards, terminated, infos
 

@@ -1,4 +1,20 @@
+"""イベント履歴を、見ている人の視点で1行の日本語にする。
+
+【呼び方の約束】ログを見ている本人が「あなた」、その対戦相手が「相手」。
+席番号（プレイヤー0/1）は出しません。両方の席のログを同じ関数で作るので、
+`player_id` を基準に決めるのが唯一の正解です。
+
+「自分」という語は使いません。以前は行為者を指すのか閲覧者を指すのかが
+文脈で変わっており、「敵 自分へ 【回復】 を使った」が
+『敵が敵自身に使った』とも『敵が私に使った』とも読めていました。
+行為者と対象が同じときは「相手 が 相手自身 に」のように明示します。
+"""
+
 from visualizer.constants import CARDS_BY_ID, CURSE_DICT, GUARDIAN_DICT, PHENOMENA_MESSAGES, SICKNESS_DICT
+
+# 閲覧者と、その対戦相手の呼び方。
+VIEWER_NAME = "あなた"
+OPPONENT_NAME = "相手"
 
 
 def _fmt_type_1(ev, actor_name, card_name, target_name):
@@ -13,14 +29,16 @@ def _fmt_type_2(ev, actor_name, card_name, target_name):
     return f"{actor_name} 戻した 【{card_name}】"
 
 def _fmt_type_3(ev, actor_name, card_name, target_name):
+    # 対象が行為者自身のときは「自分へ」では誰を指すのか読めないので、
+    # 「あなた が あなた自身 に」のように行為者を名指しして繰り返す。
+    if ev.target_id == ev.actor:
+        target_name = f"{actor_name}自身"
     if ev.card_id > 0:
-        if ev.target_id == ev.actor:
-            return f"{actor_name} 自分へ 【{card_name}】 を使った"
-        elif ev.target_id >= 0:
-            return f"{actor_name} {target_name}へ 【{card_name}】 を使った"
+        if ev.target_id >= 0:
+            return f"{actor_name} が {target_name} に 【{card_name}】 を使った"
         return f"{actor_name} 確定 【{card_name}】"
     if ev.target_id >= 0:
-        return f"{actor_name} {target_name}へカードを使用"
+        return f"{actor_name} が {target_name} にカードを使用"
     return f"{actor_name} 行動確定"
 
 def _fmt_type_4(ev, actor_name, card_name, target_name):
@@ -78,13 +96,19 @@ def _fmt_type_12(ev, actor_name, card_name, target_name):
 def _fmt_type_13(ev, actor_name, card_name, target_name):
     return f"{actor_name} MP {int(ev.value)} 回復"
 
+# 取引の3種（購入・売却・見送り）は、相手が誰かを必ず書く。
+# 「買う」「売る」は対象選択の結果として USE_CARD が発行されないため、
+# ここに相手を出さないと「誰に仕掛けた取引なのか」がログから消える。
+# イベント側には取引相手が target_id として入っている。
 def _fmt_type_14(ev, actor_name, card_name, target_name):
     price_str = f" ({int(ev.value)}円)" if ev.value > 0 else ""
-    return f"{actor_name} 【{card_name}】 を購入した{price_str}"
+    seller = f"{target_name} から " if target_name else ""
+    return f"{actor_name} が {seller}【{card_name}】 を購入した{price_str}"
 
 def _fmt_type_15(ev, actor_name, card_name, target_name):
     price_str = f" (+{int(ev.value)}円)" if ev.value > 0 else ""
-    return f"{actor_name} 【{card_name}】 を売却した{price_str}"
+    buyer = f"{target_name} に " if target_name else ""
+    return f"{actor_name} が {buyer}【{card_name}】 を売却した{price_str}"
 
 def _fmt_type_16(ev, actor_name, card_name, target_name):
     return f"{actor_name} 両替を行った"
@@ -96,7 +120,10 @@ def _fmt_type_18(ev, actor_name, card_name, target_name):
     return f"{actor_name} 【{card_name}】 を捨てた" if ev.card_id > 0 else f"{actor_name} カードを捨てた"
 
 def _fmt_type_19(ev, actor_name, card_name, target_name):
-    return f"{actor_name} 【{card_name}】 を買わなかった" if ev.card_id > 0 else f"{actor_name} 取引を見送った"
+    seller = f"{target_name} の " if target_name else ""
+    if ev.card_id > 0:
+        return f"{actor_name} が {seller}【{card_name}】 を買わなかった"
+    return f"{actor_name} が {target_name} との取引を見送った" if target_name else f"{actor_name} 取引を見送った"
 
 def _fmt_type_20(ev, actor_name, card_name, target_name):
     return f"{actor_name} 【{card_name}】 で阻止した！" if ev.card_id > 0 else f"{actor_name} 阻止した！"
@@ -183,7 +210,11 @@ def format_event_log(ev, player_id):
     if not hasattr(ev, "event_type") or ev.event_type == 0:
         return None
 
-    actor_name = "自分" if ev.actor == 0 else "敵"
+    # 席0を決め打ちにしてはいけない。ログはプレイヤー1の視点でも作られるので
+    # （visualize_server が p0_obs / p1_obs の両方を serialize する）、
+    # 席0固定だとプレイヤー1のログでは行為者の呼び方が入れ替わってしまう。
+    # 対象側は元から player_id を見ており、行為者だけがずれていた。
+    actor_name = VIEWER_NAME if ev.actor == player_id else OPPONENT_NAME
     card_name = "？"
     if ev.card_id >= 0:
         c_info = CARDS_BY_ID.get(ev.card_id)
@@ -196,7 +227,12 @@ def format_event_log(ev, player_id):
     elif ev.card_id == -1:
         card_name = "裏向きカード"
 
-    target_name = "自分" if ev.target_id == player_id else ("敵" if ev.target_id == (1 - player_id) else "")
+    if ev.target_id == player_id:
+        target_name = VIEWER_NAME
+    elif ev.target_id == 1 - player_id:
+        target_name = OPPONENT_NAME
+    else:
+        target_name = ""
 
     etype = ev.event_type
 

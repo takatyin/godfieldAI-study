@@ -1,4 +1,5 @@
 import asyncio
+import glob
 import json
 import os
 import random
@@ -10,8 +11,9 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 import godfield_core
-from godfield_rl.agents.heuristic_agent import get_ai_action
-from visualizer.constants import CARDS, project_root
+from godfield_rl.evaluation import load_policy, split_observation
+from godfield_rl.opponents import make_opponent
+from visualizer.constants import project_root
 from visualizer.presenter import serialize_observation
 
 app = FastAPI()
@@ -25,13 +27,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize C++ game logic
-godfield_core.init_game_logic(CARDS)
+# カードマスタの読み込みと C++ 側の登録簿の初期化は visualizer.constants の
+# import 時に godfield_rl.cards が済ませている（何度呼んでも安全）。
 
 # Shared game state
 env_pool = godfield_core.EnvPool(1)
 state = None
 ai_enabled = True  # Player 1 is controlled by AI by default
+
+# 対戦相手。人手の方策は常に使え、学習済みモデルは assets/models にあるものを拾う。
+#
+# 学習済みモデルは観測レイアウトが変わると読めなくなる（HISTORY_LENGTH を変えた等）。
+# 読めないものは黙って落として人手の方策で遊べるようにしてある。
+opponents: dict[str, object] = {
+    "strategic": make_opponent("strategic"),
+    "heuristic": make_opponent("heuristic"),
+    "random": make_opponent("random"),
+}
+current_opponent_type = "strategic"
+
+for path in sorted(glob.glob(os.path.join(project_root, "assets", "models", "*.zip"))):
+    name = os.path.splitext(os.path.basename(path))[0]
+    try:
+        # 人間と対戦させるので、学習時（探索のために確率的に選ぶ）と違い決定的に指させる
+        opponents[name] = load_policy(path, deterministic=True)
+        current_opponent_type = name
+    except Exception as exc:
+        print(f"[skip] {name} は読み込めませんでした: {str(exc).splitlines()[0]}")
+
+print(f"対戦相手: {', '.join(opponents)}（既定 {current_opponent_type}）")
 
 
 def reset_game(seed=None):
@@ -42,21 +66,31 @@ def reset_game(seed=None):
     state = env_pool.get_state(0)
 
 
+def opponent_action(opponent) -> int:
+    """相手方策に1手選ばせます。
+
+    相手方策はすべて Opponent（act(観測, マスク) のバッチ受け取り）で統一されています。
+    以前は heuristic / random だけ act(state) で呼んでおり、選ぶと TypeError で
+    落ちていました（godfield_rl.agents.heuristic_agent という別実装が残っていた名残）。
+    """
+    obs, masks = split_observation(env_pool.get_observations(), 1)
+    return int(opponent.act(obs, masks)[0])
+
+
 async def run_ai_steps():
     # If it is Player 1's turn and AI is enabled, auto-step Player 1
     while not state.is_done and state.current_actor_id == 1 and ai_enabled:
-        ai_act = get_ai_action(state)
-        if ai_act is None:
-            break
+        ai_act = opponent_action(opponents[current_opponent_type])
         godfield_core.step_game(state, godfield_core.ActionType(ai_act))
+        env_pool.set_state(0, state)
         await asyncio.sleep(0)
 
-        # Auto-advance
         while not state.is_done:
             auto_action = godfield_core.get_single_legal_action(state)
             if auto_action == -1:
                 break
             godfield_core.step_game(state, godfield_core.ActionType(auto_action))
+            env_pool.set_state(0, state)
             await asyncio.sleep(0)
 
 
@@ -74,6 +108,8 @@ def get_current_observations_json():
             "p1_obs": serialize_observation(obs1, 1, state),
             "current_actor_id": state.current_actor_id,
             "ai_enabled": ai_enabled,
+            "available_opponents": list(opponents.keys()),
+            "current_opponent": current_opponent_type,
             "current_phase": state.current_phase.name,
             "attacker_id": state.attacker_id,
             "defender_id": state.defender_id,
@@ -113,6 +149,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 action_id = msg["action_id"]
                 # Process player action
                 godfield_core.step_game(state, godfield_core.ActionType(action_id))
+                env_pool.set_state(0, state)
 
                 # Auto-advance
                 while not state.is_done:
@@ -120,6 +157,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     if auto_action == -1:
                         break
                     godfield_core.step_game(state, godfield_core.ActionType(auto_action))
+                    env_pool.set_state(0, state)
                     await asyncio.sleep(0)
 
                 # Run AI if it's AI's turn
@@ -133,6 +171,13 @@ async def websocket_endpoint(websocket: WebSocket):
             elif msg["type"] == "toggle_ai":
                 ai_enabled = msg.get("ai_enabled", True)
                 await run_ai_steps()
+
+            elif msg["type"] == "change_opponent":
+                new_opp = msg.get("opponent")
+                if new_opp in opponents:
+                    global current_opponent_type
+                    current_opponent_type = new_opp
+                    await run_ai_steps()
 
             await websocket.send_text(get_current_observations_json())
 

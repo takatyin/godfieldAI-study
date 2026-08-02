@@ -37,9 +37,12 @@ jobs:
           enable-cache: true
 
       # torch は pyproject の [tool.uv.sources] で CUDA 版（約3GB）を見に行くため、
-      # そのまま uv sync すると毎回巨大なダウンロードが走る。
-      # torch を使うのは tests/test_rl_pipeline.py だけなので、CI では入れずに
-      # そのテストを除外し、学習まわりを触ったときのローカル実行に任せる。
+      # そのまま uv sync すると毎回巨大なダウンロードが走る。CI では入れず、
+      # これらを要するテスト（tests/rl/）はローカル実行に任せる。
+      #
+      # どのテストを飛ばすかは tests/rl/conftest.py が自分で判断する。ここに
+      # ファイル名を列挙していた頃は、テストを追加・移動するたびに指定が外れて
+      # CI が落ちていた。
       - name: 依存をインストール（CUDA版 torch は除外）
         run: >
           uv sync --frozen
@@ -60,4 +63,4 @@ jobs:
         run: uv run ruff check .
 
       - name: pytest
-        run: uv run pytest -q --ignore=tests/test_rl_pipeline.py
+        run: uv run pytest -q

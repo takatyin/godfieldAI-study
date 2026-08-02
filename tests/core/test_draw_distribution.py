@@ -5,25 +5,16 @@ draw_card は std::discrete_distribution から「重みの分だけカードID�
 確率分布は数学的に同一のはずなので、それを実際に確かめます。
 """
 
-import json
-import os
 from collections import Counter
 
 import pytest
 
 import godfield_core
-from tests.core.dsl import Game, Side, card_id, card_name
-
-_ASSETS = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "assets",
-    "godfield_cards.json",
-)
+from tests.core.dsl import Game, Side, all_cards, card_id, card_name
 
 
 def _drop_rates() -> dict[int, int]:
-    with open(_ASSETS, encoding="utf-8") as f:
-        return {c["id"]: c.get("drop_rate", 0) or 0 for c in json.load(f)}
+    return {c["id"]: c.get("drop_rate", 0) or 0 for c in all_cards()}
 
 
 def test_cards_with_zero_drop_rate_are_never_drawn():

@@ -53,5 +53,21 @@ compile_flags.txt
 compile_commands.json
 .clangd/
 
-# Cloned godfield-flash repository for specification analysis
+# 参考用にクローンした別実装（独立した git リポジトリ）。
+# かなり古い時代のゴッドフィールドを粗く再現したもので、仕様の根拠には使えない。
+# ダメージの表現まわりが多少参考になる程度。
 godfield-flash/
+
+# RL Training Outputs
+models/
+logs/
+experiments/
+*.log
+*.db
+*.sqlite3
+godfield_agent.zip
+
+# 可視化サーバーが対戦相手として読む学習済みモデルだけは追跡する。
+# 上の models/ はディレクトリ名だけの指定なので assets/models/ にも効いてしまう。
+!assets/models/
+!assets/models/*.zip
