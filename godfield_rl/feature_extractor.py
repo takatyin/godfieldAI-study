@@ -9,7 +9,10 @@ import torch.nn as nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 import godfield_core
-from godfield_rl.card_features import card_attr_dim, card_attribute_table
+from godfield_rl.card_features import (
+    card_attr_dim,
+    standardized_card_attribute_table,
+)
 from godfield_rl.feature_config import (
     CONTINUOUS_FEATURES_SIZE,
     EVENT_SIZE,
@@ -49,6 +52,36 @@ _MONEY_EDGES = (1, 5, 10, 15, 20, 30, 50)
 _STAT_EDGE_SETS = (_HP_EDGES, _HP_EDGES, _MP_EDGES, _MP_EDGES,
                    _MONEY_EDGES, _MONEY_EDGES)
 STAT_THERMOMETER_DIM = sum(len(e) for e in _STAT_EDGE_SETS)
+
+
+def zero_gate() -> nn.Parameter:
+    """後から足した経路を、学習開始時点では「何もしない」状態にするための係数。
+
+    【なぜ必要か】
+
+    トークンに新しい成分を足すと、その分だけ ReLU 前の分布がずれます。実測では
+    カード属性と閾値符号をそのまま足しただけで、**学習前から**
+
+        常にゼロのユニット   16 -> 53 / 256
+        局面ごとのばらつき  0.312 -> 0.194
+
+    と表現力が落ちていました。50M ステップ回した結果は 256 ユニット中 134 が死に、
+    ばらつき 0.158、approx_kl 0.002（前回 0.02〜0.05）で方策がまったく動かず、
+    対 strategic の勝率は 44.9% から 21.0% へ落ちました。
+
+    係数を0から始めれば、初期状態の出力は追加前と完全に一致します。係数にも
+    射影の重みにも勾配は流れるので、役に立つぶんだけ自分で大きくなります
+    （ReZero / LayerScale と同じ考え方）。新しい特徴を足すたびに既存の学習が
+    壊れる事故を、構造的に防ぎます。
+
+    【なぜ重みのゼロ初期化ではだめか】
+
+    SB3 の `ActorCriticPolicy` は構築後に特徴抽出器全体へ直交初期化（gain √2）を
+    かけ直します。`__init__` の中で重みを0にしても上書きされます（実測で
+    ゼロ初期化したはずの射影の出力が 9.62 ありました）。直交初期化は
+    `nn.Linear` / `nn.Conv2d` だけを対象にするので、素の `nn.Parameter` は残ります。
+    """
+    return nn.Parameter(torch.zeros(1))
 
 
 class GodFieldFeatureExtractor(BaseFeaturesExtractor):
@@ -161,6 +194,7 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         self.global_proj = nn.Linear(CONTINUOUS_FEATURES_SIZE, d_model)
         # 閾値の判断を1次元で表せるようにするための温度計符号（上のコメント参照）
         self.stat_thermometer_proj = nn.Linear(STAT_THERMOMETER_DIM, d_model)
+        self.stat_thermometer_gate = zero_gate()
         stat_index, stat_edge = [], []
         for i, edges in enumerate(_STAT_EDGE_SETS):
             stat_index += [i] * len(edges)
@@ -182,9 +216,16 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         # 観測にはカードIDしか入っていないため、これが無いと294枚それぞれの意味を
         # 報酬だけから再発見することになります（godfield_rl/card_features.py 参照）。
         # カードマスタから決まる派生データなのでチェックポイントには保存しません。
-        self.register_buffer("card_attrs",
-                             torch.as_tensor(card_attribute_table()), persistent=False)
+        # clone() は必須。`torch.as_tensor` は numpy 配列とメモリを共有するため、
+        # 素で渡すと lru_cache が返す表そのものを指し、抽出器が複数あると同じ
+        # バッファを共有する（片方を書き換えると他方も壊れる）。
+        self.register_buffer(
+            "card_attrs",
+            torch.as_tensor(standardized_card_attribute_table()).clone(),
+            persistent=False,
+        )
         self.card_attr_proj = nn.Linear(card_attr_dim(), d_model)
+        self.card_attr_gate = zero_gate()
 
         # 3. History Embeddings
         self.hist_cont_proj = nn.Linear(EVENT_SIZE - 1, d_model)
@@ -257,7 +298,8 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         # 「所持金が10円以上か」のような閾値をそのまま1次元にしたもの
         stat_therm = (stats[:, self._stat_index] >= self._stat_edge).to(cont_features.dtype)
         global_tokens = (
-            self.global_proj(cont_features) + self.stat_thermometer_proj(stat_therm)
+            self.global_proj(cont_features)
+            + self.stat_thermometer_gate * self.stat_thermometer_proj(stat_therm)
         ).unsqueeze(1)  # [B, 1, d_model]
 
         # 2. Card Tokens
@@ -292,7 +334,7 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
 
         # カードの属性（値段・攻撃力・MPコストなど）をそのカードのトークンに足す。
         # ID の埋め込みだけだと、そのカードが何をするのかを報酬から学び直すことになる。
-        card_attr_embs = self.card_attr_proj(self.card_attrs[card_ids])
+        card_attr_embs = self.card_attr_gate * self.card_attr_proj(self.card_attrs[card_ids])
 
         card_tokens = card_embs + type_embs + self.card_flag_proj(flags) + card_attr_embs
 
@@ -314,7 +356,9 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
 
         # 履歴のカードにも同じ属性を足す。「相手が高い防具を出した」「MPの重い奇跡を
         # 撃った」といった読みは、IDだけでは学べない。
-        hist_attr_embs = self.card_attr_proj(self.card_attrs[hist_card_ids])
+        hist_attr_embs = self.card_attr_gate * self.card_attr_proj(
+            self.card_attrs[hist_card_ids]
+        )
 
         hist_tokens = (hist_cont_embs + hist_card_embs + hist_pos_embs
                        + hist_attr_embs)  # [B, L, d_model]

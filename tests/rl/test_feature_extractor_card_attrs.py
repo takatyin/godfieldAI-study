@@ -53,6 +53,19 @@ def test_the_attribute_table_is_available_to_the_network(extractor):
     assert not extractor.card_attrs[0].any(), "空スロット用の行が全ゼロではありません"
 
 
+def test_the_table_given_to_the_network_is_standardized(extractor):
+    """共通成分が残っていると、全カードトークンに同じベクトルが足される。
+
+    情報を持たない定数が乗ると ReLU 前の分布が偏ってユニットが死に、局面ごとの
+    変動が薄まります。実測では 256 ユニット中 134 が常にゼロになり、
+    approx_kl が 0.002 まで落ちて学習が止まりました。
+    """
+    real = extractor.card_attrs[1:].numpy()
+    assert abs(np.linalg.norm(real.mean(axis=0))) < 1e-4, (
+        f"共通成分が残っています（ノルム {np.linalg.norm(real.mean(axis=0)):.3f}）"
+    )
+
+
 def test_the_attribute_table_is_not_stored_in_the_checkpoint(extractor):
     """カードマスタから決まる派生データなので保存しない（読み込み時に作り直す）。"""
     keys = extractor.state_dict().keys()
@@ -60,8 +73,20 @@ def test_the_attribute_table_is_not_stored_in_the_checkpoint(extractor):
     assert "card_attr_proj.weight" in keys, "射影の重みは学習対象なので保存されるべきです"
 
 
+def open_gates(extractor) -> None:
+    """学習開始時点ではゲートが0で属性が効かないので、配線の検証用に開ける。
+
+    ゲートが0から始まること自体は tests/rl/test_added_paths_start_inert.py が
+    検証しています。ここで見たいのは「開けたときに正しく届くか」です。
+    """
+    with torch.no_grad():
+        extractor.card_attr_gate.fill_(1.0)
+        extractor.stat_thermometer_gate.fill_(1.0)
+
+
 def test_card_attributes_change_the_output(extractor):
     """属性の射影を殺すと出力が変わる ＝ 属性が実際に使われている。"""
+    open_gates(extractor)
     obs = base_observation()
     obs[0, fc.HAND_CARDS_START] = card_id("神の盾")
     before = run(extractor, obs)
@@ -76,6 +101,7 @@ def test_card_attributes_change_the_output(extractor):
 
 def test_history_cards_also_carry_attributes(extractor):
     """履歴のカードにも属性を足している（相手が何を出したかの読みに要る）。"""
+    open_gates(extractor)
     obs = base_observation()
     ev = fc.HISTORY_START
     obs[0, ev + 1] = float(godfield_core.EventType.ATTACK_HIT)  # event_type
@@ -96,6 +122,7 @@ def test_an_empty_hand_is_unaffected_by_the_attribute_table(extractor):
     空スロットの行は全ゼロなので、線形射影の出力はバイアスだけになる。
     バイアスも0にすれば完全に一致するはず。
     """
+    open_gates(extractor)
     obs = base_observation()
     with torch.no_grad():
         extractor.card_attr_proj.bias.zero_()
@@ -121,6 +148,7 @@ def test_stat_thermometer_dimensions_line_up(extractor):
 
 
 def test_stat_thermometer_changes_the_output(extractor):
+    open_gates(extractor)
     obs = base_observation()
     obs[0, fc.STAT_START + 4] = 0.20  # 自分の所持金 20円
     before = run(extractor, obs)
