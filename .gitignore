@@ -66,3 +66,8 @@ experiments/
 *.db
 *.sqlite3
 godfield_agent.zip
+
+# 可視化サーバーが対戦相手として読む学習済みモデルだけは追跡する。
+# 上の models/ はディレクトリ名だけの指定なので assets/models/ にも効いてしまう。
+!assets/models/
+!assets/models/*.zip
