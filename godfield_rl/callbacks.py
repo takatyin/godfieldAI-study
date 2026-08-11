@@ -15,6 +15,7 @@ class WinRateCallback(BaseCallback):
     """
     Opponentに対する勝率・敗北率・引き分け率を記録し、TensorBoard/WandBに出力するコールバック。
     """
+
     def __init__(self, history_size: int = 1000, verbose: int = 0):
         super().__init__(verbose)
         self.history_size = history_size
@@ -117,7 +118,18 @@ class SelfPlayCallback(BaseCallback):
     一定のステップ数ごとに現在のモデルを共有ディレクトリに保存し、
     同時に共有ディレクトリから他のモデルをランダムに読み込んで対戦プールを更新するコールバック（League Training対応）。
     """
-    def __init__(self, pool: PoolOpponent, save_freq: int, save_path: str, max_pool_size: int = 5, worker_id: int = 0, seed: int = 0, total_timesteps: int = 0, verbose: int = 0):
+
+    def __init__(
+        self,
+        pool: PoolOpponent,
+        save_freq: int,
+        save_path: str,
+        max_pool_size: int = 5,
+        worker_id: int = 0,
+        seed: int = 0,
+        total_timesteps: int = 0,
+        verbose: int = 0,
+    ):
         super().__init__(verbose)
         self.pool = pool
         self.save_freq = save_freq
@@ -187,9 +199,7 @@ class SelfPlayCallback(BaseCallback):
             all_models = glob.glob(os.path.join(self.save_path, "*.zip"))
 
             # ワーカーを均等に巡回して選ぶ（速いワーカーの占拠を防ぐ）
-            selected_models = sample_across_workers(
-                all_models, min(len(all_models), self.max_pool_size), self._rng
-            )
+            selected_models = sample_across_workers(all_models, min(len(all_models), self.max_pool_size), self._rng)
             sample_size = len(selected_models)
 
             # 抽出したモデルをロードして分身のプールを作る。

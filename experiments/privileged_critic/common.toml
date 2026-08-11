@@ -1,0 +1,90 @@
+schema_version = 1
+experiment = "privileged_critic"
+description = "MaskablePPO と Privileged Critic PPO の paired comparison"
+
+[pairing]
+# 同じ seed の baseline/privileged を1組として比較する。まず 42 で smoke/full run を確認し、
+# 問題がなければ残りを追加する。
+seeds = [42, 43, 44, 45, 46]
+primary_seed = 42
+require_clean_worktree = true
+only_intended_difference = "Privileged Critic 経路（critic の true hand 利用と Actor への勾配漏洩を防ぐ extractor 分離）"
+required_privileged_design_constraints = [
+  "Actor/Critic の feature extractor を非共有にし、privileged critic の勾配で Actor 側 extractor を更新しない",
+]
+
+[training]
+# キー名は TrainingConfig に合わせる。lr は learning rate（CLI: --lr）。
+num_envs = 1000
+total_timesteps = 5000000
+lr = 5.845e-5
+n_steps = 256
+batch_size = 2048
+n_epochs = 10
+target_kl = 0.03
+ent_coef = 0.01
+clip_range = 0.3
+gamma = 0.995
+
+[ppo_inherited_defaults]
+# TrainingConfig が CLI に公開していない MaskablePPO の値。両 variant は同じ
+# uv.lock（sb3-contrib/stable-baselines3 2.9.0）と同じ commit から継承する。
+gae_lambda = 0.95
+clip_range_vf = "none"
+normalize_advantage = true
+vf_coef = 0.5
+max_grad_norm = 0.5
+policy_mlp_pi = [64, 64]
+policy_mlp_vf = [64, 64]
+activation = "Tanh"
+orthogonal_initialization = true
+
+[reward_shaping]
+shape_hp = 0.2
+shape_mp = 0.0
+shape_money = 0.0
+
+[network]
+use_transformer = true
+feature_extractor = "GodFieldTransformerExtractor"
+d_model = 192
+nhead = 8
+num_layers = 4
+dim_feedforward = 768
+features_dim = 256
+grad_checkpointing = false
+amp = true
+
+[opponent]
+kind = "strategic"
+self_play = false
+
+[evaluation]
+tool = "tools/evaluate.py"
+opponent = "strategic"
+games_per_seat = 3000
+num_envs = 512
+seed_offset_from_training = 10000
+both_seats = true
+deterministic = true
+amp = true
+reward_shaping = false
+
+[logging]
+tensorboard = true
+wandb = false
+wandb_project = "godfield-rl-privileged-critic"
+artifact_root = "runs/privileged_critic"
+
+tracked_metrics = [
+  "win_rate/recent_win",
+  "win_rate/overall",
+  "train/explained_variance",
+  "train/value_loss",
+  "train/policy_gradient_loss",
+  "train/entropy_loss",
+  "train/approx_kl",
+  "train/clip_fraction",
+  "time/fps",
+]
+optional_system_metrics = ["elapsed_seconds", "peak_vram_mib"]

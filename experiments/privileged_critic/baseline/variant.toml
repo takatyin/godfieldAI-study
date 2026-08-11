@@ -1,0 +1,15 @@
+schema_version = 1
+experiment = "privileged_critic"
+variant = "baseline"
+
+[model]
+algorithm = "MaskablePPO"
+policy = "通常の MaskableActorCriticPolicy（AMP 対応クラスを含む既存 policy_class）"
+actor_input = "通常観測 o_t"
+critic_input = "通常観測 o_t"
+privileged_critic = false
+feature_extractor_sharing = "Actor/Critic で共有（MaskableActorCriticPolicy の既定値）"
+
+[cli]
+# common.toml の共通引数に追加する variant 固有引数。baseline は追加なし。
+extra_args = []

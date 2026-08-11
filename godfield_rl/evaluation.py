@@ -42,8 +42,7 @@ class MatchResult:
         return self.draws / self.games if self.games else float("nan")
 
     def __str__(self) -> str:
-        return (f"{self.games}局  勝 {self.win_rate:.1%} / 負 {self.loss_rate:.1%}"
-                f" / 分 {self.draw_rate:.1%}")
+        return f"{self.games}局  勝 {self.win_rate:.1%} / 負 {self.loss_rate:.1%} / 分 {self.draw_rate:.1%}"
 
 
 def split_observation(raw: np.ndarray, num_envs: int) -> tuple[np.ndarray, np.ndarray]:
@@ -99,11 +98,14 @@ def load_policy(
         # 読み直すため、層が増えた場合は最終的に optimizer の
         # ValueError として表に出る。どれも原因は同じなので同じ案内にする。
         text = str(exc)
-        if not any(sign in text for sign in (
-            "size mismatch",
-            "Missing key",
-            "parameter group that doesn't match",
-        )):
+        if not any(
+            sign in text
+            for sign in (
+                "size mismatch",
+                "Missing key",
+                "parameter group that doesn't match",
+            )
+        ):
             raise
         raise RuntimeError(
             f"{path} は今の観測・特徴抽出器では読めません。\n"
@@ -120,9 +122,7 @@ def load_policy(
     return FrozenOpponent(model, deterministic=deterministic, amp=amp)
 
 
-def resolve_policy(
-    spec: str, seed: int = 0, device: str | None = None, amp: bool = False
-) -> Opponent:
+def resolve_policy(spec: str, seed: int = 0, device: str | None = None, amp: bool = False) -> Opponent:
     """名前（random/heuristic/strategic）か .zip のパスから方策を作ります。"""
     if spec.endswith(".zip"):
         return load_policy(spec, device=device, amp=amp)

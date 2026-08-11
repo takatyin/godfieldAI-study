@@ -61,7 +61,9 @@ godfield-flash/
 # RL Training Outputs
 models/
 logs/
-experiments/
+runs/
+wandb/
+.wandb/
 *.log
 *.db
 *.sqlite3

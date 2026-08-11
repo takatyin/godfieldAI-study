@@ -61,11 +61,11 @@ ID_BUY = card_id("買う")
 ID_SMILE_SHELL = card_id("スマイルの貝がら")
 
 # しきい値
-BUY_MIN_MONEY = 10      # 所持金がこれ以上なら「買う」を優先
-EXCHANGE_HP_THRESHOLD = 20   # HPがこれ未満になったら「両替」を使う
-SELL_MIN_PRICE = 15     # 値段がこれ以上の神器だけ相手に売る
-CHEAP_ARMOR_DEF = 2     # 守がこれ以下の防具は優先的に消費する
-BUY_MAX_PRICE = 10      # 提示されたカードがこの値段以内なら必ず買う
+BUY_MIN_MONEY = 10  # 所持金がこれ以上なら「買う」を優先
+EXCHANGE_HP_THRESHOLD = 20  # HPがこれ未満になったら「両替」を使う
+SELL_MIN_PRICE = 15  # 値段がこれ以上の神器だけ相手に売る
+CHEAP_ARMOR_DEF = 2  # 守がこれ以下の防具は優先的に消費する
+BUY_MAX_PRICE = 10  # 提示されたカードがこの値段以内なら必ず買う
 DISCARD_HAND_SIZE = 17  # 手札がこれを超えたら「捨てる」を選ぶ
 
 # 手札に何枚まで残すか。これを超えたぶんが捨てる候補になる。
@@ -105,7 +105,7 @@ ACTION_DEAL_YES = int(A.ACTION_DEAL_YES)
 ACTION_DEAL_NO = int(A.ACTION_DEAL_NO)
 
 STAT_SCALE = 100.0  # 観測は HP/MP/お金 を /100 で正規化している
-MAX_STAT = 99       # HP / MP / お金 の上限
+MAX_STAT = 99  # HP / MP / お金 の上限
 
 
 def exchange_allocation(total: int) -> tuple[int, int, int]:
@@ -134,7 +134,7 @@ def exchange_allocation(total: int) -> tuple[int, int, int]:
     money = min(10, rest)
     rest -= money
 
-    hp = 40 + rest                      # 余りはHPへ戻す
+    hp = 40 + rest  # 余りはHPへ戻す
     # 上限を超えたぶんを MP -> お金 の順にこぼす
     overflow = max(0, hp - MAX_STAT)
     hp -= overflow
@@ -188,10 +188,7 @@ class StrategicOpponent:
 
     def _hand_choices(self, mask_row: np.ndarray, hand: np.ndarray) -> list[int]:
         """選べる手札スロットのうち、カードが入っているもの。"""
-        return [
-            i for i in range(fc.MAX_HAND_SIZE)
-            if mask_row[ACTION_HAND_0 + i] and hand[i] >= 0
-        ]
+        return [i for i in range(fc.MAX_HAND_SIZE) if mask_row[ACTION_HAND_0 + i] and hand[i] >= 0]
 
     def _pick(self, slots: list[int]) -> int:
         return ACTION_HAND_0 + int(self._rng.choice(slots))
@@ -236,10 +233,7 @@ class StrategicOpponent:
             return self._pick(picks)
 
         # 5. 値段の高い神器を売る
-        picks = [
-            i for i in slots
-            if hand[i] == ID_SELL and self._has_expensive_item(hand, slots)
-        ]
+        picks = [i for i in slots if hand[i] == ID_SELL and self._has_expensive_item(hand, slots)]
         if picks:
             return self._pick(picks)
 
@@ -292,9 +286,9 @@ class StrategicOpponent:
         hand = self._hand(obs_row)
         slots = self._hand_choices(mask_row, hand)
         sellable = [
-            i for i in slots
-            if hand[i] not in (ID_SELL, ID_BUY, ID_EXCHANGE)
-            and feature(hand[i], "price") >= SELL_MIN_PRICE
+            i
+            for i in slots
+            if hand[i] not in (ID_SELL, ID_BUY, ID_EXCHANGE) and feature(hand[i], "price") >= SELL_MIN_PRICE
         ]
         # 15円以上が無くても出品はしなければならないので、その場合は
         # 手持ちで一番高いものを出す（None を返すとランダムに落ちる）。
@@ -318,10 +312,7 @@ class StrategicOpponent:
             if len(picks) > keep:
                 return self._pick(picks)
 
-        weak_miracles = [
-            i for i in slots
-            if feature(hand[i], "type") == "miracle" and hand[i] not in STRONG_MIRACLES
-        ]
+        weak_miracles = [i for i in slots if feature(hand[i], "type") == "miracle" and hand[i] not in STRONG_MIRACLES]
         if weak_miracles:
             return self._pick(weak_miracles)
 
@@ -336,9 +327,7 @@ class StrategicOpponent:
         # 奇跡は価格が0なので、価格だけで並べると強い奇跡が真っ先に捨てられる。
         def rank(slot: int) -> tuple[int, int]:
             card = hand[slot]
-            keep_last = int(
-                feature(card, "type") in ("defense", "weapon") or card in STRONG_MIRACLES
-            )
+            keep_last = int(feature(card, "type") in ("defense", "weapon") or card in STRONG_MIRACLES)
             return (keep_last, feature(card, "price"))
 
         return ACTION_HAND_0 + min(slots, key=rank)
@@ -461,7 +450,7 @@ class StrategicOpponent:
 
     def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
         masks = action_masks.astype(bool)
-        actions = self._random_legal(masks)          # 既定はランダムな合法手
+        actions = self._random_legal(masks)  # 既定はランダムな合法手
         explore = self._rng.random(len(actions)) < self.explore_rate
 
         for i in range(len(actions)):

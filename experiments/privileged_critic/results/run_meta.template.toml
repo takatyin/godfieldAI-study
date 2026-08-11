@@ -1,0 +1,52 @@
+schema_version = 1
+run_id = ""
+experiment = "privileged_critic"
+variant = "baseline_or_privileged"
+started_at_utc = ""
+finished_at_utc = ""
+
+[source]
+git_commit = ""
+git_branch = ""
+working_tree_dirty = false
+common_definition = "experiments/privileged_critic/common.toml"
+variant_definition = ""
+
+[resolved_training]
+seed = 0
+num_envs = 1000
+total_timesteps = 5000000
+lr = 5.845e-5
+n_steps = 256
+batch_size = 2048
+n_epochs = 10
+target_kl = 0.03
+ent_coef = 0.01
+clip_range = 0.3
+gamma = 0.995
+shape_hp = 0.2
+shape_mp = 0.0
+shape_money = 0.0
+opponent = "strategic"
+network = "transformer_d192_h8_L4_ff768_features256"
+amp = true
+privileged_critic = false
+
+[resolved_evaluation]
+opponent = "strategic"
+games_per_seat = 3000
+num_envs = 512
+seed = 0
+both_seats = true
+deterministic = true
+amp = true
+
+[artifacts]
+directory = "runs/privileged_critic/<run_id>"
+model = "runs/privileged_critic/<run_id>/checkpoints/final_model.zip"
+tensorboard = "runs/privileged_critic/<run_id>/tensorboard"
+stdout_log = "runs/privileged_critic/<run_id>/logs/train.log"
+wandb_run = ""
+
+[notes]
+text = ""

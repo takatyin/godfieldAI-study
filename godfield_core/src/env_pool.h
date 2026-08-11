@@ -60,6 +60,8 @@ public:
      */
     pybind11::array_t<int> get_player_stats();
 
+    pybind11::array_t<int> get_opponent_true_hands(int player_id);
+
     InternalState get_state(int env_id) const { return states_[env_id]; }
     void set_state(int env_id, const InternalState &state) {
         states_[env_id] = state;
@@ -81,6 +83,7 @@ private:
     std::vector<int> current_actors_;
     // get_player_stats() が返す配列の実体。呼び出しごとに詰め直す。
     std::vector<int> player_stats_;
+    std::vector<int> opponent_true_hands_;
 
     // Internal helper functions for game logic
     void reset_env(int env_id, int seed);

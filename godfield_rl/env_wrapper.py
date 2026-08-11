@@ -16,6 +16,7 @@ from godfield_rl.shaping import PotentialShaper
 # C++ 側の constants.h を唯一の定義元とする（値をコピーすると観測レイアウトが黙ってズレる）
 ACTION_SPACE_SIZE = godfield_core.ACTION_SPACE_SIZE
 
+
 class GodFieldVectorEnv(VecEnv):
     """学習者を単一エージェントとして見せる VecEnv。
 
@@ -49,10 +50,7 @@ class GodFieldVectorEnv(VecEnv):
         self._obs_total = godfield_core.OBSERVATION_SIZE  # Total including padding
         self._mask_start = self._obs_dim  # Where action_mask starts in the feature array
 
-        observation_space = Box(
-            low=-np.inf, high=np.inf,
-            shape=(self._obs_dim,), dtype=np.float32
-        )
+        observation_space = Box(low=-np.inf, high=np.inf, shape=(self._obs_dim,), dtype=np.float32)
         action_space = Discrete(ACTION_SPACE_SIZE)
 
         super().__init__(num_envs, observation_space, action_space)
@@ -69,9 +67,9 @@ class GodFieldVectorEnv(VecEnv):
         """Extract observations and action masks from C++ buffer."""
         obs_flat = self.core_env.get_observations()
         obs_raw = obs_flat.reshape(self.num_envs, self._obs_total)
-        features = obs_raw[:, :godfield_core.OBSERVATION_FEATURE_SIZE]
-        obs = features[:, :self._obs_dim].copy()
-        masks = features[:, self._mask_start:self._mask_start + ACTION_SPACE_SIZE].copy()
+        features = obs_raw[:, : godfield_core.OBSERVATION_FEATURE_SIZE]
+        obs = features[:, : self._obs_dim].copy()
+        masks = features[:, self._mask_start : self._mask_start + ACTION_SPACE_SIZE].copy()
         return obs, masks
 
     def seed(self, seed: int | None = None) -> list[int | None]:
@@ -123,10 +121,7 @@ class GodFieldVectorEnv(VecEnv):
             actions = self.opponent.act(obs[pending], masks[pending].astype(bool))
             self.core_env.step_subset(pending.astype(np.int32), actions.astype(np.int32))
 
-        raise RuntimeError(
-            "相手の手番が既定回数内に終わりませんでした。"
-            "進行不能な状態に陥っている可能性があります。"
-        )
+        raise RuntimeError("相手の手番が既定回数内に終わりませんでした。進行不能な状態に陥っている可能性があります。")
 
     def step_wait(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[dict[str, Any]]]:
         self.core_env.step_all(np.array(self.actions, dtype=np.int32))
@@ -150,9 +145,7 @@ class GodFieldVectorEnv(VecEnv):
                 self.num_envs, self._obs_total
             )
             rewards = np.where(opp_terminated, opp_rewards, rewards)
-            terminal_obs = np.where(
-                opp_terminated[:, None], opp_terminal[:, : self._obs_dim], terminal_obs
-            )
+            terminal_obs = np.where(opp_terminated[:, None], opp_terminal[:, : self._obs_dim], terminal_obs)
             terminated |= opp_terminated
 
         obs, self._current_masks = self._get_obs_and_masks()
@@ -166,9 +159,7 @@ class GodFieldVectorEnv(VecEnv):
         # 手番も含めて1つの遷移とみなす）。
         if self.shaper is not None:
             next_potential = self._potential()
-            rewards = rewards + self.shaper.shape(
-                self._prev_potential, next_potential, terminated
-            )
+            rewards = rewards + self.shaper.shape(self._prev_potential, next_potential, terminated)
             # 終端の環境は自動リセット済みなので、次の局の Φ を起点にする
             self._prev_potential = next_potential
 
@@ -186,6 +177,9 @@ class GodFieldVectorEnv(VecEnv):
             np.ndarray of shape (num_envs, ACTION_SPACE_SIZE) with dtype bool.
         """
         return self._current_masks.astype(bool)
+
+    def get_opponent_true_hands(self) -> np.ndarray:
+        return self.core_env.get_opponent_true_hands(self.learner_seat)
 
     def get_attr(self, attr_name: str, indices=None) -> list[Any]:
         return [getattr(self, attr_name, None)] * len(self._get_indices(indices))

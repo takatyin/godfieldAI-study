@@ -3,6 +3,7 @@
 Handles categorical card ID features through embedding layers
 and combines them with continuous features.
 """
+
 import gymnasium as gym
 import torch
 import torch.nn as nn
@@ -49,8 +50,7 @@ _HP_EDGES = (5, 10, 15, 20, 25, 30, 35, 40)
 _MP_EDGES = (2, 5, 10, 15, 20, 30)
 _MONEY_EDGES = (1, 5, 10, 15, 20, 30, 50)
 # 観測での並び順（自HP, 敵HP, 自MP, 敵MP, 自金, 敵金）に閾値を割り当てる
-_STAT_EDGE_SETS = (_HP_EDGES, _HP_EDGES, _MP_EDGES, _MP_EDGES,
-                   _MONEY_EDGES, _MONEY_EDGES)
+_STAT_EDGE_SETS = (_HP_EDGES, _HP_EDGES, _MP_EDGES, _MP_EDGES, _MONEY_EDGES, _MONEY_EDGES)
 STAT_THERMOMETER_DIM = sum(len(e) for e in _STAT_EDGE_SETS)
 
 
@@ -85,21 +85,17 @@ def zero_gate() -> nn.Parameter:
 
 
 class GodFieldFeatureExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Box,
-                 card_embed_dim: int = 16,
-                 features_dim: int = 256):
+    def __init__(self, observation_space: gym.spaces.Box, card_embed_dim: int = 16, features_dim: int = 256):
         super().__init__(observation_space, features_dim)
 
         # Embedding for card IDs (+1 for CARD_EMPTY mapped to 0)
         self.card_embedding = nn.Embedding(
-            num_embeddings=NUM_CARD_TYPES + 1,
-            embedding_dim=card_embed_dim,
-            padding_idx=0
+            num_embeddings=NUM_CARD_TYPES + 1, embedding_dim=card_embed_dim, padding_idx=0
         )
 
         # Calculate dimensions
         num_card_slots = (MAX_HAND_SIZE * 4) + HISTORY_LENGTH
-        continuous_dim = CONTINUOUS_FEATURES_SIZE + (HISTORY_LENGTH * (EVENT_SIZE - 1)) + 1 # +1 for history_head
+        continuous_dim = CONTINUOUS_FEATURES_SIZE + (HISTORY_LENGTH * (EVENT_SIZE - 1)) + 1  # +1 for history_head
 
         total_input_dim = continuous_dim + (num_card_slots * card_embed_dim)
 
@@ -125,7 +121,7 @@ class GodFieldFeatureExtractor(BaseFeaturesExtractor):
         card_features = torch.clamp(card_features, min=0, max=NUM_CARD_TYPES)
 
         # Extract history events
-        history = observations[:, HISTORY_START:HISTORY_START + HISTORY_LENGTH * EVENT_SIZE]
+        history = observations[:, HISTORY_START : HISTORY_START + HISTORY_LENGTH * EVENT_SIZE]
         history = history.view(batch_size, HISTORY_LENGTH, EVENT_SIZE)
 
         # History continuous parts
@@ -146,13 +142,7 @@ class GodFieldFeatureExtractor(BaseFeaturesExtractor):
         embedded_history_cards = embedded_history_cards.view(batch_size, -1)
 
         # Concatenate everything
-        x = torch.cat([
-            cont_features,
-            embedded_cards,
-            history_cont,
-            embedded_history_cards,
-            history_head
-        ], dim=1)
+        x = torch.cat([cont_features, embedded_cards, history_cont, embedded_history_cards, history_head], dim=1)
 
         return self.linear(x)
 
@@ -173,14 +163,17 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
     ゼロになりますが、種別・位置の埋め込みを足すため実際には非ゼロになる点に注意。
     """
 
-    def __init__(self, observation_space: gym.spaces.Box,
-                 d_model: int = 128,
-                 nhead: int = 4,
-                 num_layers: int = 2,
-                 dim_feedforward: int = 256,
-                 dropout: float = 0.0,
-                 features_dim: int = 256,
-                 grad_checkpointing: bool = False):
+    def __init__(
+        self,
+        observation_space: gym.spaces.Box,
+        d_model: int = 128,
+        nhead: int = 4,
+        num_layers: int = 2,
+        dim_feedforward: int = 256,
+        dropout: float = 0.0,
+        features_dim: int = 256,
+        grad_checkpointing: bool = False,
+    ):
         super().__init__(observation_space, features_dim)
 
         if d_model % nhead != 0:
@@ -199,10 +192,8 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         for i, edges in enumerate(_STAT_EDGE_SETS):
             stat_index += [i] * len(edges)
             stat_edge += [e / STAT_SCALE for e in edges]
-        self.register_buffer("_stat_index", torch.tensor(stat_index, dtype=torch.long),
-                             persistent=False)
-        self.register_buffer("_stat_edge", torch.tensor(stat_edge, dtype=torch.float32),
-                             persistent=False)
+        self.register_buffer("_stat_index", torch.tensor(stat_index, dtype=torch.long), persistent=False)
+        self.register_buffer("_stat_edge", torch.tensor(stat_edge, dtype=torch.float32), persistent=False)
 
         # 2. Card Embeddings
         # Card ID embedding (includes +1 shift for CARD_EMPTY mapped to 0)
@@ -256,10 +247,7 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         )
 
         # Final projection from Global Token -> features_dim
-        self.final_proj = nn.Sequential(
-            nn.Linear(d_model, features_dim),
-            nn.ReLU()
-        )
+        self.final_proj = nn.Sequential(nn.Linear(d_model, features_dim), nn.ReLU())
 
     def _encode(self, seq: torch.Tensor, key_padding_mask: torch.Tensor) -> torch.Tensor:
         """Transformer を通します。grad_checkpointing なら層ごとに再計算します。
@@ -281,7 +269,9 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
 
         for layer in self.transformer.layers:
             seq = torch.utils.checkpoint.checkpoint(
-                layer, seq, src_key_padding_mask=key_padding_mask,
+                layer,
+                seq,
+                src_key_padding_mask=key_padding_mask,
                 # 既定(True)は入力の requires_grad を見て挙動が変わるうえ、
                 # autocast の状態を再計算時に引き継がない。
                 use_reentrant=False,
@@ -298,8 +288,7 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         # 「所持金が10円以上か」のような閾値をそのまま1次元にしたもの
         stat_therm = (stats[:, self._stat_index] >= self._stat_edge).to(cont_features.dtype)
         global_tokens = (
-            self.global_proj(cont_features)
-            + self.stat_thermometer_gate * self.stat_thermometer_proj(stat_therm)
+            self.global_proj(cont_features) + self.stat_thermometer_gate * self.stat_thermometer_proj(stat_therm)
         ).unsqueeze(1)  # [B, 1, d_model]
 
         # 2. Card Tokens
@@ -309,25 +298,25 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         card_ids = observations[:, cards_start:cards_end].long() + 1
         card_ids = torch.clamp(card_ids, min=0, max=NUM_CARD_TYPES)
 
-        card_embs = self.card_embedding(card_ids) # [B, 36, d_model]
+        card_embs = self.card_embedding(card_ids)  # [B, 36, d_model]
 
         # Create type indices: 9 of 0s, 9 of 1s, 9 of 2s, 9 of 3s
-        type_indices = torch.tensor(
-            [0]*MAX_HAND_SIZE + [1]*MAX_HAND_SIZE + [2]*MAX_HAND_SIZE + [3]*MAX_HAND_SIZE,
-            device=device
-        ).unsqueeze(0).expand(batch_size, -1)
-        type_embs = self.card_type_embedding(type_indices) # [B, 36, d_model]
+        type_indices = (
+            torch.tensor(
+                [0] * MAX_HAND_SIZE + [1] * MAX_HAND_SIZE + [2] * MAX_HAND_SIZE + [3] * MAX_HAND_SIZE, device=device
+            )
+            .unsqueeze(0)
+            .expand(batch_size, -1)
+        )
+        type_embs = self.card_type_embedding(type_indices)  # [B, 36, d_model]
 
         # カードごとの属性を、そのカードのトークンに足す。グローバルトークン側に
         # まとめて流すとどのカードの属性なのかが失われるので、ここで対応づける。
         #   ch0 … 自分のカードが相手に見えているか（自分の手札ブロックだけ）
         #   ch1 … 相手のカードが展開済みか（相手の手札ブロックだけ）
         # 仮置きの2ブロックには対応する属性が無いので0のまま。
-        flags = torch.zeros(batch_size, self.num_card_slots, 2,
-                            device=device, dtype=card_embs.dtype)
-        flags[:, :MAX_HAND_SIZE, 0] = observations[
-            :, HAND_KNOWN_TO_OPP_START : HAND_KNOWN_TO_OPP_START + MAX_HAND_SIZE
-        ]
+        flags = torch.zeros(batch_size, self.num_card_slots, 2, device=device, dtype=card_embs.dtype)
+        flags[:, :MAX_HAND_SIZE, 0] = observations[:, HAND_KNOWN_TO_OPP_START : HAND_KNOWN_TO_OPP_START + MAX_HAND_SIZE]
         flags[:, 2 * MAX_HAND_SIZE : 3 * MAX_HAND_SIZE, 1] = observations[
             :, OPP_DEPLOYED_START : OPP_DEPLOYED_START + MAX_HAND_SIZE
         ]
@@ -339,29 +328,26 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         card_tokens = card_embs + type_embs + self.card_flag_proj(flags) + card_attr_embs
 
         # 3. History Tokens
-        history = observations[:, HISTORY_START:HISTORY_START + HISTORY_LENGTH * EVENT_SIZE]
+        history = observations[:, HISTORY_START : HISTORY_START + HISTORY_LENGTH * EVENT_SIZE]
         history = history.view(batch_size, HISTORY_LENGTH, EVENT_SIZE)
 
         # continuous parts of history (everything except card_id at index 2)
-        hist_cont = torch.cat([history[:, :, :2], history[:, :, 3:]], dim=2) # [B, L, EVENT_SIZE-1]
-        hist_cont_embs = self.hist_cont_proj(hist_cont) # [B, L, d_model]
+        hist_cont = torch.cat([history[:, :, :2], history[:, :, 3:]], dim=2)  # [B, L, EVENT_SIZE-1]
+        hist_cont_embs = self.hist_cont_proj(hist_cont)  # [B, L, d_model]
 
         hist_card_ids = history[:, :, 2].long() + 1
         hist_card_ids = torch.clamp(hist_card_ids, min=0, max=NUM_CARD_TYPES)
-        hist_card_embs = self.card_embedding(hist_card_ids) # [B, L, d_model]
+        hist_card_embs = self.card_embedding(hist_card_ids)  # [B, L, d_model]
 
         # Positional encoding (0 to HISTORY_LENGTH-1)
         pos_indices = torch.arange(HISTORY_LENGTH, device=device).unsqueeze(0).expand(batch_size, -1)
-        hist_pos_embs = self.history_pos_emb(pos_indices) # [B, L, d_model]
+        hist_pos_embs = self.history_pos_emb(pos_indices)  # [B, L, d_model]
 
         # 履歴のカードにも同じ属性を足す。「相手が高い防具を出した」「MPの重い奇跡を
         # 撃った」といった読みは、IDだけでは学べない。
-        hist_attr_embs = self.card_attr_gate * self.card_attr_proj(
-            self.card_attrs[hist_card_ids]
-        )
+        hist_attr_embs = self.card_attr_gate * self.card_attr_proj(self.card_attrs[hist_card_ids])
 
-        hist_tokens = (hist_cont_embs + hist_card_embs + hist_pos_embs
-                       + hist_attr_embs)  # [B, L, d_model]
+        hist_tokens = hist_cont_embs + hist_card_embs + hist_pos_embs + hist_attr_embs  # [B, L, d_model]
 
         # 4. Concatenate Sequence
         # Sequence: [Global Token (1), Card Tokens (MAX_HAND_SIZE*4), Hist Tokens (HISTORY_LENGTH)]
@@ -370,7 +356,7 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         # 5. 空スロット・未発生の履歴を注意の対象から外す。
         #    外さないと、空きが多い序盤ほど意味のないトークンに注意が吸われる。
         #    グローバルトークンは常に有効。
-        card_pad = card_ids == 0                                  # CARD_EMPTY(+1) は 0
+        card_pad = card_ids == 0  # CARD_EMPTY(+1) は 0
         hist_pad = history[:, :, EVENT_TYPE_INDEX] == float(EVENT_TYPE_NONE)
         global_pad = torch.zeros(batch_size, 1, dtype=torch.bool, device=device)
         key_padding_mask = torch.cat([global_pad, card_pad, hist_pad], dim=1)
@@ -379,6 +365,6 @@ class GodFieldTransformerExtractor(BaseFeaturesExtractor):
         out_seq = self._encode(seq, key_padding_mask)
 
         # 7. Extract Global Token (Index 0)
-        global_out = out_seq[:, 0, :] # [B, d_model]
+        global_out = out_seq[:, 0, :]  # [B, d_model]
 
         return self.final_proj(global_out)

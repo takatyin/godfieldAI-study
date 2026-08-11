@@ -90,8 +90,8 @@ def sell_card_id() -> int:
 
 @dataclass
 class BuyDecision:
-    card: int      # 公開された札
-    money: int     # 買う側の所持金
+    card: int  # 公開された札
+    money: int  # 買う側の所持金
     bought: bool
 
     @property
@@ -101,8 +101,8 @@ class BuyDecision:
 
 @dataclass
 class SellDecision:
-    picked: int          # 出品した札
-    choices: list[int]   # 選べた札
+    picked: int  # 出品した札
+    choices: list[int]  # 選べた札
     opp_money: int
     opp_mp: int
 
@@ -132,10 +132,7 @@ class TradeStats:
 
     def buy_rate(self, matches) -> tuple[int, float]:
         """条件に合い、かつ所持金が足りる局面での受諾率。"""
-        rows = [
-            b for b in self.buys
-            if matches(feature(b.card, "type", ""), price_of(b.card)) and b.affordable
-        ]
+        rows = [b for b in self.buys if matches(feature(b.card, "type", ""), price_of(b.card)) and b.affordable]
         if not rows:
             return 0, float("nan")
         return len(rows), sum(1 for b in rows if b.bought) / len(rows)
@@ -158,9 +155,7 @@ class TradeProbe:
             if offered is None:
                 self.stats.unreadable += 1
                 continue
-            self.stats.buys.append(
-                BuyDecision(offered, view.my_money(i), int(actions[i]) == ACTION_DEAL_YES)
-            )
+            self.stats.buys.append(BuyDecision(offered, view.my_money(i), int(actions[i]) == ACTION_DEAL_YES))
 
         for i in view.rows(PHASE_SELL_SELECT):
             a = int(actions[i])
@@ -170,9 +165,7 @@ class TradeProbe:
             picked = view.hand(i)[a]
             if picked < 0:
                 continue
-            self.stats.sells.append(
-                SellDecision(int(picked), choices, view.opp_money(i), view.opp_mp(i))
-            )
+            self.stats.sells.append(SellDecision(int(picked), choices, view.opp_money(i), view.opp_mp(i)))
 
         for i in view.rows(PHASE_TARGET_SELECT):
             if self.sell_id in view.staged(i):
@@ -187,8 +180,15 @@ class TradeOverride:
     学習し直さずに「直す価値」を勝率で測るために使います。
     """
 
-    def __init__(self, policy, sell_id: int, *, buy_obvious: bool = False,
-                 sell_to_opponent: bool = False, sell_highest: bool = False):
+    def __init__(
+        self,
+        policy,
+        sell_id: int,
+        *,
+        buy_obvious: bool = False,
+        sell_to_opponent: bool = False,
+        sell_highest: bool = False,
+    ):
         self.policy = policy
         self.sell_id = sell_id
         self.buy_obvious = buy_obvious
@@ -310,13 +310,15 @@ class ValueResult:
         return abs(self.delta) > 2 * self.delta_stderr
 
 
-def measure_value(policy, opponent, sell_id: int, *, games: int, num_envs: int = 256,
-                  seed: int = 0) -> tuple[float, float, list[ValueResult]]:
+def measure_value(
+    policy, opponent, sell_id: int, *, games: int, num_envs: int = 256, seed: int = 0
+) -> tuple[float, float, list[ValueResult]]:
     """判断を直したときに勝率がどれだけ変わるかを測ります。
 
     学習し直さずに「直す価値」が分かります。上書きの回数も返すので、
     「わずかな回数で大きく動く＝1回あたりの価値が高い」判断を見分けられます。
     """
+
     def play(pol):
         fwd, rev, wr = play_both_seats(pol, opponent, games=games, num_envs=num_envs, seed=seed)
         n = fwd.games + rev.games
@@ -334,10 +336,16 @@ def measure_value(policy, opponent, sell_id: int, *, games: int, num_envs: int =
     ):
         override = TradeOverride(policy, sell_id, **kwargs)
         wr, se = play(override)
-        results.append(ValueResult(
-            label, wr, se, (wr - base) * 100,
-            math.sqrt(base_se ** 2 + se ** 2), override.changed,
-        ))
+        results.append(
+            ValueResult(
+                label,
+                wr,
+                se,
+                (wr - base) * 100,
+                math.sqrt(base_se**2 + se**2),
+                override.changed,
+            )
+        )
     return base, base_se, results
 
 

@@ -95,6 +95,45 @@ pybind11::array_t<int> EnvPool::get_player_stats() {
     );
 }
 
+pybind11::array_t<int> EnvPool::get_opponent_true_hands(int player_id){
+    if(player_id < 0 || player_id > 1){
+        throw std::runtime_error(
+            "get_opponent_true_hands: player_idは０　か　１　である必要があります"
+        );
+    }
+
+    int opp = 1 - player_id;
+
+    opponent_true_hands_.resize(
+        static_cast<size_t>(num_envs_) * MAX_HAND_SIZE
+    );
+
+    for(int env_id = 0; env_id < num_envs_; env_id++){
+        const InternalState& state = states_[env_id];
+
+        for(int h = 0; h < MAX_HAND_SIZE; h++){
+            opponent_true_hands_[
+                static_cast<size_t>(env_id) * MAX_HAND_SIZE + h
+            ] = state.true_hand[opp][h];
+        }
+    }
+
+    pybind11::handle base = pybind11::cast(this);
+
+    return pybind11::array_t<int>(
+        {
+            static_cast<pybind11::ssize_t>(num_envs_),
+            static_cast<pybind11::ssize_t>(MAX_HAND_SIZE)
+        },
+        {
+            static_cast<pybind11::ssize_t>(sizeof(int) * MAX_HAND_SIZE),
+            static_cast<pybind11::ssize_t>(sizeof(int))
+        },
+        opponent_true_hands_.data(),
+        base
+    );
+}
+
 pybind11::array_t<int> EnvPool::get_current_actors() {
     pybind11::handle base = pybind11::cast(this);
     return pybind11::array_t<int>(

@@ -49,12 +49,19 @@ from godfield_rl.feature_config import NUM_CARD_TYPES
 
 # カードマスタに実在する値。想定外の値が来たら黙って落とさず気付けるよう、
 # ここに列挙したものだけを受け付ける。
-CARD_TYPES = ("deal", "defense", "devil", "guardian", "miracle", "phenomena",
-              "sundry", "weapon")
+CARD_TYPES = ("deal", "defense", "devil", "guardian", "miracle", "phenomena", "sundry", "weapon")
 ELEMENTS = ("火", "水", "木", "土", "光", "闇")
-USAGE_TIMINGS = ("main_atk_phase", "main_miracle_phase", "main_sundry_phase",
-                 "main_deal_phase", "atk_plus_phase", "miracle_plus_phase",
-                 "atk_defence_phase", "miracle_defence_phase", "guardian_phase")
+USAGE_TIMINGS = (
+    "main_atk_phase",
+    "main_miracle_phase",
+    "main_sundry_phase",
+    "main_deal_phase",
+    "atk_plus_phase",
+    "miracle_plus_phase",
+    "atk_defence_phase",
+    "miracle_defence_phase",
+    "guardian_phase",
+)
 REACTION_TYPES = ("block", "bounce", "reflect")
 HIT_CURSES = ("cold", "dark cloud", "dream", "flash", "fog", "heaven", "hell")
 
@@ -117,8 +124,7 @@ def _row(card: dict) -> list[float]:
     card_type = card.get("type")
     if card_type not in CARD_TYPES:
         raise ValueError(
-            f"未知のカード種別 {card_type!r}（{card.get('name')}）。"
-            f" card_features.CARD_TYPES に追加してください。"
+            f"未知のカード種別 {card_type!r}（{card.get('name')}）。 card_features.CARD_TYPES に追加してください。"
         )
     out += [1.0 if card_type == t else 0.0 for t in CARD_TYPES]
 
@@ -161,9 +167,7 @@ def card_attribute_table() -> np.ndarray:
     for card in all_cards():
         row = _row(card)
         if len(row) != len(names):
-            raise AssertionError(
-                f"特徴の数が feature_names() と一致しません: {len(row)} != {len(names)}"
-            )
+            raise AssertionError(f"特徴の数が feature_names() と一致しません: {len(row)} != {len(names)}")
         table[int(card["id"]) + 1] = row
     return table
 

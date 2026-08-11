@@ -32,9 +32,15 @@ PHASE_TARGET_SELECT = int(godfield_core.GamePhase.PHASE_MAIN_TARGET_SELECT)
 # 貝がらは回復ではなく災いを払うカードなので、こちらに災いが無い局面では
 # どちらを選んでも何も起きない。確率が 0.5 付近に留まりやすいのはそのため。
 SELF_ONLY_CARD_NAMES = (
-    "スマイルのしずく", "ハートのしずく", "ロマンスウォーター", "天の川のおいしい水",
-    "スマイルの花", "ハートの花", "ロマンスの香木",
-    "スマイルの貝がら", "ハートの貝がら",
+    "スマイルのしずく",
+    "ハートのしずく",
+    "ロマンスウォーター",
+    "天の川のおいしい水",
+    "スマイルの花",
+    "ハートの花",
+    "ロマンスの香木",
+    "スマイルの貝がら",
+    "ハートの貝がら",
     "守護封印のつぼ",
 )
 
@@ -45,22 +51,28 @@ SELF_ONLY_CARD_NAMES = (
 # ものを相手に売れば有利だが、自分にも重要なものや安いものを売るのは明確な損）。
 # 一律に「相手が正解」として測ると、正しい手まで誤りに数えてしまう。
 OPPONENT_ONLY_CARD_NAMES = (
-    "女神の石けん", "夜空のホウキ", "買う",
+    "女神の石けん",
+    "夜空のホウキ",
+    "買う",
 )
 
 # 「そのカードが効く局面か」の判定に使う観測の位置。
-SICKNESS_COLD, SICKNESS_FEVER = 1, 2          # 0 は「病なし」
-CURSE_FOG, CURSE_FLASH = 0, 1                 # 霧, 閃光（multi-hot）
+SICKNESS_COLD, SICKNESS_FEVER = 1, 2  # 0 は「病なし」
+CURSE_FOG, CURSE_FLASH = 0, 1  # 霧, 閃光（multi-hot）
 
 # カードごとに、効く条件が違う。全体の平均だけを見ると
 # 「どちらに使っても何も起きない局面」に薄められて、肝心の
 # 「効く局面でどちらを選んでいるか」が見えなくなる。
 RELEVANCE_KIND_BY_CARD = {
-    "スマイルの貝がら": "smile_shell",   # 風邪・熱病・霧・閃光を払う
-    "ハートの貝がら": "heart_shell",     # 全ての災いを払う
-    "スマイルのしずく": "hp", "ハートのしずく": "hp",
-    "ロマンスウォーター": "hp", "天の川のおいしい水": "hp",
-    "スマイルの花": "mp", "ハートの花": "mp", "ロマンスの香木": "mp",
+    "スマイルの貝がら": "smile_shell",  # 風邪・熱病・霧・閃光を払う
+    "ハートの貝がら": "heart_shell",  # 全ての災いを払う
+    "スマイルのしずく": "hp",
+    "ハートのしずく": "hp",
+    "ロマンスウォーター": "hp",
+    "天の川のおいしい水": "hp",
+    "スマイルの花": "mp",
+    "ハートの花": "mp",
+    "ロマンスの香木": "mp",
 }
 
 # 効く局面かどうかで分けたときの内訳。相手側は霧だと観測が 0 埋めされるので、
@@ -123,15 +135,21 @@ def target_select_rows(obs: np.ndarray, masks: np.ndarray) -> np.ndarray:
 
 def _focus_spec(names: tuple[str, ...], direction: str):
     right, wrong = (
-        (ACTION_TARGET_SELF, ACTION_TARGET_OPP) if direction == "self"
-        else (ACTION_TARGET_OPP, ACTION_TARGET_SELF)
+        (ACTION_TARGET_SELF, ACTION_TARGET_OPP) if direction == "self" else (ACTION_TARGET_OPP, ACTION_TARGET_SELF)
     )
     return _card_ids(names), right, wrong
 
 
-def run(learner, *, num_envs: int, steps: int, seed: int, opponent: str = "strategic",
-        focus: dict[str, tuple[tuple[str, ...], str]] | None = None,
-        apply: str | None = None) -> dict:
+def run(
+    learner,
+    *,
+    num_envs: int,
+    steps: int,
+    seed: int,
+    opponent: str = "strategic",
+    focus: dict[str, tuple[tuple[str, ...], str]] | None = None,
+    apply: str | None = None,
+) -> dict:
     """1回まわして、対象選択の統計・エピソード長・勝敗を集めます。
 
     focus には「対象を間違えたら数えたいカード群」を名前つきで渡します。渡した
@@ -158,9 +176,7 @@ def run(learner, *, num_envs: int, steps: int, seed: int, opponent: str = "strat
     per_card: dict[int, list[int]] = defaultdict(lambda: [0, 0])  # id -> [遭遇, 相手を選んだ]
     prob_to_opp: dict[int, list[float]] = defaultdict(list)
     # id -> 局面の種類ごとの [遭遇, 相手を選んだ]
-    per_bucket: dict[int, list[list[int]]] = defaultdict(
-        lambda: [[0, 0] for _ in range(NUM_BUCKETS)]
-    )
+    per_bucket: dict[int, list[list[int]]] = defaultdict(lambda: [[0, 0] for _ in range(NUM_BUCKETS)])
     ep_steps = np.zeros(num_envs, dtype=np.int64)
     lengths: list[int] = []
     results: list[float] = []
@@ -185,9 +201,7 @@ def run(learner, *, num_envs: int, steps: int, seed: int, opponent: str = "strat
             chose_opp = actions[idx] == ACTION_TARGET_OPP
             rel = relevance(obs[idx])
             fogged = obs[idx, fc.CURSES_START + CURSE_FOG] > 0.5
-            for j, (cid, opp, p) in enumerate(
-                zip(staged, chose_opp, probs[idx, ACTION_TARGET_OPP])
-            ):
+            for j, (cid, opp, p) in enumerate(zip(staged, chose_opp, probs[idx, ACTION_TARGET_OPP])):
                 cid = int(cid)
                 per_card[cid][0] += 1
                 per_card[cid][1] += int(opp)
@@ -210,12 +224,7 @@ def run(learner, *, num_envs: int, steps: int, seed: int, opponent: str = "strat
             staged_all = obs[:, fc.STAGED_CARDS_START].astype(int)
             in_phase = obs[:, fc.PHASE_START + PHASE_TARGET_SELECT] > 0.5
             for label, (card_ids_, right, wrong) in specs.items():
-                bad = (
-                    in_phase
-                    & np.isin(staged_all, list(card_ids_))
-                    & masks[:, right]
-                    & (actions == wrong)
-                )
+                bad = in_phase & np.isin(staged_all, list(card_ids_)) & masks[:, right] & (actions == wrong)
                 hits[label] += int(bad.sum())
                 flagged[label] |= bad
                 if label == apply:

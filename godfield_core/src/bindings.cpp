@@ -758,6 +758,7 @@ PYBIND11_MODULE(godfield_core, m) {
              "並びは [p0_hp, p0_mp, p0_money, p1_hp, p1_mp, p1_money]。"
              "観測は霧がかかると相手の値が0に潰れるため、報酬シェーピングには"
              "こちらを使ってください。")
+        .def("get_opponent_true_hands", &EnvPool::get_opponent_true_hands, py::arg("player_id"))
         .def("get_rewards_for", &EnvPool::get_rewards_for, py::arg("player_id"))
         .def("get_terminal_observations_for", &EnvPool::get_terminal_observations_for, py::arg("player_id"))
         .def("get_rewards", &EnvPool::get_rewards)

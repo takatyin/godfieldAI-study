@@ -1,0 +1,15 @@
+schema_version = 1
+experiment = "privileged_critic"
+variant = "privileged"
+
+[model]
+algorithm = "PrivilegedMaskablePPO"
+policy = "PrivilegedMaskableActorCriticPolicy（AMP 有効時は AmpPrivilegedMaskableActorCriticPolicy）"
+actor_input = "通常観測 o_t のみ"
+critic_input = "通常観測 o_t と opponent true hand h_t"
+privileged_critic = true
+feature_extractor_sharing = "Actor/Critic で非共有（現行 privileged policy が強制）"
+
+[cli]
+# common.toml の共通引数に追加する唯一の実験条件差。
+extra_args = ["--privileged-critic"]

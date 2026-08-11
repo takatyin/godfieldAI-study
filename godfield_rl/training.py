@@ -29,6 +29,9 @@ from godfield_rl.opponents import (
     make_opponent,
 )
 from godfield_rl.shaping import make_shaper
+from godfield_rl.amp import policy_class
+from godfield_rl.privileged.amp import privileged_policy_class
+from godfield_rl.privileged.ppo import PrivilegedMaskablePPO
 
 EVAL_NUM_ENVS = 100
 EVAL_EPISODES = 50
@@ -135,8 +138,14 @@ def build_envs(cfg: TrainingConfig, opponent) -> tuple[GodFieldVectorEnv, GodFie
 
 
 def build_model(cfg: TrainingConfig, env: GodFieldVectorEnv, device: str) -> MaskablePPO:
-    return MaskablePPO(
-        policy_class(cfg.amp),
+    if cfg.privileged_critic:
+        model_class = PrivilegedMaskablePPO
+        policy = privileged_policy_class(cfg.amp)
+    else:
+        model_class = MaskablePPO
+        policy = policy_class(cfg.amp)
+    return model_class(
+        policy,
         env,
         policy_kwargs=build_policy_kwargs(cfg),
         learning_rate=cfg.lr,

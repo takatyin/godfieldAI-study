@@ -48,22 +48,16 @@ class AmpMaskableActorCriticPolicy(MaskableActorCriticPolicy):
     """
 
     def _autocast(self):
-        return torch.autocast(
-            "cuda", dtype=torch.bfloat16, enabled=torch.cuda.is_available()
-        )
+        return torch.autocast("cuda", dtype=torch.bfloat16, enabled=torch.cuda.is_available())
 
     def forward(self, obs, deterministic: bool = False, action_masks=None):
         with self._autocast():
-            actions, values, log_prob = super().forward(
-                obs, deterministic=deterministic, action_masks=action_masks
-            )
+            actions, values, log_prob = super().forward(obs, deterministic=deterministic, action_masks=action_masks)
         return actions, values.float(), log_prob.float()
 
     def evaluate_actions(self, obs, actions, action_masks=None):
         with self._autocast():
-            values, log_prob, entropy = super().evaluate_actions(
-                obs, actions, action_masks=action_masks
-            )
+            values, log_prob, entropy = super().evaluate_actions(obs, actions, action_masks=action_masks)
         # 損失の集約と最適化は fp32 で行う。ここを bf16 のまま返すと、
         # 平均を取る段階で仮数部の不足が効いてくる。
         return (

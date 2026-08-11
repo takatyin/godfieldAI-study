@@ -181,11 +181,11 @@ class PoolOpponent:
         curriculum_end: float = 0.3,
     ):
         """Args:
-            anchors: 学習を通じて固定の相手。**弱い順に並べる**こと。
-            snapshots: 自己対戦のプール。SelfPlayCallback が入れ替えます。
-            anchor_ratio: 錨と当たる確率。分身がまだ1体も無い間は常に錨を使います。
-            curriculum_end: 学習の何割の時点で最強の錨だけになるか。
-                0 にすると最初から最強の錨だけを使います。
+        anchors: 学習を通じて固定の相手。**弱い順に並べる**こと。
+        snapshots: 自己対戦のプール。SelfPlayCallback が入れ替えます。
+        anchor_ratio: 錨と当たる確率。分身がまだ1体も無い間は常に錨を使います。
+        curriculum_end: 学習の何割の時点で最強の錨だけになるか。
+            0 にすると最初から最強の錨だけを使います。
         """
         if not 0.0 <= anchor_ratio <= 1.0:
             raise ValueError(f"anchor_ratio は 0..1 で指定してください: {anchor_ratio}")
@@ -241,10 +241,7 @@ class PoolOpponent:
 
     def describe_anchors(self) -> str:
         """今の錨の配分を1行で表します（ログ用）。"""
-        return " / ".join(
-            f"{type(a).__name__}:{w:.0%}"
-            for a, w in zip(self.anchors, self.anchor_weights())
-        )
+        return " / ".join(f"{type(a).__name__}:{w:.0%}" for a, w in zip(self.anchors, self.anchor_weights()))
 
     def act(self, observations: np.ndarray, action_masks: np.ndarray) -> np.ndarray:
         return self.select().act(observations, action_masks)

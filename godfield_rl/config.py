@@ -81,6 +81,10 @@ class TrainingConfig:
     # コメント参照）、そちらを避けるための手段。
     grad_checkpointing: bool = False
 
+    # Critic のみ相手の真の手札を追加で利用する。
+    # Actor は通常観測だけを使うため、推論時には privileged 情報を必要としない。
+    privileged_critic: bool = False
+
     # --- 対戦相手 ----------------------------------------------------------
     opponent: str = "strategic"
     self_play: bool = False
@@ -119,9 +123,7 @@ class TrainingConfig:
 
     def __post_init__(self) -> None:
         if self.use_transformer and self.d_model % self.nhead != 0:
-            raise ValueError(
-                f"d_model({self.d_model}) は nhead({self.nhead}) で割り切れる必要があります"
-            )
+            raise ValueError(f"d_model({self.d_model}) は nhead({self.nhead}) で割り切れる必要があります")
         if self.batch_size > self.num_envs * self.n_steps:
             raise ValueError(
                 f"batch_size({self.batch_size}) が1回のロールアウト"
@@ -130,14 +132,9 @@ class TrainingConfig:
         if self.opponent not in OPPONENT_KINDS:
             raise ValueError(f"未知の相手方策です: {self.opponent!r}")
         if not 0.0 <= self.anchor_ratio <= 1.0:
-            raise ValueError(
-                f"anchor_ratio は 0..1 で指定してください: {self.anchor_ratio}"
-            )
+            raise ValueError(f"anchor_ratio は 0..1 で指定してください: {self.anchor_ratio}")
         if not 0.0 <= self.anchor_curriculum_end <= 1.0:
-            raise ValueError(
-                "anchor_curriculum_end は 0..1 で指定してください: "
-                f"{self.anchor_curriculum_end}"
-            )
+            raise ValueError(f"anchor_curriculum_end は 0..1 で指定してください: {self.anchor_curriculum_end}")
 
 
 # 型ごとの argparse への渡し方。dataclass の定義を唯一の情報源にして、
@@ -167,6 +164,7 @@ _HELP = {
     # リテラルの % は %% と書く必要がある。
     "amp": "bfloat16の自動混合精度で学習する（VRAM約35%%減・約1.9倍速）",
     "grad_checkpointing": "活性を保持せず再計算してVRAMを削る（逆伝播が約1.3倍）",
+    "privileged_critic": "Critic のみ相手の真の手札を利用する非対称 Actor-Critic",
     "opponent": "環境内部で相手の手番を指す方策",
     "self_play": "自己対戦リーグを有効にする",
     "self_play_save_freq": "何ステップごとにモデルをプールへ保存するか",
@@ -195,8 +193,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
             # 既定が True のものは --no-xxx で切れるようにする
             if default:
                 parser.add_argument(
-                    "--no-" + f.name.replace("_", "-"), dest=f.name,
-                    action="store_false", help=f"{help_text}（既定で有効）",
+                    "--no-" + f.name.replace("_", "-"),
+                    dest=f.name,
+                    action="store_false",
+                    help=f"{help_text}（既定で有効）",
                 )
             else:
                 parser.add_argument(flag, dest=f.name, action="store_true", help=help_text)
