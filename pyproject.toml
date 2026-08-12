@@ -38,7 +38,7 @@ build-backend = "setuptools.build_meta"
 # CPU 版で学習すると PPO の更新（実測で学習時間の 2/3〜9割）がすべて CPU で回る。
 [[tool.uv.index]]
 name = "pytorch-cuda"
-url = "https://download.pytorch.org/whl/cu130"
+url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [tool.uv.sources]
