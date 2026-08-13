@@ -1,0 +1,102 @@
+schema_version = 1
+run_id = "privileged_critic_privileged_s42_20260813T065100Z"
+pair_id = "privileged_critic_s42_20260813T065100Z"
+experiment = "privileged_critic"
+variant = "privileged"
+run_kind = "smoke_test"
+status = "failed"
+started_at_utc = "2026-08-13T06:51:00Z"
+finished_at_utc = "2026-08-13T06:52:06Z"
+exit_code = 1
+
+[source]
+git_commit = "237627be5672abe215a2c57f39a45121ef7537ec"
+git_branch = "study"
+working_tree_dirty = true
+uv_lock_sha256 = "8038385a19405bcee6cb3dfcaa36fcd6f2c0af0dfec2d193510c601d2841431d"
+common_definition = "experiments/privileged_critic/common.toml"
+variant_definition = "experiments/privileged_critic/privileged/variant.toml"
+
+[resolved_training]
+num_envs = 1000
+total_timesteps = 10000
+seed = 42
+lr = 5.845e-05
+n_steps = 256
+batch_size = 2048
+n_epochs = 10
+target_kl = 0.03
+ent_coef = 0.01
+clip_range = 0.3
+gamma = 0.995
+shape_hp = 0.2
+shape_mp = 0.0
+shape_money = 0.0
+shape_hand = 0.0
+use_transformer = true
+d_model = 192
+nhead = 8
+num_layers = 4
+dim_feedforward = 768
+features_dim = 256
+amp = true
+grad_checkpointing = false
+privileged_critic = true
+opponent = "strategic"
+self_play = false
+self_play_save_freq = 1000000
+pool_dir = "models/league_v5"
+worker_id = 0
+start_opponent_model = ""
+anchor_ratio = 0.5
+anchor_kinds = "heuristic,strategic"
+anchor_curriculum_end = 0.3
+tensorboard_log = "logs/tb"
+save_path = "godfield_agent"
+wandb = false
+wandb_project = "godfield-rl-privileged-critic"
+wandb_name = ""
+
+[inherited_ppo_defaults]
+gae_lambda = 0.95
+clip_range_vf = "none"
+normalize_advantage = true
+vf_coef = 0.5
+max_grad_norm = 0.5
+policy_mlp_pi = [64, 64]
+policy_mlp_vf = [64, 64]
+activation = "Tanh"
+orthogonal_initialization = true
+
+[resolved_evaluation]
+tool = "tools/evaluate.py"
+opponent = "strategic"
+games_per_seat = 3000
+num_envs = 512
+both_seats = true
+deterministic = true
+amp = true
+reward_shaping = false
+seed = 10042
+
+[environment]
+python_executable = ".venv/bin/python"
+python_version = "3.10.20"
+torch_version = "2.13.0+cu126"
+torch_cuda_version = "12.6"
+gpu_name = "NVIDIA A100-PCIE-40GB"
+requested_gpu_id = "1"
+visible_cuda_device = "cuda:0"
+
+[artifacts]
+directory = "runs/privileged_critic/privileged_critic_privileged_s42_20260813T065100Z"
+model = "runs/privileged_critic/privileged_critic_privileged_s42_20260813T065100Z/checkpoints/final_model.zip"
+model_sha256 = ""
+tensorboard = "runs/privileged_critic/privileged_critic_privileged_s42_20260813T065100Z/tensorboard"
+stdout_log = "runs/privileged_critic/privileged_critic_privileged_s42_20260813T065100Z/logs/train.log"
+command_log = "runs/privileged_critic/privileged_critic_privileged_s42_20260813T065100Z/logs/command.log"
+eval_log = "runs/privileged_critic/privileged_critic_privileged_s42_20260813T065100Z/logs/eval.log"
+wandb_run = ""
+
+[notes]
+text = "training command exited non-zero; see logs/train.log"
