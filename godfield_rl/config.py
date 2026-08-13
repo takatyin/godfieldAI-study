@@ -66,6 +66,7 @@ class TrainingConfig:
     shape_hp: float = 0.2
     shape_mp: float = 0.0
     shape_money: float = 0.0
+    shape_hand: float = 0.0
 
     # --- ネットワーク ------------------------------------------------------
     use_transformer: bool = True
@@ -154,6 +155,7 @@ _HELP = {
     "shape_hp": "HP差のポテンシャル重み（0で無効）",
     "shape_mp": "MP差のポテンシャル重み。大きくすると温存を覚えるので小さく",
     "shape_money": "所持金差のポテンシャル重み。同上",
+    "shape_hand": "手札価値差のポテンシャル重み",
     "use_transformer": "Transformerを使う（切るとMLP）",
     "d_model": "Transformerの埋め込み次元（nheadで割り切れること）",
     "nhead": "Transformerのヘッド数",

@@ -8,6 +8,7 @@ from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 from godfield_rl.feature_config import MAX_HAND_SIZE, NUM_CARD_TYPES
 
 
+
 class PrivilegedMaskableActorCriticPolicy(MaskableActorCriticPolicy):
     """Actor は通常観測のみ、Critic は相手の真の手札も使う非対称 Actor-Critic。
 
@@ -46,7 +47,9 @@ class PrivilegedMaskableActorCriticPolicy(MaskableActorCriticPolicy):
         self._build_mlp_extractor()
 
         # Actor の latent 表現から action distribution のパラメータを出力する層。
-        self.action_net = self.action_dist.proba_distribution_net(latent_dim=self.mlp_extractor.latent_dim_pi)
+        self.action_net = self.action_dist.proba_distribution_net(
+            latent_dim=self.mlp_extractor.latent_dim_pi
+        )
 
         # Critic の latent 表現からスカラー value を出力する層。
         self.value_net = nn.Linear(
@@ -79,7 +82,8 @@ class PrivilegedMaskableActorCriticPolicy(MaskableActorCriticPolicy):
         # features_dim へ戻す。
         self.critic_fusion = nn.Sequential(
             nn.Linear(
-                self.features_dim + MAX_HAND_SIZE * self.hand_embed_dim,
+                self.features_dim
+                + MAX_HAND_SIZE * self.hand_embed_dim,
                 self.features_dim,
             ),
             nn.ReLU(),
@@ -105,7 +109,9 @@ class PrivilegedMaskableActorCriticPolicy(MaskableActorCriticPolicy):
 
             for module, gain in module_gains.items():
                 # gain を固定した init_weights を各 submodule に再帰適用する。
-                module.apply(partial(self.init_weights, gain=gain))
+                module.apply(
+                    partial(self.init_weights, gain=gain)
+                )
 
         # privileged module を全て登録した「後」で optimizer を作る。
         # これにより hand embedding / critic_fusion も self.parameters()
@@ -179,7 +185,9 @@ class PrivilegedMaskableActorCriticPolicy(MaskableActorCriticPolicy):
         if action_masks is not None:
             distribution.apply_masking(action_masks)
 
-        actions = distribution.get_actions(deterministic=deterministic)
+        actions = distribution.get_actions(
+            deterministic=deterministic
+        )
 
         log_prob = distribution.log_prob(actions)
 

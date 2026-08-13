@@ -19,7 +19,14 @@ from godfield_rl.privileged.buffer import PrivilegedRolloutBuffer
 
 
 class PrivilegedMaskablePPO(MaskablePPO):
+    """Critic だけが相手の真の手札を使う MaskablePPO。
+
+    Rollout の各時刻で通常観測 ``o_t`` と相手の真の手札 ``h_t`` を対応づけて保存し、
+    Actor は ``pi(a | o_t)``、Critic は ``V(o_t, h_t)`` として学習する。
+    """
+
     def __init__(self, *args, **kwargs):
+        """Privileged 情報を保持できる rollout buffer を指定して初期化する。"""
         # 通常の MaskableRolloutBuffer の代わりに、
         # opponent_true_hands を保存できる buffer を使う。
         kwargs["rollout_buffer_class"] = PrivilegedRolloutBuffer
@@ -41,11 +48,13 @@ class PrivilegedMaskablePPO(MaskablePPO):
 
         assert self._last_obs is not None, "No previous observation was provided"
 
+        # Rollout 収集では勾配を作らず、Dropout 等も推論時の挙動にする。
         self.policy.set_training_mode(False)
 
         n_steps = 0
         action_masks = None
 
+        # 前回の rollout を破棄し、時刻0から新しいデータを収集する。
         rollout_buffer.reset()
 
         if use_masking and not is_masking_supported(env):
@@ -101,13 +110,16 @@ class PrivilegedMaskablePPO(MaskablePPO):
             # a_t を環境へ適用して o_{t+1} へ
             new_obs, rewards, dones, infos = env.step(clipped_actions)
 
+            # VecEnv の1 step で並列環境数ぶんの遷移を収集したことになる。
             self.num_timesteps += env.num_envs
 
+            # SB3 の callback 互換性を保ち、収集中の値を callback から参照可能にする。
             callback.update_locals(locals())
 
             if not callback.on_step():
                 return False
 
+            # episode reward / length など、親実装と同じ統計を更新する。
             self._update_info_buffer(infos, dones)
 
             n_steps += 1
@@ -154,6 +166,7 @@ class PrivilegedMaskablePPO(MaskablePPO):
                 action_masks=action_masks,
             )
 
+            # 次の反復では o_{t+1} と、その時点で取得した h_{t+1} を組にする。
             self._last_obs = new_obs
             self._last_episode_starts = dones
 
@@ -180,6 +193,7 @@ class PrivilegedMaskablePPO(MaskablePPO):
                 last_hands_tensor,
             )
 
+        # 保存済みの reward / value と末尾の V(o_T, h_T) から GAE と return を作る。
         rollout_buffer.compute_returns_and_advantage(
             last_values=values,
             dones=dones,
@@ -202,10 +216,13 @@ class PrivilegedMaskablePPO(MaskablePPO):
         に変更する。
         """
 
+        # Dropout 等を学習時の挙動に戻し、optimizer 用の勾配を有効にする。
         self.policy.set_training_mode(True)
 
+        # schedule を現在の学習進捗に合わせて更新する。
         self._update_learning_rate(self.policy.optimizer)
 
+        # policy/value のクリップ幅も schedule から今回の値を得る。
         clip_range = self.clip_range(self._current_progress_remaining)
 
         if self.clip_range_vf is not None:
@@ -226,6 +243,7 @@ class PrivilegedMaskablePPO(MaskablePPO):
             for rollout_data in self.rollout_buffer.get(self.batch_size):
                 actions = rollout_data.actions
 
+                # Discrete distribution は action を一次元の整数列として受け取る。
                 if isinstance(
                     self.action_space,
                     spaces.Discrete,
@@ -253,6 +271,7 @@ class PrivilegedMaskablePPO(MaskablePPO):
                 # Advantage normalization
                 advantages = rollout_data.advantages
 
+                # 1サンプルでは標準偏差を定義できないため正規化しない。
                 if self.normalize_advantage and len(advantages) > 1:
                     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
@@ -291,6 +310,7 @@ class PrivilegedMaskablePPO(MaskablePPO):
                 if self.clip_range_vf is None:
                     values_pred = values
                 else:
+                    # 旧 value からの変化量を制限し、1更新で Critic が動きすぎるのを防ぐ。
                     values_pred = rollout_data.old_values + th.clamp(
                         values - rollout_data.old_values,
                         -clip_range_vf,
@@ -304,7 +324,8 @@ class PrivilegedMaskablePPO(MaskablePPO):
 
                 value_losses.append(value_loss.item())
 
-                # Entropy loss
+                # Entropy を最大化する項を加え、方策が早期に決定的になるのを抑える。
+                # 分布が解析的 entropy を返せない場合は -log_prob で近似する。
                 if entropy is None:
                     entropy_loss = -th.mean(-log_prob)
                 else:
@@ -312,9 +333,10 @@ class PrivilegedMaskablePPO(MaskablePPO):
 
                 entropy_losses.append(entropy_loss.item())
 
+                # Actor、探索、Critic の各目的を係数付きで同時に最適化する。
                 loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
 
-                # Approximate KL
+                # 旧方策からの変化量を近似 KL で監視する。勾配には使わない。
                 with th.no_grad():
                     log_ratio = log_prob - rollout_data.old_log_prob
 
@@ -322,6 +344,7 @@ class PrivilegedMaskablePPO(MaskablePPO):
 
                     approx_kl_divs.append(approx_kl_div)
 
+                # 方策が信頼領域を大きく外れたら、残りの minibatch / epoch を打ち切る。
                 if self.target_kl is not None and approx_kl_div > 1.5 * self.target_kl:
                     continue_training = False
 
@@ -344,11 +367,13 @@ class PrivilegedMaskablePPO(MaskablePPO):
 
                 self.policy.optimizer.step()
 
+            # SB3 と同様に、完走・早期終了にかかわらず開始した epoch を数える。
             self._n_updates += 1
 
             if not continue_training:
                 break
 
+        # return のばらつきを Critic がどれだけ説明できているかを診断する。
         explained_var = explained_variance(
             self.rollout_buffer.values.flatten(),
             self.rollout_buffer.returns.flatten(),

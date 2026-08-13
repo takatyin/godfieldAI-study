@@ -29,7 +29,6 @@ from godfield_rl.opponents import (
     make_opponent,
 )
 from godfield_rl.shaping import make_shaper
-from godfield_rl.amp import policy_class
 from godfield_rl.privileged.amp import privileged_policy_class
 from godfield_rl.privileged.ppo import PrivilegedMaskablePPO
 
@@ -121,7 +120,13 @@ def build_envs(cfg: TrainingConfig, opponent) -> tuple[GodFieldVectorEnv, GodFie
     評価用にはシェーピングを入れません。見たいのは「勝てるか」だけで、
     シェーピングぶんが混ざると勝率以外の量を見ることになります。
     """
-    shaper = make_shaper(cfg.shape_hp, cfg.shape_mp, cfg.shape_money, cfg.gamma)
+    shaper = make_shaper(
+        cfg.shape_hp,
+        cfg.shape_mp,
+        cfg.shape_money,
+        gamma=cfg.gamma,
+        hand=cfg.shape_hand,
+    )
     train_env = GodFieldVectorEnv(
         cfg.num_envs, opponent=opponent, shaper=shaper
     )
@@ -138,10 +143,14 @@ def build_envs(cfg: TrainingConfig, opponent) -> tuple[GodFieldVectorEnv, GodFie
 
 
 def build_model(cfg: TrainingConfig, env: GodFieldVectorEnv, device: str) -> MaskablePPO:
+    """設定に応じて通常 PPO または Privileged Critic 版を組み立てる。"""
+
     if cfg.privileged_critic:
+        # rollout buffer と value 計算の両方が privileged 情報に対応した組を使う。
         model_class = PrivilegedMaskablePPO
         policy = privileged_policy_class(cfg.amp)
     else:
+        # 比較対象の baseline は従来の MaskablePPO / policy をそのまま使う。
         model_class = MaskablePPO
         policy = policy_class(cfg.amp)
     return model_class(

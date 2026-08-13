@@ -758,7 +758,18 @@ PYBIND11_MODULE(godfield_core, m) {
              "並びは [p0_hp, p0_mp, p0_money, p1_hp, p1_mp, p1_money]。"
              "観測は霧がかかると相手の値が0に潰れるため、報酬シェーピングには"
              "こちらを使ってください。")
-        .def("get_opponent_true_hands", &EnvPool::get_opponent_true_hands, py::arg("player_id"))
+        .def("get_true_hands", &EnvPool::get_true_hands, 
+            py::arg("player_id"),
+            "指定プレイヤーの真の手札を返します。形は"
+            " (環境数, MAX_HAND_SIZE)。観測上の公開情報ではなく内部状態の"
+            " true_hand を返すため、報酬シェーピングや Privileged Critic など"
+            " 学習時の特権情報用途を想定しています。"
+                    )
+        .def("get_opponent_true_hands", &EnvPool::get_opponent_true_hands,
+             py::arg("player_id"),
+             "指定プレイヤーから見た相手の真の手札を返します。形は"
+             " (環境数, MAX_HAND_SIZE)。Privileged Critic の学習専用で、"
+             "Actor の通常観測には含まれません。")
         .def("get_rewards_for", &EnvPool::get_rewards_for, py::arg("player_id"))
         .def("get_terminal_observations_for", &EnvPool::get_terminal_observations_for, py::arg("player_id"))
         .def("get_rewards", &EnvPool::get_rewards)

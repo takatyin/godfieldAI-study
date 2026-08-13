@@ -91,7 +91,12 @@ class GodFieldVectorEnv(VecEnv):
         """
         if self.shaper is None:
             return self._prev_potential  # 使われないので確保済みのゼロ配列を返す
-        return self.shaper.potential(self.core_env.get_player_stats(), self.learner_seat)
+        return self.shaper.potential(
+            self.core_env.get_player_stats(), 
+            self.learner_seat,
+            my_hands=self.core_env.get_true_hands(self.learner_seat),
+            opp_hands=self.core_env.get_true_hands(1-self.learner_seat),
+            )
 
     def reset(self) -> np.ndarray:
         self.core_env.reset(self.seed_val)
@@ -179,6 +184,11 @@ class GodFieldVectorEnv(VecEnv):
         return self._current_masks.astype(bool)
 
     def get_opponent_true_hands(self) -> np.ndarray:
+        """学習者視点の相手の真の手札を Privileged Critic 用に返す。
+
+        通常観測には含めず、PrivilegedMaskablePPO が value を計算するときだけ
+        明示的に取得する。形は ``(num_envs, MAX_HAND_SIZE)``。
+        """
         return self.core_env.get_opponent_true_hands(self.learner_seat)
 
     def get_attr(self, attr_name: str, indices=None) -> list[Any]:

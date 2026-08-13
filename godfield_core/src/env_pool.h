@@ -60,7 +60,16 @@ public:
      */
     pybind11::array_t<int> get_player_stats();
 
+    /**
+     * @brief 指定したプレイヤーから見た相手の真の手札を返します。形は
+     *        (環境数, MAX_HAND_SIZE) で、空きスロットは CARD_EMPTY のままです。
+     *
+     * Privileged Critic の学習専用です。Actor に渡す通常観測には混ぜず、推論時に
+     * 非公開情報を必要としない方策を維持します。
+     */
+    pybind11::array_t<int> get_true_hands(int player_id);     
     pybind11::array_t<int> get_opponent_true_hands(int player_id);
+
 
     InternalState get_state(int env_id) const { return states_[env_id]; }
     void set_state(int env_id, const InternalState &state) {
@@ -83,7 +92,6 @@ private:
     std::vector<int> current_actors_;
     // get_player_stats() が返す配列の実体。呼び出しごとに詰め直す。
     std::vector<int> player_stats_;
-    std::vector<int> opponent_true_hands_;
 
     // Internal helper functions for game logic
     void reset_env(int env_id, int seed);

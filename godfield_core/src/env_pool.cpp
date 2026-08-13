@@ -95,44 +95,44 @@ pybind11::array_t<int> EnvPool::get_player_stats() {
     );
 }
 
-pybind11::array_t<int> EnvPool::get_opponent_true_hands(int player_id){
-    if(player_id < 0 || player_id > 1){
+pybind11::array_t<int> EnvPool::get_true_hands(int player_id) {
+    // 2人対戦なので、有効な player_id は 0 または 1 のみ。
+    if (player_id < 0 || player_id > 1) {
         throw std::runtime_error(
-            "get_opponent_true_hands: player_idは０　か　１　である必要があります"
+            "get_true_hands: player_id must be 0 or 1"
         );
     }
 
-    int opp = 1 - player_id;
+    // Python 側では、各並列環境を1行とする
+    // (num_envs_, MAX_HAND_SIZE) の配列として返す。
+    pybind11::array_t<int> result({
+        static_cast<pybind11::ssize_t>(num_envs_),
+        static_cast<pybind11::ssize_t>(MAX_HAND_SIZE)
+    });
 
-    opponent_true_hands_.resize(
-        static_cast<size_t>(num_envs_) * MAX_HAND_SIZE
-    );
+    auto out = result.mutable_unchecked<2>();
 
-    for(int env_id = 0; env_id < num_envs_; env_id++){
+    // 観測上の公開情報ではなく、内部状態の true_hand をそのまま返す。
+    // CARD_EMPTY もそのまま保持し、手札スロットとの対応を維持する。
+    for (int env_id = 0; env_id < num_envs_; env_id++) {
         const InternalState& state = states_[env_id];
 
-        for(int h = 0; h < MAX_HAND_SIZE; h++){
-            opponent_true_hands_[
-                static_cast<size_t>(env_id) * MAX_HAND_SIZE + h
-            ] = state.true_hand[opp][h];
+        for (int h = 0; h < MAX_HAND_SIZE; h++) {
+            out(env_id, h) = state.true_hand[player_id][h];
         }
     }
 
-    pybind11::handle base = pybind11::cast(this);
-
-    return pybind11::array_t<int>(
-        {
-            static_cast<pybind11::ssize_t>(num_envs_),
-            static_cast<pybind11::ssize_t>(MAX_HAND_SIZE)
-        },
-        {
-            static_cast<pybind11::ssize_t>(sizeof(int) * MAX_HAND_SIZE),
-            static_cast<pybind11::ssize_t>(sizeof(int))
-        },
-        opponent_true_hands_.data(),
-        base
-    );
+    return result;
 }
+
+pybind11::array_t<int> EnvPool::get_opponent_true_hands(int player_id) {
+    if (player_id < 0 || player_id > 1) {
+        throw std::runtime_error("player_id must be 0 or 1");
+    }
+
+    return get_true_hands(1 - player_id);
+}
+
 
 pybind11::array_t<int> EnvPool::get_current_actors() {
     pybind11::handle base = pybind11::cast(this);
@@ -249,5 +249,4 @@ void EnvPool::step_env(int env_id, int action) {
 void EnvPool::generate_observation(int env_id) {
     make_observation(states_[env_id], states_[env_id].current_actor_id, obs_buffers_[env_id]);
 }
-
 

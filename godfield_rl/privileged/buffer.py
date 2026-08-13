@@ -1,10 +1,9 @@
 from typing import NamedTuple
 
+import godfield_core
 import numpy as np
 import torch as th
 from sb3_contrib.common.maskable.buffers import MaskableRolloutBuffer
-
-import godfield_core
 
 
 class PrivilegedRolloutBufferSamples(NamedTuple):
@@ -84,7 +83,9 @@ class PrivilegedRolloutBuffer(MaskableRolloutBuffer):
         assert self.full, ""
 
         # T*N 個の rollout sample をランダムな順番に並べ替える。
-        indices = np.random.permutation(self.buffer_size * self.n_envs)
+        indices = np.random.permutation(
+            self.buffer_size * self.n_envs
+        )
 
         if not self.generator_ready:
             # 保存時の shape は基本的に (T, N, ...)。
@@ -104,7 +105,9 @@ class PrivilegedRolloutBuffer(MaskableRolloutBuffer):
             ]
 
             for tensor in tensor_names:
-                self.__dict__[tensor] = self.swap_and_flatten(self.__dict__[tensor])
+                self.__dict__[tensor] = self.swap_and_flatten(
+                    self.__dict__[tensor]
+                )
 
             # 同じ rollout に対して何度も flatten しないためのフラグ。
             self.generator_ready = True
@@ -116,7 +119,9 @@ class PrivilegedRolloutBuffer(MaskableRolloutBuffer):
         start_idx = 0
 
         while start_idx < self.buffer_size * self.n_envs:
-            yield self._get_samples(indices[start_idx : start_idx + batch_size])
+            yield self._get_samples(
+                indices[start_idx : start_idx + batch_size]
+            )
             start_idx += batch_size
 
     def _get_samples(self, batch_inds):
@@ -136,9 +141,11 @@ class PrivilegedRolloutBuffer(MaskableRolloutBuffer):
             self.log_probs[batch_inds].flatten(),
             self.advantages[batch_inds].flatten(),
             self.returns[batch_inds].flatten(),
+
             # flatten 後は (T*N, H) なので、
             # minibatch では (B, H) になる。
             self.opponent_true_hands[batch_inds],
+
             # MaskablePPO が期待する
             # (B, mask_dims) に整形する。
             self.action_masks[batch_inds].reshape(
@@ -149,4 +156,7 @@ class PrivilegedRolloutBuffer(MaskableRolloutBuffer):
 
         # NumPy -> torch.Tensor に変換し、
         # 名前付き tuple として PPO の train() 側へ返す。
-        return PrivilegedRolloutBufferSamples(*tuple(map(self.to_torch, data)))
+        return PrivilegedRolloutBufferSamples(
+            *tuple(map(self.to_torch, data))
+        )
+    

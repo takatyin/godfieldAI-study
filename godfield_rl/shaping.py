@@ -58,6 +58,7 @@ class PotentialShaper:
         hp: HP差の重み。まずはここだけを使うことを推奨します。
         mp: MP差の重み。「温存するほど良い」と教えかねないので小さく。
         money: 所持金差の重み。同上。
+        hand: 手札価値の重み(手札価値は実装予定)
         gamma: 割引率。PPO の gamma と必ず同じ値にしてください。ずれると
             打ち消し合いが崩れ、最適方策が変わらないという保証が失われます。
     """
@@ -65,13 +66,20 @@ class PotentialShaper:
     hp: float = 0.2
     mp: float = 0.0
     money: float = 0.0
+    hand: float = 0.0
     gamma: float = 0.995
 
     @property
     def enabled(self) -> bool:
-        return self.hp != 0.0 or self.mp != 0.0 or self.money != 0.0
+        return self.hp != 0.0 or self.mp != 0.0 or self.money != 0.0 or self.hand != 0.0
 
-    def potential(self, stats: np.ndarray, learner_seat: int) -> np.ndarray:
+    def potential(
+        self,
+        stats: np.ndarray,
+        learner_seat: int,
+        my_hands: np.ndarray | None = None,
+        opp_hands: np.ndarray | None = None,
+    ) -> np.ndarray:
         """Args:
             stats: (環境数, 6) の [p0_hp, p0_mp, p0_money, p1_hp, p1_mp, p1_money]。
             learner_seat: 学習者の席。
@@ -101,7 +109,13 @@ class PotentialShaper:
         return (self.gamma * next_phi - prev_potential).astype(np.float32)
 
 
-def make_shaper(hp: float, mp: float, money: float, gamma: float) -> PotentialShaper | None:
+def make_shaper(
+    hp: float,
+    mp: float,
+    money: float,
+    gamma: float,
+    hand: float = 0.0,
+) -> PotentialShaper | None:
     """重みがすべて0なら None を返します（シェーピングなし）。"""
-    shaper = PotentialShaper(hp=hp, mp=mp, money=money, gamma=gamma)
+    shaper = PotentialShaper(hp=hp, mp=mp, money=money, hand=hand, gamma=gamma)
     return shaper if shaper.enabled else None

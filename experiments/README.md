@@ -1,5 +1,7 @@
 # Experiments
 
+全実験に共通する管理方法は [`experiment_plan.md`](./experiment_plan.md) にまとめています。
+
 このディレクトリには、再現に必要な実験定義と小さな結果サマリーだけを置きます。
 学習済みモデル、checkpoint、TensorBoard event、標準出力ログ、W&B のローカル生成物などは
 リポジトリ直下の `runs/` に出力し、Git では管理しません。
