@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TOMLで定義された比較実験を同一条件・別GPUで実行する。"""
+"""TOMLで定義された比較実験を同一条件・指定GPU群で実行する。"""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -34,7 +35,10 @@ NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
 CONFIG_SECTIONS = ("training", "reward_shaping", "network", "opponent")
 NETWORK_METADATA_KEYS = {"feature_extractor"}
 MANAGED_CONFIG_KEYS = {"seed", "tensorboard_log", "save_path", "wandb_name"}
-ENV_ALIASES = {"TIMESTEPS": "total_timesteps"}
+ENV_ALIASES = {
+    "TIMESTEPS": "total_timesteps",
+    "HAND_VALUE_WEIGHT": "shape_hand",
+}
 FORBIDDEN_EXTRA_ARGS = {
     "--seed",
     "--tensorboard-log",
@@ -72,8 +76,11 @@ class RunState:
     config: dict[str, Any]
     command: list[str]
     environment: dict[str, str]
+    hand_value_checkpoint: Path | None = None
+    hand_value_checkpoint_sha256: str = ""
     process: subprocess.Popen[str] | None = None
     log_file: Any = None
+    log_thread: threading.Thread | None = None
     finalized: bool = False
 
 
@@ -316,19 +323,43 @@ def parse_gpu_ids(raw: str, variant_count: int, dry_run: bool) -> list[str]:
         if dry_run:
             return [f"<gpu-{index}>" for index in range(variant_count)]
         raise ValueError(
-            f"set GPU_IDS to {variant_count} comma-separated GPU IDs "
-            f"(for example GPU_IDS={','.join(str(i) for i in range(variant_count))})"
+            "set GPU_IDS to one or more comma-separated GPU IDs "
+            "(for example GPU_IDS=0 or GPU_IDS=0,1)"
         )
-    gpu_ids = raw.split(",")
-    if len(gpu_ids) < variant_count:
-        raise ValueError(f"{variant_count} variants require {variant_count} GPUs; GPU_IDS has {len(gpu_ids)}")
+    gpu_ids = [gpu.strip() for gpu in raw.split(",")]
     if any(not gpu.isdigit() for gpu in gpu_ids):
         raise ValueError(f"GPU_IDS must contain only non-negative integers (got {raw!r})")
     if len(set(gpu_ids)) != len(gpu_ids):
         raise ValueError(f"GPU_IDS contains duplicates (got {raw!r})")
-    if len(gpu_ids) > variant_count:
-        print(f"note: only the first {variant_count} GPUs are used: {','.join(gpu_ids[:variant_count])}")
-    return gpu_ids[:variant_count]
+    return gpu_ids
+
+
+def assign_gpus(gpu_ids: list[str], variant_count: int) -> list[str]:
+    """variantを指定GPUへround-robinで割り当てる。"""
+
+    if not gpu_ids:
+        raise ValueError("at least one GPU ID is required")
+    return [gpu_ids[index % len(gpu_ids)] for index in range(variant_count)]
+
+
+def relay_process_output(
+    stream: Any,
+    log_file: Any,
+    prefix: str,
+    terminal: Any,
+    output_lock: threading.Lock,
+) -> None:
+    """子プロセスの出力を生ログへ保存しつつ、識別子付きで端末へ中継する。"""
+
+    try:
+        for line in stream:
+            log_file.write(line)
+            log_file.flush()
+            with output_lock:
+                terminal.write(f"{prefix} {line}")
+                terminal.flush()
+    finally:
+        stream.close()
 
 
 def gpu_preflight(python: Path, gpu: str) -> dict[str, str]:
@@ -402,6 +433,38 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def display_path(path: Path) -> str:
+    try:
+        return path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def resolve_hand_value_checkpoint(root: Path, config: dict[str, Any]) -> Path | None:
+    """hand shaping有効時に最新連番runのbest checkpointを検証します。"""
+    if config["shape_hand"] == 0.0:
+        return None
+
+    model_dir = Path(config["hand_value_model_dir"]).expanduser()
+    if not model_dir.is_absolute():
+        model_dir = root / model_dir
+    model_dir = model_dir.resolve()
+
+    candidates: list[tuple[int, Path]] = []
+    for path in model_dir.glob("hand_value_model_*"):
+        suffix = path.name.removeprefix("hand_value_model_")
+        if path.is_dir() and suffix.isdigit():
+            candidates.append((int(suffix), path))
+    if not candidates:
+        raise ValueError(f"hand value model run not found under: {model_dir}")
+
+    _, latest_run = max(candidates, key=lambda item: item[0])
+    checkpoint = latest_run / "best_model.pt"
+    if not checkpoint.is_file():
+        raise ValueError(f"best hand value model not found: {checkpoint}")
+    return checkpoint
+
+
 def build_metadata(
     state: RunState,
     definition: ExperimentDefinition,
@@ -432,6 +495,17 @@ def build_metadata(
     ]
     append_toml_table(lines, "source", source)
     append_toml_table(lines, "resolved_training", state.config)
+    if state.hand_value_checkpoint is not None:
+        append_toml_table(
+            lines,
+            "hand_value_model",
+            {
+                "checkpoint": display_path(state.hand_value_checkpoint),
+                "sha256": state.hand_value_checkpoint_sha256,
+                "weight": state.config["shape_hand"],
+                "clip_value": state.config["hand_value_clip_value"],
+            },
+        )
     inherited = definition.common.get("ppo_inherited_defaults", {})
     if inherited:
         append_toml_table(lines, "inherited_ppo_defaults", inherited)
@@ -468,7 +542,7 @@ def build_metadata(
 
 
 def create_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="TOMLで定義した比較実験をvariantごとに別GPUで実行する")
+    parser = argparse.ArgumentParser(description="TOMLで定義した比較実験を指定GPU群で実行する")
     parser.add_argument("experiment", help="experiments/以下の実験名（例: privileged_critic）")
     parser.add_argument("--dry-run", action="store_true", help="設定とコマンドを検証・表示し、GPUや出力を変更しない")
     return parser
@@ -486,11 +560,15 @@ def main() -> int:
     if not python.is_file() and not dry_run:
         raise ValueError(f"expected executable Python at {python}")
     gpu_ids = parse_gpu_ids(os.environ.get("GPU_IDS", ""), len(definition.variants), dry_run)
+    assigned_gpu_ids = assign_gpus(gpu_ids, len(definition.variants))
     startup_check_sec = int(os.environ.get("STARTUP_CHECK_SEC", "10"))
     if startup_check_sec < 0:
         raise ValueError("STARTUP_CHECK_SEC must be non-negative")
 
     resolved = [resolve_variant_config(definition, variant, os.environ) for variant in definition.variants]
+    hand_value_checkpoints = [
+        resolve_hand_value_checkpoint(REPO_ROOT, config) for config in resolved
+    ]
     started = utc_now()
     compact = started.strftime("%Y%m%dT%H%M%SZ")
     started_iso = utc_iso(started)
@@ -500,7 +578,15 @@ def main() -> int:
     pair_id = f"{definition.name}_s{seed}_{compact}"
 
     states: list[RunState] = []
-    for index, (variant, gpu, config) in enumerate(zip(definition.variants, gpu_ids, resolved, strict=True)):
+    for index, (variant, gpu, config, hand_value_checkpoint) in enumerate(
+        zip(
+            definition.variants,
+            assigned_gpu_ids,
+            resolved,
+            hand_value_checkpoints,
+            strict=True,
+        )
+    ):
         run_id = f"{definition.name}_{variant.name}_s{seed}_{compact}"
         run_dir = REPO_ROOT / "runs" / definition.name / run_id
         command = [str(python), str(REPO_ROOT / "train.py"), *training_args(config)]
@@ -517,6 +603,7 @@ def main() -> int:
         command.extend(variant.extra_args)
         environment = os.environ.copy()
         environment["CUDA_VISIBLE_DEVICES"] = gpu
+        environment["PYTHONUNBUFFERED"] = "1"
         states.append(
             RunState(
                 index=index,
@@ -527,16 +614,33 @@ def main() -> int:
                 config=config,
                 command=command,
                 environment=environment,
+                hand_value_checkpoint=hand_value_checkpoint,
+                hand_value_checkpoint_sha256=(
+                    sha256_file(hand_value_checkpoint)
+                    if hand_value_checkpoint is not None
+                    else ""
+                ),
             )
         )
 
     print(f"Experiment: {definition.name}")
     print(f"  comparison : {pair_id}")
     print(f"  variants   : {', '.join(variant.name for variant in definition.variants)}")
+    print(f"  GPUs       : {', '.join(gpu_ids)}")
     print(f"  conditions : seed={seed} run_kind={run_kind}")
     for state in states:
         print(f"  {state.variant.name}: GPU {state.gpu} -> {state.run_dir.relative_to(REPO_ROOT)}")
+        if state.hand_value_checkpoint is not None:
+            print(
+                "    hand value: "
+                f"{display_path(state.hand_value_checkpoint)} "
+                f"(weight={state.config['shape_hand']}, "
+                f"clip={state.config['hand_value_clip_value']})"
+            )
         print(f"    CUDA_VISIBLE_DEVICES={shlex.quote(state.gpu)} {shlex.join(state.command)}")
+    if len(gpu_ids) > len(definition.variants):
+        unused = gpu_ids[len(definition.variants) :]
+        print(f"  unused GPUs: {', '.join(unused)} (there are fewer variants than GPUs)")
     if dry_run:
         print("Dry run complete; no GPU checks, directories, or processes were created.")
         return 0
@@ -547,7 +651,8 @@ def main() -> int:
         if state.run_dir.exists() or result_meta.exists():
             raise ValueError(f"refusing to overwrite existing run: {state.run_id}")
 
-    gpu_details = [gpu_preflight(python, state.gpu) for state in states]
+    used_gpu_ids = list(dict.fromkeys(state.gpu for state in states))
+    gpu_details = {gpu: gpu_preflight(python, gpu) for gpu in used_gpu_ids}
     git_commit = git_output("rev-parse", "HEAD")
     git_branch = git_output("branch", "--show-current") or "DETACHED"
     git_dirty = bool(git_output("status", "--porcelain", "--untracked-files=normal"))
@@ -578,7 +683,7 @@ def main() -> int:
             finished,
             exit_code,
             metadata_source(state),
-            gpu_details[state.index],
+            gpu_details[state.gpu],
             model_sha,
             note,
         )
@@ -596,6 +701,19 @@ def main() -> int:
         update_metadata(state, "running", -1)
 
     stopping = False
+    output_lock = threading.Lock()
+
+    def terminal_print(message: str, *, error: bool = False) -> None:
+        with output_lock:
+            print(message, file=sys.stderr if error else sys.stdout, flush=True)
+
+    def finish_output(state: RunState) -> None:
+        if state.log_thread is not None:
+            state.log_thread.join()
+            state.log_thread = None
+        if state.log_file is not None:
+            state.log_file.close()
+            state.log_file = None
 
     def stop_all(signum: int | None = None, _frame: Any = None) -> None:
         nonlocal stopping
@@ -614,6 +732,8 @@ def main() -> int:
             except subprocess.TimeoutExpired:
                 state.process.kill()
                 state.process.wait()
+        for state in states:
+            finish_output(state)
         for state in states:
             if state.finalized:
                 continue
@@ -637,30 +757,62 @@ def main() -> int:
         signal.signal(caught_signal, stop_all)
 
     try:
-        for state in states:
-            state.log_file = (state.run_dir / "logs" / "train.log").open("w", encoding="utf-8")
-            state.process = subprocess.Popen(
-                state.command,
-                cwd=REPO_ROOT,
-                env=state.environment,
-                stdout=state.log_file,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            print(f"Started {state.variant.name} (pid={state.process.pid})")
+        queued = list(range(len(states)))
+        running: set[int] = set()
 
+        def start_available() -> None:
+            busy_gpus = {states[index].gpu for index in running}
+            for index in list(queued):
+                state = states[index]
+                if state.gpu in busy_gpus:
+                    continue
+                queued.remove(index)
+                busy_gpus.add(state.gpu)
+                running.add(index)
+                state.log_file = (state.run_dir / "logs" / "train.log").open("w", encoding="utf-8")
+                state.process = subprocess.Popen(
+                    state.command,
+                    cwd=REPO_ROOT,
+                    env=state.environment,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                )
+                if state.process.stdout is None:
+                    raise OSError("failed to capture training process output")
+                prefix = f"[{state.variant.name}|GPU {state.gpu}]"
+                state.log_thread = threading.Thread(
+                    target=relay_process_output,
+                    args=(state.process.stdout, state.log_file, prefix, sys.stdout, output_lock),
+                    name=f"log-{state.variant.name}",
+                    daemon=True,
+                )
+                state.log_thread.start()
+                terminal_print(f"Started {state.variant.name} on GPU {state.gpu} (pid={state.process.pid})")
+
+        start_available()
+
+        initial_running = set(running)
         deadline = time.monotonic() + startup_check_sec
-        while time.monotonic() < deadline and all(state.process.poll() is None for state in states):
+        while time.monotonic() < deadline and all(
+            states[index].process.poll() is None for index in initial_running
+        ):
             time.sleep(min(0.2, max(0.0, deadline - time.monotonic())))
         early_failure = next(
-            (state for state in states if state.process.poll() not in (None, 0)),
+            (
+                states[index]
+                for index in initial_running
+                if states[index].process.poll() not in (None, 0)
+            ),
             None,
         )
         if early_failure is not None:
-            print(
+            finish_output(early_failure)
+            terminal_print(
                 f"error: {early_failure.variant.name} failed during startup "
                 f"(exit={early_failure.process.returncode})",
-                file=sys.stderr,
+                error=True,
             )
             update_metadata(
                 early_failure,
@@ -673,16 +825,16 @@ def main() -> int:
             stop_all()
             return 1
 
-        pending = set(range(len(states)))
-        while pending:
-            for index in list(pending):
+        while running:
+            completed_any = False
+            for index in list(running):
                 state = states[index]
                 return_code = state.process.poll()
                 if return_code is None:
                     continue
-                pending.remove(index)
-                state.log_file.close()
-                state.log_file = None
+                completed_any = True
+                running.remove(index)
+                finish_output(state)
                 model_path = state.run_dir / "checkpoints" / "final_model.zip"
                 event_exists = any((state.run_dir / "tensorboard").glob("**/events.out.tfevents.*"))
                 if return_code == 0 and model_path.is_file() and event_exists:
@@ -696,7 +848,7 @@ def main() -> int:
                         utc_iso(),
                     )
                     state.finalized = True
-                    print(f"{state.variant.name}: completed and artifacts validated")
+                    terminal_print(f"{state.variant.name}: completed and artifacts validated")
                     continue
                 if return_code == 0:
                     return_code = 66 if not model_path.is_file() else 67
@@ -705,10 +857,14 @@ def main() -> int:
                     note = "training command exited non-zero; see logs/train.log"
                 update_metadata(state, "failed", return_code, note=note, finished=utc_iso())
                 state.finalized = True
-                print(f"error: {state.variant.name} failed (exit={return_code})", file=sys.stderr)
+                terminal_print(f"error: {state.variant.name} failed (exit={return_code})", error=True)
                 stop_all()
                 return 1
-            time.sleep(0.2)
+
+            if completed_any:
+                start_available()
+            else:
+                time.sleep(0.2)
     except KeyboardInterrupt:
         stop_all()
         return 130
@@ -718,8 +874,7 @@ def main() -> int:
         return 1
     finally:
         for state in states:
-            if state.log_file is not None:
-                state.log_file.close()
+            finish_output(state)
 
     print(f"Comparison complete. View: .venv/bin/tensorboard --logdir runs/{definition.name}")
     return 0

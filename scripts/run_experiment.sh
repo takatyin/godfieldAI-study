@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# experiments/<name> のTOML定義を読み、全variantを別GPUで比較実行する。
+# experiments/<name> のTOML定義を読み、全variantを指定GPU群で比較実行する。
+# Hand Value shaping比較例:
+#   DRY_RUN=1 ./scripts/run_experiment.sh hand_value_shaping
+#   RUN_KIND=smoke_test TIMESTEPS=10000 GPU_IDS=0,1 \
+#     ./scripts/run_experiment.sh hand_value_shaping
 
 set -euo pipefail
 
