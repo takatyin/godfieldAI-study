@@ -59,7 +59,7 @@ privileged_critic_privileged_s42_20260813T120000Z
 
 - `TrainingConfig` と `train.py` CLIが、学習コードで利用可能な設定の正本です。
 - `common.toml` は比較時に固定する値、`variant.toml` は意図した差分の正本です。
-- ランナーはTOMLを読み取ってもよいですが、解決した値を明示的なCLIへ変換し、
+- 共通ランナーはTOMLを読み取り、解決した値を明示的なCLIへ変換し、
   実行コマンドとresolved metadataをrunごとに保存します。
 - baselineとvariantでは、検証対象以外のseed・学習条件・評価条件を一致させます。
 
@@ -82,11 +82,20 @@ lockfile、Python/PyTorch/CUDA/GPU情報をmetadataへ記録します。
   baseline PPOとPrivileged Critic PPOの比較
 - 実験一覧: [`experiments/README.md`](./experiments/README.md)
 
+すべての実験は実験名を渡して同じランナーから起動します。`pairing.variants` の順で
+`GPU_IDS` を割り当てるため、実験ごとの起動スクリプトを追加する必要はありません。
+
 Privileged Critic比較の起動例:
 
 ```bash
 RUN_KIND=smoke_test TIMESTEPS=10000 GPU_IDS=0,1 \
-  ./scripts/run_privileged_experiment.sh
+  ./scripts/run_experiment.sh privileged_critic
+```
+
+GPUを使わずに定義と生成コマンドだけ確認する場合:
+
+```bash
+DRY_RUN=1 ./scripts/run_experiment.sh privileged_critic
 ```
 
 TensorBoard:

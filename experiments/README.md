@@ -12,6 +12,7 @@
 - 実験定義の TOML は比較条件を固定してレビュー可能にする正本です。ランナーはTOMLを既定値として
   読み取れますが、解決した値を明示的なCLIへ変換し、実行コマンドとmetadataを保存します。
 - 比較実験では共通条件を1ファイルに置き、各 variant のファイルには意図した差分だけを置きます。
+- `common.toml` の `pairing.variants` がvariantの実行順とGPUの割当順を決めます。
 - 実行ごとの日時、Git 情報、seed、解決済み条件、評価結果は小さな meta/summary としてここに残せます。
 - 実行時生成物のパスは `runs/<experiment>/<run_id>/` とし、run 間で共有しません。
 
@@ -20,4 +21,19 @@
 - [`privileged_critic/`](./privileged_critic/README.md): 通常の MaskablePPO と Privileged Critic PPO の比較
 
 新しい比較を追加するときは、実験ごとに README、共通条件、variant 差分、結果サマリーをまとめ、
-既存の CLI・TensorBoard・W&B・評価ツールを再利用してください。
+共通ランナーから起動します。実験ごとの実行スクリプトは不要です。
+
+```bash
+DRY_RUN=1 ./scripts/run_experiment.sh <experiment>
+RUN_KIND=smoke_test GPU_IDS=0,1 ./scripts/run_experiment.sh <experiment>
+```
+
+reward shapingなどの条件差は、各 `variant.toml` の同名sectionに差分だけを書きます。
+
+```toml
+[reward_shaping]
+shape_hp = 0.2
+shape_mp = 0.05
+shape_money = 0.01
+shape_hand = 0.0
+```

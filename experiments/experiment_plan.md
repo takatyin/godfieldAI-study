@@ -107,6 +107,51 @@ runs/<experiment>/<run_id>/
 これらは後から推測で公式結果にせず、`legacy` または `smoke_test` として扱います。
 今後のrunはこの計画に従い、実行時点でメタデータと結果を記録します。
 
+## 共通ランナーとvariant差分
+
+すべての比較実験は `scripts/run_experiment.sh <experiment>` から起動します。
+`common.toml` にはvariantの実行順とGPU割当順を明示します。
+
+```toml
+[pairing]
+variants = ["baseline", "candidate"]
+primary_seed = 42
+```
+
+variant固有の `TrainingConfig` 差分は、`common.toml` と同じsection、または
+フィールド名を直接指定する `[overrides]` に書きます。例えばreward shaping比較は次のように定義します。
+
+```toml
+# experiments/reward_shaping/hp_mp/variant.toml
+schema_version = 1
+experiment = "reward_shaping"
+variant = "hp_mp"
+
+[reward_shaping]
+shape_hp = 0.2
+shape_mp = 0.05
+shape_money = 0.0
+shape_hand = 0.0
+```
+
+`[training]`, `[reward_shaping]`, `[network]`, `[opponent]`, `[overrides]` の値は
+`TrainingConfig` のCLIへ変換されます。通常は意味別sectionを使い、sectionに収まらないフィールドだけ
+`[overrides]` に置きます。CLIにしかない特殊な引数が必要な場合に限り、
+`[cli].extra_args = ["--flag"]` を使用します。
+
+定義の検証だけならGPUなしでdry runできます。
+
+```bash
+DRY_RUN=1 ./scripts/run_experiment.sh reward_shaping
+```
+
+本番実行ではvariant数以上のGPUを指定します。`pairing.variants` の先頭から順に割り当てられます。
+
+```bash
+RUN_KIND=smoke_test TIMESTEPS=10000 GPU_IDS=0,1 \
+  ./scripts/run_experiment.sh reward_shaping
+```
+
 ## 実験チェックリスト
 
 ### 実行前

@@ -15,6 +15,7 @@ dependencies = [
     "websockets>=11.0",
     "wandb>=0.28.1",
     "tensorboard>=2.21.0",
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 # 開発用の依存。`uv sync` が既定で入れるので、追加の指定なしに環境が揃う。

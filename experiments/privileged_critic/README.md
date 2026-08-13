@@ -80,18 +80,19 @@ deterministic policy、AMP 有効で測ります。学習中の win rate は報�
 
 ## 実行方法
 
-[`scripts/run_privileged_experiment.sh`](../../scripts/run_privileged_experiment.sh) が `common.toml` を読み、
-baseline と privileged を同一 seed・同一共通引数で別GPUへ割り当てます。唯一のCLI差分は
-privileged 側の `--privileged-critic` です。本番学習には依存同期を行わない `.venv/bin/python` を使います。
+共通の [`scripts/run_experiment.sh`](../../scripts/run_experiment.sh) が `common.toml` と各 `variant.toml` を読み、
+baseline と privileged を同一 seed・同一共通引数で別GPUへ割り当てます。privileged側の
+`[overrides].privileged_critic = true` が `--privileged-critic` に変換されます。本番学習には
+依存同期を行わない `.venv/bin/python` を使います。
 
 ```bash
 # 短い配線確認（完了時の status は smoke_test）
 RUN_KIND=smoke_test TIMESTEPS=10000 GPU_IDS=0,1 \
-  ./scripts/run_privileged_experiment.sh
+  ./scripts/run_experiment.sh privileged_critic
 
 # 10M steps の公式比較
 RUN_KIND=full TIMESTEPS=10000000 SEED=42 GPU_IDS=0,1 \
-  ./scripts/run_privileged_experiment.sh
+  ./scripts/run_experiment.sh privileged_critic
 ```
 
 `GPU_IDS=1,3` のような非連続IDも指定できます。指定順に baseline、privileged を割り当て、GPUが2枚未満なら
@@ -104,7 +105,8 @@ RUN_KIND=full TIMESTEPS=10000000 SEED=42 GPU_IDS=0,1 \
 
 ```bash
 nohup env RUN_KIND=full TIMESTEPS=10000000 SEED=42 GPU_IDS=0,1 \
-  ./scripts/run_privileged_experiment.sh > privileged_pair_$(date -u +%Y%m%dT%H%M%SZ).log 2>&1 &
+  ./scripts/run_experiment.sh privileged_critic \
+  > privileged_pair_$(date -u +%Y%m%dT%H%M%SZ).log 2>&1 &
 ```
 
 複数 seed は一括投入する前に seed 42 の pair を完走・評価し、その後同じ手順を各 seed に対して
