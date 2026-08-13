@@ -2,8 +2,8 @@
 
 `summary.csv` には1 run を1行で追記します。TensorBoard の時系列全体を CSV に複製せず、
 比較に使った最終値または事前に決めた集約値だけを記録してください。実行ごとの詳細は
-`run_meta.template.toml` を `<run_id>.toml` としてこのディレクトリへコピーし、実行前に
-解決済みの値を埋めます。
+`scripts/run_privileged_experiment.sh` が `run_meta.template.toml` と同じ構造の
+`<run_id>.toml` をこのディレクトリへ生成し、実行状態と解決済みの値を更新します。
 
 モデル、TensorBoard event、標準出力、checkpoint、W&B ローカルファイルは
 `runs/privileged_critic/<run_id>/` に置き、ここへコピーしません。

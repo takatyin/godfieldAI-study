@@ -1,14 +1,19 @@
 schema_version = 1
 run_id = ""
+pair_id = ""
 experiment = "privileged_critic"
 variant = "baseline_or_privileged"
+run_kind = "full_or_smoke_test"
+status = "running_completed_failed_interrupted_or_smoke_test"
 started_at_utc = ""
 finished_at_utc = ""
+exit_code = -1
 
 [source]
 git_commit = ""
 git_branch = ""
 working_tree_dirty = false
+uv_lock_sha256 = ""
 common_definition = "experiments/privileged_critic/common.toml"
 variant_definition = ""
 
@@ -27,10 +32,29 @@ gamma = 0.995
 shape_hp = 0.2
 shape_mp = 0.0
 shape_money = 0.0
+shape_hand = 0.0
 opponent = "strategic"
-network = "transformer_d192_h8_L4_ff768_features256"
+self_play = false
+use_transformer = true
+d_model = 192
+nhead = 8
+num_layers = 4
+dim_feedforward = 768
+features_dim = 256
 amp = true
+grad_checkpointing = false
 privileged_critic = false
+
+[inherited_ppo_defaults]
+gae_lambda = 0.95
+clip_range_vf = "none"
+normalize_advantage = true
+vf_coef = 0.5
+max_grad_norm = 0.5
+policy_mlp_pi = [64, 64]
+policy_mlp_vf = [64, 64]
+activation = "Tanh"
+orthogonal_initialization = true
 
 [resolved_evaluation]
 opponent = "strategic"
@@ -41,11 +65,23 @@ both_seats = true
 deterministic = true
 amp = true
 
+[environment]
+python_executable = ".venv/bin/python"
+python_version = ""
+torch_version = ""
+torch_cuda_version = ""
+requested_gpu_id = ""
+visible_cuda_device = "cuda:0"
+gpu_name = ""
+
 [artifacts]
 directory = "runs/privileged_critic/<run_id>"
 model = "runs/privileged_critic/<run_id>/checkpoints/final_model.zip"
+model_sha256 = ""
 tensorboard = "runs/privileged_critic/<run_id>/tensorboard"
 stdout_log = "runs/privileged_critic/<run_id>/logs/train.log"
+command_log = "runs/privileged_critic/<run_id>/logs/command.log"
+eval_log = "runs/privileged_critic/<run_id>/logs/eval.log"
 wandb_run = ""
 
 [notes]

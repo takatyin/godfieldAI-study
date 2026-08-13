@@ -8,9 +8,9 @@
 
 ## 方針
 
-- 学習設定の実装上の唯一の情報源は `godfield_rl.config.TrainingConfig` と `train.py` の CLI です。
-- 実験定義の TOML は CLI の値を固定してレビュー可能にするための記録です。TOML を直接読み込む
-  新しい設定ローダーや実験管理ライブラリは追加しません。
+- 学習コードで利用可能な設定の正本は `godfield_rl.config.TrainingConfig` と `train.py` の CLI です。
+- 実験定義の TOML は比較条件を固定してレビュー可能にする正本です。ランナーはTOMLを既定値として
+  読み取れますが、解決した値を明示的なCLIへ変換し、実行コマンドとmetadataを保存します。
 - 比較実験では共通条件を1ファイルに置き、各 variant のファイルには意図した差分だけを置きます。
 - 実行ごとの日時、Git 情報、seed、解決済み条件、評価結果は小さな meta/summary としてここに残せます。
 - 実行時生成物のパスは `runs/<experiment>/<run_id>/` とし、run 間で共有しません。

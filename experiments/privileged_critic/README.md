@@ -14,8 +14,8 @@ GodField は部分観測環境なので、通常 Critic の `V(o_t)` は同じ�
 - [`privileged/variant.toml`](./privileged/variant.toml): Privileged Critic の差分
 - [`results/`](./results/README.md): Git 管理する小さな run meta と集約結果
 
-TOML は既存の `TrainingConfig`/CLI に対応するレビュー用の実験定義であり、直接読み込む設定ファイル
-ではありません。新しいローダーは導入せず、実行時には下記の明示的な CLI を使います。
+TOML は既存の `TrainingConfig`/CLI に対応する実験定義です。ランナーは `common.toml` から既定値を読み、
+解決した値を明示的な CLI に変換します。`train.py` 自体へ新しい設定ローダーは導入しません。
 
 ## 条件差
 
@@ -80,65 +80,35 @@ deterministic policy、AMP 有効で測ります。学習中の win rate は報�
 
 ## 実行方法
 
-以下は既存 CLI を明示的に呼ぶ手順です。公式比較では先に working tree を clean にし、同じ commit、
-同じマシン/GPU、同じ seed で baseline と privileged を1組ずつ実行します。`variant` だけを変更し、
-出力ディレクトリは共有しません。
+[`scripts/run_privileged_experiment.sh`](../../scripts/run_privileged_experiment.sh) が `common.toml` を読み、
+baseline と privileged を同一 seed・同一共通引数で別GPUへ割り当てます。唯一のCLI差分は
+privileged 側の `--privileged-critic` です。本番学習には依存同期を行わない `.venv/bin/python` を使います。
 
 ```bash
-seed=42
-variant=baseline
-started_at=$(date -u +%Y%m%dT%H%M%SZ)
-run_id="pc_${variant}_s${seed}_${started_at}"
-run_dir="runs/privileged_critic/${run_id}"
-mkdir -p "$run_dir/checkpoints" "$run_dir/logs" "$run_dir/wandb"
+# 短い配線確認（完了時の status は smoke_test）
+RUN_KIND=smoke_test TIMESTEPS=10000 GPU_IDS=0,1 \
+  ./scripts/run_privileged_experiment.sh
 
-common_args=(
-  --seed "$seed"
-  --num-envs 1000
-  --total-timesteps 5000000
-  --lr 5.845e-5
-  --n-steps 256
-  --batch-size 2048
-  --n-epochs 10
-  --target-kl 0.03
-  --ent-coef 0.01
-  --clip-range 0.3
-  --gamma 0.995
-  --shape-hp 0.2
-  --shape-mp 0.0
-  --shape-money 0.0
-  --opponent strategic
-  --d-model 192
-  --nhead 8
-  --num-layers 4
-  --dim-feedforward 768
-  --features-dim 256
-  --tensorboard-log "$run_dir/tensorboard"
-  --save-path "$run_dir/checkpoints/final_model"
-)
-
-WANDB_DIR="$run_dir/wandb" uv run python train.py "${common_args[@]}" \
-  2>&1 | tee "$run_dir/logs/train.log"
+# 10M steps の公式比較
+RUN_KIND=full TIMESTEPS=10000000 SEED=42 GPU_IDS=0,1 \
+  ./scripts/run_privileged_experiment.sh
 ```
 
-`use_transformer=true` と `amp=true` は既定値なので、それらを無効化するフラグを渡しません。
-W&B も両 variant で使う場合は両方のコマンドに次を同じように追加します。
+`GPU_IDS=1,3` のような非連続IDも指定できます。指定順に baseline、privileged を割り当て、GPUが2枚未満なら
+学習前に停止します。`TIMESTEPS`, `SEED`, `NUM_ENVS` に加え、`LR`, `N_STEPS`, `BATCH_SIZE`,
+`N_EPOCHS`, `TARGET_KL`, `ENT_COEF`, `CLIP_RANGE`, `GAMMA`, reward shaping とネットワーク寸法を
+環境変数で上書きできます。上書き値は必ず両 variant に適用され、run meta に解決済み値を保存します。
+
+長時間実行ではランナー自体をバックグラウンドへ送れます。pair 全体の標準出力先は新しいファイル名にし、
+既存ファイルを上書きしないでください。
 
 ```bash
---wandb --wandb-project godfield-rl-privileged-critic --wandb-name "$run_id"
-```
-
-privileged は前述の配線確認後、同じ `common_args` に唯一の CLI 条件差を足して実行します。
-
-```bash
-variant=privileged
-# run_id/run_dir/common_args は新しい variant 用に上と同じ手順で作り直す。
-WANDB_DIR="$run_dir/wandb" uv run python train.py "${common_args[@]}" --privileged-critic \
-  2>&1 | tee "$run_dir/logs/train.log"
+nohup env RUN_KIND=full TIMESTEPS=10000000 SEED=42 GPU_IDS=0,1 \
+  ./scripts/run_privileged_experiment.sh > privileged_pair_$(date -u +%Y%m%dT%H%M%SZ).log 2>&1 &
 ```
 
 複数 seed は一括投入する前に seed 42 の pair を完走・評価し、その後同じ手順を各 seed に対して
-繰り返します。同じ run directory の再利用や上書きはしません。
+繰り返します。同じ run directory の再利用や上書きはランナーが拒否します。
 
 ## 評価方法
 
@@ -147,7 +117,7 @@ WANDB_DIR="$run_dir/wandb" uv run python train.py "${common_args[@]}" --privileg
 
 ```bash
 eval_seed=$((seed + 10000))
-uv run python tools/evaluate.py "$run_dir/checkpoints/final_model.zip" \
+.venv/bin/python tools/evaluate.py "$run_dir/checkpoints/final_model.zip" \
   --vs strategic --games 3000 --num-envs 512 --seed "$eval_seed" --amp \
   2>&1 | tee "$run_dir/logs/eval.log"
 ```
@@ -155,7 +125,7 @@ uv run python tools/evaluate.py "$run_dir/checkpoints/final_model.zip" \
 TensorBoard は experiment root を指定すれば両 run を同じ画面で比較できます。
 
 ```bash
-tensorboard --logdir runs/privileged_critic
+.venv/bin/tensorboard --logdir runs/privileged_critic
 ```
 
 ## 出力先と Git 管理
@@ -166,9 +136,11 @@ tensorboard --logdir runs/privileged_critic
 runs/privileged_critic/<run_id>/
 ├── checkpoints/final_model.zip
 ├── tensorboard/<SB3 run>/events.out.tfevents.*
+├── logs/command.log
 ├── logs/train.log
-├── logs/eval.log
-└── wandb/
+├── logs/eval.log                 # 固定評価を実施した場合
+├── definitions/{common,variant}.toml
+└── run_meta.toml
 ```
 
 `runs/`, 既存の `logs/` と `models/`, W&B ローカルディレクトリは `.gitignore` 対象です。
@@ -178,12 +150,10 @@ runs/privileged_critic/<run_id>/
 
 ## 再現手順と run meta
 
-1. `run_meta.template.toml` を `results/<run_id>.toml` にコピーする。
-2. 実行直前に UTC 日時、`git rev-parse HEAD`, `git branch --show-current`,
-   `git status --porcelain` が空か、seed、variant、評価 seed、artifact path を記録する。
-3. `common.toml` と対応する `variant.toml` を見ながら解決済み値を確認する。
-4. 学習ログ冒頭の設定表示と CLI が一致することを確認してから完走させる。
-5. 固定評価を実行し、`summary.csv` と run meta に結果・集約方法・任意の速度/VRAMを追記する。
+1. ランナーが実行直前に `runs/.../run_meta.toml` と `results/<run_id>.toml` を生成する。
+2. `status`, Git情報、CUDA/Python/PyTorch/GPU情報、seed、解決済み条件、artifact pathを確認する。
+3. `logs/command.log` と学習ログ冒頭の設定表示が一致することを確認する。
+4. 固定評価を実行し、`summary.csv` と run meta に結果・集約方法・任意の速度/VRAMを追記する。
 
 commit SHA だけでは dirty な差分を再現できないため、公式比較は clean worktree を必須とします。
 予備実験を dirty な状態で行った場合は `working_tree_dirty=true` として公式集計から除外します。
