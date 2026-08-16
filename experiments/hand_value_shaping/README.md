@@ -30,5 +30,27 @@ RUN_KIND=full GPU_IDS=0,1 \
   ./scripts/run_experiment.sh hand_value_shaping
 ```
 
+## 実行ログ
+
+実行ごとにUTC開始時刻を含む別のディレクトリへ保存されるため、過去の実験は
+上書きされません。
+
+```text
+runs/hand_value_shaping/<run_id>/
+├── checkpoints/final_model.zip
+├── tensorboard/
+├── logs/
+│   ├── command.log
+│   └── train.log
+└── run_meta.toml
+```
+
+学習中の標準出力はターミナルに表示されると同時に`train.log`へ保存されます。
+TensorBoardは次のコマンドでbaselineとhand_valueの両方をまとめて確認できます。
+
+```bash
+.venv/bin/tensorboard --logdir runs/hand_value_shaping
+```
+
 環境変数`HAND_VALUE_WEIGHT`で共通値を上書きできますが、variant側の明示値が最後に
 適用されます。通常の比較ではTOMLを正本として変更してください。

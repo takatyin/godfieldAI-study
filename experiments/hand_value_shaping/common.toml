@@ -3,7 +3,7 @@ experiment = "hand_value_shaping"
 description = "HP shaping と HP + learned Hand Value shaping の paired comparison"
 
 [pairing]
-variants = ["baseline", "hand_value"]
+variants = ["hand_value"]
 seeds = [42, 43, 44, 45, 46]
 primary_seed = 42
 require_clean_worktree = true

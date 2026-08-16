@@ -28,7 +28,7 @@ from godfield_rl.opponents import (
     PoolOpponent,
     make_opponent,
 )
-from godfield_rl.privileged.policy import privileged_policy_class
+from godfield_rl.privileged.amp import privileged_policy_class
 from godfield_rl.privileged.ppo import PrivilegedMaskablePPO
 from godfield_rl.shaping import make_shaper
 
