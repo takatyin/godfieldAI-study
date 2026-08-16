@@ -67,6 +67,8 @@ class TrainingConfig:
     shape_mp: float = 0.0
     shape_money: float = 0.0
     shape_hand: float = 0.0
+    hand_value_model_dir: str = "runs/hand_value_model"
+    hand_value_clip_value: float = 1.0
 
     # --- ネットワーク ------------------------------------------------------
     use_transformer: bool = True
@@ -136,6 +138,11 @@ class TrainingConfig:
             raise ValueError(f"anchor_ratio は 0..1 で指定してください: {self.anchor_ratio}")
         if not 0.0 <= self.anchor_curriculum_end <= 1.0:
             raise ValueError(f"anchor_curriculum_end は 0..1 で指定してください: {self.anchor_curriculum_end}")
+        if self.hand_value_clip_value <= 0.0:
+            raise ValueError(
+                "hand_value_clip_value は正の値にしてください: "
+                f"{self.hand_value_clip_value}"
+            )
 
 
 # 型ごとの argparse への渡し方。dataclass の定義を唯一の情報源にして、
@@ -155,7 +162,9 @@ _HELP = {
     "shape_hp": "HP差のポテンシャル重み（0で無効）",
     "shape_mp": "MP差のポテンシャル重み。大きくすると温存を覚えるので小さく",
     "shape_money": "所持金差のポテンシャル重み。同上",
-    "shape_hand": "手札価値差のポテンシャル重み",
+    "shape_hand": "学習済みHandValueModelのポテンシャル重み（0で無効）",
+    "hand_value_model_dir": "hand_value_model_<番号>を格納するディレクトリ",
+    "hand_value_clip_value": "reward shaping時のHand Value予測の絶対値上限",
     "use_transformer": "Transformerを使う（切るとMLP）",
     "d_model": "Transformerの埋め込み次元（nheadで割り切れること）",
     "nhead": "Transformerのヘッド数",

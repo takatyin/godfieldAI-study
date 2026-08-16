@@ -1,0 +1,9 @@
+schema_version = 1
+experiment = "hand_value_shaping"
+variant = "baseline"
+
+[description]
+reward_shaping = "HP差のみ。学習済みHandValueModelは使用しない"
+
+[cli]
+extra_args = []

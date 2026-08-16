@@ -1,0 +1,12 @@
+schema_version = 1
+experiment = "hand_value_shaping"
+variant = "hand_value"
+
+[description]
+reward_shaping = "HP差に学習済みHandValueModelのpotentialを追加"
+
+[reward_shaping]
+shape_hand = 0.2
+
+[cli]
+extra_args = []

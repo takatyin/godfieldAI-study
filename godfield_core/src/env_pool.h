@@ -29,6 +29,7 @@ public:
     void step_subset(pybind11::array_t<int> env_ids, pybind11::array_t<int> actions);
 
     pybind11::array_t<float> get_observations();
+    pybind11::array_t<float> get_observations_for(int player_id);
     pybind11::array_t<float> get_dones();
 
     /** @brief 各環境で現在行動権を持つプレイヤーID。 */

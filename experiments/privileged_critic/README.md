@@ -81,7 +81,7 @@ deterministic policy、AMP 有効で測ります。学習中の win rate は報�
 ## 実行方法
 
 共通の [`scripts/run_experiment.sh`](../../scripts/run_experiment.sh) が `common.toml` と各 `variant.toml` を読み、
-baseline と privileged を同一 seed・同一共通引数で別GPUへ割り当てます。privileged側の
+baseline と privileged を同一 seed・同一共通引数で指定GPU群へ割り当てます。privileged側の
 `[overrides].privileged_critic = true` が `--privileged-critic` に変換されます。本番学習には
 依存同期を行わない `.venv/bin/python` を使います。
 
@@ -95,8 +95,10 @@ RUN_KIND=full TIMESTEPS=10000000 SEED=42 GPU_IDS=0,1 \
   ./scripts/run_experiment.sh privileged_critic
 ```
 
-`GPU_IDS=1,3` のような非連続IDも指定できます。指定順に baseline、privileged を割り当て、GPUが2枚未満なら
-学習前に停止します。`TIMESTEPS`, `SEED`, `NUM_ENVS` に加え、`LR`, `N_STEPS`, `BATCH_SIZE`,
+`GPU_IDS=1,3` のような非連続IDも指定できます。指定順に baseline、privileged を割り当てます。
+`GPU_IDS=0` のように1枚だけ指定した場合は baseline の完了後に privileged を同じGPUで実行します。
+学習ログは各runの `logs/train.log` に保存しながら、`[variant|GPU n]` 付きでターミナルにも逐次表示します。
+`TIMESTEPS`, `SEED`, `NUM_ENVS` に加え、`LR`, `N_STEPS`, `BATCH_SIZE`,
 `N_EPOCHS`, `TARGET_KL`, `ENT_COEF`, `CLIP_RANGE`, `GAMMA`, reward shaping とネットワーク寸法を
 環境変数で上書きできます。上書き値は必ず両 variant に適用され、run meta に解決済み値を保存します。
 

@@ -83,27 +83,28 @@ class GodFieldVectorEnv(VecEnv):
             self.seed_val = seed
         return [seed] * self.num_envs
 
-    def _potential(self) -> np.ndarray:
+    def _potential(self, obs: np.ndarray) -> np.ndarray:
         """現在の Φ(s)。シェーピングを使わない場合は 0。
 
-        観測ではなく真の状態から作ります。観測は霧がかかると相手の HP/MP/お金が
-        0 に潰れるため、そこから作ると霧の付与・解除だけで偽の報酬が出ます。
+        HP/MP/所持金と手札には真の状態を使います。``obs`` は学習済みの
+        HandValueModel を使う場合にだけ、そのモデルの入力として利用します。
         """
         if self.shaper is None:
             return self._prev_potential  # 使われないので確保済みのゼロ配列を返す
         return self.shaper.potential(
-            self.core_env.get_player_stats(), 
+            self.core_env.get_player_stats(),
             self.learner_seat,
             my_hands=self.core_env.get_true_hands(self.learner_seat),
-            opp_hands=self.core_env.get_true_hands(1-self.learner_seat),
-            )
+            opp_hands=self.core_env.get_true_hands(1 - self.learner_seat),
+            obs=obs,
+        )
 
     def reset(self) -> np.ndarray:
         self.core_env.reset(self.seed_val)
         # 開始直後に相手の手番から始まる環境があるため、学習者の手番まで進めてから返す
         self._advance_opponent_turns()
         obs, self._current_masks = self._get_obs_and_masks()
-        self._prev_potential = self._potential()
+        self._prev_potential = self._potential(obs)
         return obs
 
     def step_async(self, actions: np.ndarray) -> None:
@@ -163,7 +164,7 @@ class GodFieldVectorEnv(VecEnv):
         # 選ぶ局面」で Φ(s') を取る（学習者の遷移は s -> s' なので、その間の相手の
         # 手番も含めて1つの遷移とみなす）。
         if self.shaper is not None:
-            next_potential = self._potential()
+            next_potential = self._potential(obs)
             rewards = rewards + self.shaper.shape(self._prev_potential, next_potential, terminated)
             # 終端の環境は自動リセット済みなので、次の局の Φ を起点にする
             self._prev_potential = next_potential

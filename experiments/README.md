@@ -12,7 +12,8 @@
 - 実験定義の TOML は比較条件を固定してレビュー可能にする正本です。ランナーはTOMLを既定値として
   読み取れますが、解決した値を明示的なCLIへ変換し、実行コマンドとmetadataを保存します。
 - 比較実験では共通条件を1ファイルに置き、各 variant のファイルには意図した差分だけを置きます。
-- `common.toml` の `pairing.variants` がvariantの実行順とGPUの割当順を決めます。
+- `common.toml` の `pairing.variants` がvariantの実行順を決めます。`GPU_IDS` の指定順に
+  round-robinで割り当て、同じGPUに割り当てられたvariantは直列実行します。
 - 実行ごとの日時、Git 情報、seed、解決済み条件、評価結果は小さな meta/summary としてここに残せます。
 - 実行時生成物のパスは `runs/<experiment>/<run_id>/` とし、run 間で共有しません。
 
@@ -26,6 +27,18 @@
 ```bash
 DRY_RUN=1 ./scripts/run_experiment.sh <experiment>
 RUN_KIND=smoke_test GPU_IDS=0,1 ./scripts/run_experiment.sh <experiment>
+```
+
+`GPU_IDS` は1個以上の任意個数を指定できます。例えば `GPU_IDS=0` なら全variantを1枚で直列実行し、
+`GPU_IDS=0,1` なら最大2本を並列実行します。各学習ログは `train.log` に保存されると同時に、
+`[variant|GPU n]` 付きでターミナルにもリアルタイム表示されます。
+
+Hand Value reward shapingの比較は次で確認・実行できます。
+
+```bash
+DRY_RUN=1 ./scripts/run_experiment.sh hand_value_shaping
+RUN_KIND=smoke_test TIMESTEPS=10000 GPU_IDS=0,1 \
+  ./scripts/run_experiment.sh hand_value_shaping
 ```
 
 reward shapingなどの条件差は、各 `variant.toml` の同名sectionに差分だけを書きます。

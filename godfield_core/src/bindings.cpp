@@ -641,6 +641,7 @@ PYBIND11_MODULE(godfield_core, m) {
         "Get opponent staged cards for observation integration validation");
 
     m.def("get_observation", &get_observation, "Get Observation from InternalState for player_id");
+    
 
     py::enum_<EventType>(m, "EventType")
         .value("NONE", EventType::NONE)
@@ -751,6 +752,7 @@ PYBIND11_MODULE(godfield_core, m) {
         .def("reset", &EnvPool::reset, py::arg("seed"))
         .def("step_all", &EnvPool::step_all, py::arg("actions"))
         .def("get_observations", &EnvPool::get_observations)
+        .def("get_observations_for", &EnvPool::get_observations_for, py::arg("player_id"))
         .def("step_subset", &EnvPool::step_subset, py::arg("env_ids"), py::arg("actions"))
         .def("get_current_actors", &EnvPool::get_current_actors)
         .def("get_player_stats", &EnvPool::get_player_stats,

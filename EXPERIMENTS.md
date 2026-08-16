@@ -83,7 +83,9 @@ lockfile、Python/PyTorch/CUDA/GPU情報をmetadataへ記録します。
 - 実験一覧: [`experiments/README.md`](./experiments/README.md)
 
 すべての実験は実験名を渡して同じランナーから起動します。`pairing.variants` の順で
-`GPU_IDS` を割り当てるため、実験ごとの起動スクリプトを追加する必要はありません。
+`GPU_IDS` をround-robinに割り当てるため、実験ごとの起動スクリプトを追加する必要はありません。
+GPUを1枚だけ指定した場合はvariantを直列実行し、複数枚ならGPUごとに並列実行します。
+学習ログはrunごとのファイルへ保存しながら、識別子付きでターミナルにもリアルタイム表示されます。
 
 Privileged Critic比較の起動例:
 

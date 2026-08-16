@@ -28,9 +28,9 @@ from godfield_rl.opponents import (
     PoolOpponent,
     make_opponent,
 )
-from godfield_rl.shaping import make_shaper
-from godfield_rl.privileged.amp import privileged_policy_class
+from godfield_rl.privileged.policy import privileged_policy_class
 from godfield_rl.privileged.ppo import PrivilegedMaskablePPO
+from godfield_rl.shaping import make_shaper
 
 EVAL_NUM_ENVS = 100
 EVAL_EPISODES = 50
@@ -114,18 +114,25 @@ def anchor_kinds(cfg: TrainingConfig) -> list[str]:
     return kinds
 
 
-def build_envs(cfg: TrainingConfig, opponent) -> tuple[GodFieldVectorEnv, GodFieldVectorEnv | None]:
+def build_envs(
+    cfg: TrainingConfig,
+    opponent,
+    device: str = "cpu",
+) -> tuple[GodFieldVectorEnv, GodFieldVectorEnv | None]:
     """学習用と評価用の環境を作ります。
 
     評価用にはシェーピングを入れません。見たいのは「勝てるか」だけで、
     シェーピングぶんが混ざると勝率以外の量を見ることになります。
     """
     shaper = make_shaper(
-        cfg.shape_hp,
-        cfg.shape_mp,
-        cfg.shape_money,
+        hp=cfg.shape_hp,
+        mp=cfg.shape_mp,
+        money=cfg.shape_money,
         gamma=cfg.gamma,
         hand=cfg.shape_hand,
+        hand_value_model_dir=cfg.hand_value_model_dir,
+        hand_device=device,
+        hand_clip_value=cfg.hand_value_clip_value,
     )
     train_env = GodFieldVectorEnv(
         cfg.num_envs, opponent=opponent, shaper=shaper
@@ -259,7 +266,7 @@ def run(cfg: TrainingConfig) -> MaskablePPO:
         )
 
     opponent = build_opponent(cfg, device)
-    train_env, eval_env = build_envs(cfg, opponent)
+    train_env, eval_env = build_envs(cfg, opponent, device)
     model = build_model(cfg, train_env, device)
     callbacks = build_callbacks(cfg, opponent, eval_env)
 

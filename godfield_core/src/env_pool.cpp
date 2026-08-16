@@ -182,6 +182,48 @@ pybind11::array_t<float> EnvPool::get_observations() {
     );
 }
 
+pybind11::array_t<float> EnvPool::get_observations_for(int player_id) {
+    if (player_id < 0 || player_id > 1) {
+        throw std::runtime_error(
+            "get_observations_for: player_id must be 0 or 1"
+        );
+    }
+
+    constexpr size_t kObsFloats =
+        sizeof(Observation) / sizeof(float);
+
+    pybind11::array_t<float> result({
+        static_cast<pybind11::ssize_t>(
+            num_envs_ * kObsFloats
+        )
+    });
+
+    auto out = result.mutable_unchecked<1>();
+
+    for (int env_id = 0; env_id < num_envs_; ++env_id) {
+        Observation obs;
+
+        make_observation(
+            states_[env_id],
+            player_id,
+            obs
+        );
+
+        const float* ptr =
+            reinterpret_cast<const float*>(&obs);
+
+        for (size_t j = 0; j < kObsFloats; ++j) {
+            out(
+                static_cast<pybind11::ssize_t>(
+                    env_id * kObsFloats + j
+                )
+            ) = ptr[j];
+        }
+    }
+
+    return result;
+}
+
 pybind11::array_t<float> EnvPool::get_rewards() {
     pybind11::handle base = pybind11::cast(this);
     return pybind11::array_t<float>(

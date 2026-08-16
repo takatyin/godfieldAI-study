@@ -8,7 +8,6 @@ from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 from godfield_rl.feature_config import MAX_HAND_SIZE, NUM_CARD_TYPES
 
 
-
 class PrivilegedMaskableActorCriticPolicy(MaskableActorCriticPolicy):
     """Actor は通常観測のみ、Critic は相手の真の手札も使う非対称 Actor-Critic。
 
@@ -282,3 +281,69 @@ class PrivilegedMaskableActorCriticPolicy(MaskableActorCriticPolicy):
         latent_vf = self.mlp_extractor.forward_critic(vf_features)
 
         return self.value_net(latent_vf)
+    
+class AmpPrivilegedMaskableActorCriticPolicy(
+    PrivilegedMaskableActorCriticPolicy
+):
+    def _autocast(self):
+        return th.autocast(
+            "cuda",
+            dtype=th.bfloat16,
+            enabled=th.cuda.is_available(),
+        )
+
+    def forward(
+        self,
+        obs,
+        opponent_true_hands,
+        deterministic=False,
+        action_masks=None,
+    ):
+        with self._autocast():
+            actions, values, log_prob = super().forward(
+                obs,
+                opponent_true_hands,
+                deterministic=deterministic,
+                action_masks=action_masks,
+            )
+
+        return (
+            actions,
+            values.float(),
+            log_prob.float(),
+        )
+
+    def evaluate_actions(
+        self,
+        obs,
+        actions,
+        opponent_true_hands,
+        action_masks=None,
+    ):
+        with self._autocast():
+            values, log_prob, entropy = super().evaluate_actions(
+                obs,
+                actions,
+                opponent_true_hands,
+                action_masks=action_masks,
+            )
+
+        return (
+            values.float(),
+            log_prob.float(),
+            entropy.float() if entropy is not None else None,
+        )
+
+    def predict_values(
+        self,
+        obs,
+        opponent_true_hands,
+    ):
+        with self._autocast():
+            values = super().predict_values(
+                obs,
+                opponent_true_hands,
+            )
+
+        return values.float()
+    
