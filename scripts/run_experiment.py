@@ -544,8 +544,36 @@ def build_metadata(
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="TOMLで定義した比較実験を指定GPU群で実行する")
     parser.add_argument("experiment", help="experiments/以下の実験名（例: privileged_critic）")
+    parser.add_argument(
+        "--variant",
+        action="append",
+        dest="variants",
+        metavar="NAME",
+        help="実行するvariant名。省略時は定義済みの全variantを実行する（複数回指定可）",
+    )
     parser.add_argument("--dry-run", action="store_true", help="設定とコマンドを検証・表示し、GPUや出力を変更しない")
     return parser
+
+
+def select_variants(
+    definition: ExperimentDefinition, requested: list[str] | None
+) -> ExperimentDefinition:
+    if not requested:
+        return definition
+    if len(set(requested)) != len(requested):
+        raise ValueError("--variant contains duplicates")
+
+    variants_by_name = {variant.name: variant for variant in definition.variants}
+    unknown = [name for name in requested if name not in variants_by_name]
+    if unknown:
+        available = ", ".join(variants_by_name)
+        raise ValueError(
+            f"unknown variant(s): {', '.join(unknown)} (available: {available})"
+        )
+    return dataclasses.replace(
+        definition,
+        variants=tuple(variants_by_name[name] for name in requested),
+    )
 
 
 def main() -> int:
@@ -555,7 +583,9 @@ def main() -> int:
     if run_kind not in {"full", "smoke_test"}:
         raise ValueError(f"RUN_KIND must be 'full' or 'smoke_test' (got {run_kind!r})")
 
-    definition = load_experiment(REPO_ROOT, args.experiment)
+    definition = select_variants(
+        load_experiment(REPO_ROOT, args.experiment), args.variants
+    )
     python = REPO_ROOT / ".venv" / "bin" / "python"
     if not python.is_file() and not dry_run:
         raise ValueError(f"expected executable Python at {python}")

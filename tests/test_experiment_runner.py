@@ -122,6 +122,25 @@ def test_gpu_ids_accept_any_positive_count_and_are_assigned_round_robin() -> Non
     assert runner.assign_gpus(["0", "2", "4"], variant_count=5) == ["0", "2", "4", "0", "2"]
 
 
+def test_select_variants_runs_only_requested_variant(tmp_path: Path) -> None:
+    runner = load_runner_module()
+    write_experiment(tmp_path)
+    definition = runner.load_experiment(tmp_path, "reward_shaping")
+
+    selected = runner.select_variants(definition, ["hp_mp"])
+
+    assert [variant.name for variant in selected.variants] == ["hp_mp"]
+
+
+def test_select_variants_rejects_unknown_variant(tmp_path: Path) -> None:
+    runner = load_runner_module()
+    write_experiment(tmp_path)
+    definition = runner.load_experiment(tmp_path, "reward_shaping")
+
+    with pytest.raises(ValueError, match="unknown variant"):
+        runner.select_variants(definition, ["missing"])
+
+
 def test_relay_process_output_keeps_raw_log_and_prefixes_terminal() -> None:
     runner = load_runner_module()
     stream = io.StringIO("first\nwin_rate=75%\n")

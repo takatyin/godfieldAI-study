@@ -29,6 +29,12 @@ DRY_RUN=1 ./scripts/run_experiment.sh <experiment>
 RUN_KIND=smoke_test GPU_IDS=0,1 ./scripts/run_experiment.sh <experiment>
 ```
 
+特定のvariantだけを実行する場合は `--variant` で指定します。
+
+```bash
+GPU_IDS=0 ./scripts/run_experiment.sh privileged_critic --variant privileged
+```
+
 `GPU_IDS` は1個以上の任意個数を指定できます。例えば `GPU_IDS=0` なら全variantを1枚で直列実行し、
 `GPU_IDS=0,1` なら最大2本を並列実行します。各学習ログは `train.log` に保存されると同時に、
 `[variant|GPU n]` 付きでターミナルにもリアルタイム表示されます。
